@@ -1,0 +1,457 @@
+<title>ProdigyFlo Schema Map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #fdfdfe;
+    --surface: #ffffff;
+    --sunk: #f1f3f6;
+    --ink: #1a1e26;
+    --muted: #5c6472;
+    --faint: #8b93a3;
+    --line: #e3e6ec;
+    --accent: #0e9f6e;
+    --accent-soft: #e0f5ec;
+    --warn: #b45309;
+    --warn-soft: #fdf0dd;
+    --shadow: 0 1px 2px rgba(20,24,32,.05), 0 8px 22px -10px rgba(20,24,32,.12);
+    /* domain palette — pastel ring arcs derive from these */
+    --g0: #4f8df9; --g1: #23c483; --g2: #f6a323; --g3: #f2607a; --g4: #9d6bf5;
+    --g5: #27bcd4; --g6: #ec5fb4; --g7: #8fd12c; --g8: #b98cf7; --g9: #8d99ab;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1117; --surface: #161b24; --sunk: #1c2230;
+      --ink: #e7eaf0; --muted: #9aa3b5; --faint: #6f7889; --line: #262d3b;
+      --accent: #34d399; --accent-soft: #123227;
+      --warn: #d9a44a; --warn-soft: #33270f;
+      --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 26px -12px rgba(0,0,0,.7);
+      --g0: #6ea3ff; --g1: #34d399; --g2: #fbbf24; --g3: #fb7d94; --g4: #b18cff;
+      --g5: #3dd2e8; --g6: #f77cc4; --g7: #a8e04a; --g8: #c9a3ff; --g9: #9aa6b8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e1117; --surface: #161b24; --sunk: #1c2230;
+    --ink: #e7eaf0; --muted: #9aa3b5; --faint: #6f7889; --line: #262d3b;
+    --accent: #34d399; --accent-soft: #123227;
+    --warn: #d9a44a; --warn-soft: #33270f;
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 26px -12px rgba(0,0,0,.7);
+    --g0: #6ea3ff; --g1: #34d399; --g2: #fbbf24; --g3: #fb7d94; --g4: #b18cff;
+    --g5: #3dd2e8; --g6: #f77cc4; --g7: #a8e04a; --g8: #c9a3ff; --g9: #9aa6b8;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px; line-height: 1.5; overflow: hidden;
+  }
+
+  /* ── top bar ── */
+  .bar {
+    display: flex; align-items: center; gap: 14px;
+    height: 46px; padding: 0 14px;
+    background: var(--surface); border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
+  .brand .dot { width: 18px; height: 18px; border-radius: 5px; background: var(--accent); display: grid; place-items: center; color: #fff; font-size: 11px; }
+  .brand em { font-style: normal; color: var(--accent); }
+  .repo {
+    flex: 1; min-width: 0; background: var(--sunk); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 12px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px;
+  }
+  .bar .chip {
+    border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+    border-radius: 7px; padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .bar .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .bar .chip:hover:not(.on) { border-color: var(--accent); color: var(--accent); }
+
+  /* ── layout ── */
+  /* min-width:0 on the middle column lets the ring shrink instead of forcing
+     overflow; the side panels shrink with minmax so the centred ring survives
+     far narrower widths (e.g. inside the app's iframe) before anything stacks. */
+  .layout { display: grid; grid-template-columns: minmax(188px, 240px) minmax(0, 1fr) minmax(196px, 290px); height: calc(100% - 46px); }
+  /* medium: tighten the panels and their type so the ring keeps its room */
+  @media (max-width: 1180px) {
+    .layout { grid-template-columns: 176px minmax(0, 1fr) 200px; }
+    aside { padding: 12px; font-size: 12px; }
+  }
+  /* only truly narrow collapses — then a clean vertical stack that scrolls,
+     with the ring given a real minimum height so it never overlaps a card */
+  @media (max-width: 720px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(480px, 68vh) auto; overflow-y: auto; }
+    body { overflow: auto; }
+    aside.left, aside.right { border: none; border-bottom: 1px solid var(--line); }
+  }
+
+  aside { background: var(--surface); overflow-y: auto; padding: 16px; }
+  aside.left { border-right: 1px solid var(--line); }
+  aside.right { border-left: 1px solid var(--line); }
+
+  /* ── left sidebar ── */
+  .score { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .score .ring {
+    width: 46px; height: 46px; border-radius: 50%;
+    border: 3px solid var(--accent); display: grid; place-items: center;
+    color: var(--accent); font-weight: 600; font-size: 13px;
+  }
+  .score b { display: block; font-size: 17px; font-weight: 600; }
+  .score span { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .stat { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+  .stat b { display: block; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+  .stat.wide { grid-column: 1 / -1; }
+  .stat.wide b { color: var(--accent); }
+
+  .comp-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 4px 0 8px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--muted); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+
+  .section-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--faint); margin: 18px 0 8px; }
+
+  #detail { font-size: 12px; }
+  #detail .empty { color: var(--faint); font-size: 12px; }
+  #detail h3 { margin: 0 0 2px; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+  #detail h3 i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  #detail .grp { color: var(--faint); font-size: 11px; margin-bottom: 8px; }
+  #detail dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 10px; }
+  #detail dt { color: var(--faint); }
+  #detail dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+  #detail .rel { color: var(--muted); font-size: 11.5px; line-height: 1.7; }
+  #detail .rel b { color: var(--ink); font-weight: 500; }
+  #detail .uni { margin-top: 8px; font-size: 11px; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 6px 9px; }
+
+  /* ── canvas ── */
+  .stage { position: relative; background: var(--ground); overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  .stage .counts { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 8px; z-index: 2; }
+  .stage .counts span {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 7px;
+    padding: 4px 10px; font-size: 11.5px; color: var(--muted); box-shadow: var(--shadow);
+  }
+  .stage .hint {
+    position: absolute; right: 12px; bottom: 12px; z-index: 2;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 7px;
+    padding: 4px 10px; font-size: 11px; color: var(--faint); box-shadow: var(--shadow);
+  }
+  #tip {
+    position: absolute; pointer-events: none; z-index: 3; display: none;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 11px; font-size: 12px; box-shadow: var(--shadow); max-width: 260px;
+  }
+  #tip b { display: block; }
+  #tip span { color: var(--faint); font-size: 11px; }
+
+  /* ── right panel ── */
+  .right h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; margin: 2px 0 12px; color: var(--muted); }
+  .card {
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 9px;
+  }
+  .card h3 { margin: 0 0 3px; font-size: 12.5px; display: flex; align-items: center; gap: 7px; font-weight: 600; }
+  .card h3 i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .card h3 i.ok { background: var(--accent); }
+  .card h3 i.warn { background: var(--warn); }
+  .card p { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+  .card code { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 10.5px; }
+</style>
+
+<div class="bar">
+  <div class="brand"><span class="dot">⌁</span>PRODIGY<em>FLO</em></div>
+  <div class="repo">prodigyflo · prisma/schema.prisma · branch p0-mvp · live rows from prodigyflo.ai seed</div>
+  <span style="color:var(--faint);font-size:11px">color:</span>
+  <button class="chip on" id="mode-domain">Domain</button>
+  <button class="chip" id="mode-rows">Rows</button>
+  <button class="chip" id="btn-reset">Reset view</button>
+</div>
+
+<div class="layout">
+  <aside class="left">
+    <div class="score">
+      <div class="ring">A</div>
+      <div><b>73 models</b><span>schema health</span></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>147</b><span>relations</span></div>
+      <div class="stat"><b>45</b><span>enums</span></div>
+      <div class="stat"><b>2</b><span>migrations</span></div>
+      <div class="stat"><b>10</b><span>domains</span></div>
+      <div class="stat wide"><b>11,285</b><span>rows in the live database</span></div>
+    </div>
+    <div class="section-label">rows by domain</div>
+    <div class="comp-bar" id="comp"></div>
+    <div class="legend" id="legend"></div>
+    <div class="section-label">selected model</div>
+    <div id="detail"><p class="empty">Click a dot on the ring to inspect its fields, rows, and relations. Hover to trace its chords. Scroll to zoom, drag to pan.</p></div>
+  </aside>
+
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="tip"></div>
+    <div class="counts"><span>73 models</span><span>147 relations</span></div>
+    <div class="hint">hover to trace · click to inspect · scroll to zoom</div>
+  </div>
+
+  <aside class="right">
+    <h2>Schema invariants (7)</h2>
+    <div class="card"><h3><i class="ok"></i>Webhook idempotency</h3>
+      <p><code>IntakeSubmission</code> is unique on <code>(sourceId, externalId)</code> — a replayed form post updates one row and can never create a second lead.</p></div>
+    <div class="card"><h3><i class="ok"></i>Human gate on AI output</h3>
+      <p><code>ExtractedField.verification</code> starts <code>UNVERIFIED</code>; downstream CYS resolution can raise it to <code>SUGGESTED</code> at most. Only a person makes a value <code>VERIFIED</code>.</p></div>
+    <div class="card"><h3><i class="ok"></i>Append-only audit</h3>
+      <p><code>AuditEvent</code> rows are inserted, never updated or deleted, with actor, redacted before/after, and hashed IP.</p></div>
+    <div class="card"><h3><i class="ok"></i>Tenant scoping</h3>
+      <p>Every scoped model carries <code>organizationId</code>, and a single visibility rule (<code>clientScope()</code>) is spread into every Client query — never hand-filtered.</p></div>
+    <div class="card"><h3><i class="ok"></i>Document version chain</h3>
+      <p>A re-upload creates version N+1 with <code>supersedesId</code> set. Files live under opaque keys and are served only through signed, permission-checked routes.</p></div>
+    <div class="card"><h3><i class="warn"></i>Hub models</h3>
+      <p><code>Client</code> and <code>User</code> are the gravity wells of the graph — most chords land on them. Any migration touching either deserves extra review.</p></div>
+    <div class="card"><h3><i class="warn"></i>Soft deletes only at the core</h3>
+      <p><code>deletedAt</code> exists on <code>Organization</code>, <code>User</code>, <code>Client</code>; child rows rely on cascades. Retention policy for documents is a setting, not yet a job.</p></div>
+  </aside>
+</div>
+
+<script>
+const DATA = {"models":{"Organization":{"fields":44,"group":"Access & org","uniques":[],"rows":1},"Region":{"fields":12,"group":"Access & org","uniques":["organizationId, code"],"rows":3},"Team":{"fields":13,"group":"Access & org","uniques":[],"rows":6},"Permission":{"fields":5,"group":"Access & org","uniques":[],"rows":47},"Role":{"fields":12,"group":"Access & org","uniques":["organizationId, key"],"rows":8},"RolePermission":{"fields":4,"group":"Access & org","uniques":[],"rows":180},"User":{"fields":76,"group":"Access & org","uniques":["organizationId, email","organizationId, emailAlias"],"rows":34},"UserSession":{"fields":10,"group":"Access & org","uniques":[],"rows":0},"AuthToken":{"fields":9,"group":"Access & org","uniques":[],"rows":0},"Pipeline":{"fields":9,"group":"Clients & pipeline","uniques":[],"rows":1},"PipelineStage":{"fields":16,"group":"Clients & pipeline","uniques":["pipelineId, key"],"rows":25},"StageHistory":{"fields":15,"group":"Clients & pipeline","uniques":[],"rows":2819},"Client":{"fields":77,"group":"Clients & pipeline","uniques":[],"rows":250},"ClientAddress":{"fields":13,"group":"Clients & pipeline","uniques":[],"rows":250},"Survey":{"fields":10,"group":"Qualification","uniques":[],"rows":1},"SurveyResponse":{"fields":13,"group":"Qualification","uniques":[],"rows":228},"Consent":{"fields":13,"group":"Qualification","uniques":[],"rows":764},"Verification":{"fields":13,"group":"Qualification","uniques":["clientId, type"],"rows":606},"CreditPull":{"fields":21,"group":"Qualification","uniques":[],"rows":182},"QualificationReview":{"fields":16,"group":"Qualification","uniques":[],"rows":164},"Contract":{"fields":16,"group":"Qualification","uniques":[],"rows":186},"Assignment":{"fields":15,"group":"Scheduling & pay","uniques":[],"rows":143},"AvailabilitySlot":{"fields":7,"group":"Scheduling & pay","uniques":[],"rows":90},"Appointment":{"fields":25,"group":"Scheduling & pay","uniques":[],"rows":113},"Presentation":{"fields":16,"group":"Scheduling & pay","uniques":[],"rows":77},"PaymentMethod":{"fields":20,"group":"Scheduling & pay","uniques":[],"rows":84},"FinancingApplication":{"fields":18,"group":"Scheduling & pay","uniques":[],"rows":22},"DocumentPackage":{"fields":9,"group":"Documents & AI","uniques":[],"rows":2},"DocumentRequirement":{"fields":14,"group":"Documents & AI","uniques":["packageId, key"],"rows":11},"ClientDocument":{"fields":29,"group":"Documents & AI","uniques":[],"rows":628},"DocumentReview":{"fields":8,"group":"Documents & AI","uniques":[],"rows":433},"Communication":{"fields":18,"group":"Communications","uniques":[],"rows":1346},"Call":{"fields":12,"group":"Communications","uniques":[],"rows":367},"Message":{"fields":10,"group":"Communications","uniques":[],"rows":651},"Task":{"fields":16,"group":"Work & marketing","uniques":[],"rows":382},"Note":{"fields":10,"group":"Work & marketing","uniques":[],"rows":149},"LeadSource":{"fields":11,"group":"Work & marketing","uniques":["organizationId, key"],"rows":6},"Campaign":{"fields":23,"group":"Work & marketing","uniques":[],"rows":6},"CampaignDailyStat":{"fields":11,"group":"Work & marketing","uniques":["campaignId, date"],"rows":0},"AttributionEvent":{"fields":15,"group":"Work & marketing","uniques":[],"rows":500},"Deal":{"fields":14,"group":"CYS & submission","uniques":[],"rows":45},"Submission":{"fields":23,"group":"CYS & submission","uniques":[],"rows":39},"AIRecommendation":{"fields":22,"group":"System","uniques":[],"rows":288},"Connector":{"fields":21,"group":"System","uniques":["organizationId, kind"],"rows":13},"ConnectorLog":{"fields":7,"group":"System","uniques":[],"rows":39},"Notification":{"fields":11,"group":"System","uniques":[],"rows":12},"AuditEvent":{"fields":15,"group":"System","uniques":[],"rows":3},"IntakeSource":{"fields":25,"group":"Intake","uniques":["organizationId, slug"],"rows":2},"IntakeSubmission":{"fields":19,"group":"Intake","uniques":["sourceId, externalId"],"rows":4},"MessageTemplate":{"fields":15,"group":"Communications","uniques":["organizationId, key, locale"],"rows":23},"DocumentExtraction":{"fields":21,"group":"Documents & AI","uniques":[],"rows":3},"ExtractedField":{"fields":20,"group":"Documents & AI","uniques":["extractionId, key"],"rows":15},"CysFieldDefinition":{"fields":15,"group":"CYS & submission","uniques":["organizationId, key"],"rows":16},"CysReadiness":{"fields":15,"group":"CYS & submission","uniques":[],"rows":0},"CysFieldValue":{"fields":19,"group":"CYS & submission","uniques":["clientId, fieldKey"],"rows":0},"Invite":{"fields":19,"group":"Access & org","uniques":[],"rows":0},"Sequence":{"fields":13,"group":"Communications","uniques":[],"rows":2},"SequenceStep":{"fields":8,"group":"Communications","uniques":["sequenceId, position"],"rows":5},"SequenceEnrollment":{"fields":12,"group":"Communications","uniques":["sequenceId, clientId"],"rows":1},"ScheduledMessage":{"fields":18,"group":"Communications","uniques":[],"rows":1},"SavedFilter":{"fields":11,"group":"Work & marketing","uniques":[],"rows":3},"CloserBrief":{"fields":14,"group":"Close-rate ops","uniques":[],"rows":1},"CoachingNote":{"fields":18,"group":"Close-rate ops","uniques":[],"rows":2},"NurtureTouch":{"fields":12,"group":"Close-rate ops","uniques":[],"rows":2},"HotLeadReview":{"fields":11,"group":"Close-rate ops","uniques":[],"rows":1},"InboundEvent":{"fields":16,"group":"Intake","uniques":[],"rows":0},"InboundDocument":{"fields":13,"group":"Intake","uniques":["organizationId, externalId"],"rows":0},"ConnectorCredential":{"fields":15,"group":"System","uniques":["connectorId, fieldKey"],"rows":0},"AdSet":{"fields":12,"group":"Work & marketing","uniques":["organizationId, externalId"],"rows":0},"EngineRun":{"fields":12,"group":"Engine","uniques":[],"rows":0},"EngineStep":{"fields":13,"group":"Engine","uniques":[],"rows":0},"Insight":{"fields":17,"group":"Engine","uniques":[],"rows":0},"DeployRun":{"fields":11,"group":"System","uniques":[],"rows":0}},"edges":[["Organization","Organization"],["Region","Organization"],["Team","Organization"],["Team","Region"],["Team","User"],["Role","Organization"],["RolePermission","Role"],["RolePermission","Permission"],["User","Organization"],["User","Role"],["User","Region"],["User","Team"],["User","User"],["UserSession","User"],["AuthToken","User"],["Pipeline","Organization"],["PipelineStage","Pipeline"],["StageHistory","Client"],["StageHistory","PipelineStage"],["StageHistory","User"],["Client","Organization"],["Client","Pipeline"],["Client","PipelineStage"],["Client","Region"],["Client","Team"],["Client","User"],["Client","User"],["Client","LeadSource"],["Client","Campaign"],["ClientAddress","Client"],["Survey","Organization"],["SurveyResponse","Survey"],["SurveyResponse","Client"],["Consent","Client"],["Verification","Client"],["CreditPull","Client"],["QualificationReview","Client"],["QualificationReview","User"],["Contract","Client"],["Assignment","Client"],["Assignment","User"],["Assignment","User"],["AvailabilitySlot","User"],["Appointment","Client"],["Appointment","User"],["Presentation","Client"],["Presentation","Appointment"],["Presentation","User"],["PaymentMethod","Client"],["FinancingApplication","Client"],["DocumentPackage","Organization"],["DocumentRequirement","DocumentPackage"],["ClientDocument","Client"],["ClientDocument","DocumentRequirement"],["ClientDocument","User"],["DocumentReview","ClientDocument"],["DocumentReview","User"],["Communication","Client"],["Communication","User"],["Call","Communication"],["Message","Communication"],["Task","Client"],["Task","User"],["Task","User"],["Note","Client"],["Note","User"],["LeadSource","Organization"],["Campaign","Organization"],["Campaign","LeadSource"],["CampaignDailyStat","Campaign"],["AttributionEvent","Client"],["AttributionEvent","Campaign"],["AttributionEvent","LeadSource"],["Deal","Client"],["Submission","Client"],["Submission","Deal"],["Submission","User"],["AIRecommendation","Client"],["AIRecommendation","User"],["Connector","Organization"],["ConnectorLog","Connector"],["Notification","Organization"],["Notification","User"],["AuditEvent","Organization"],["AuditEvent","User"],["IntakeSource","Organization"],["IntakeSource","User"],["IntakeSubmission","Organization"],["IntakeSubmission","IntakeSource"],["IntakeSubmission","Client"],["MessageTemplate","Organization"],["MessageTemplate","User"],["DocumentExtraction","ClientDocument"],["ExtractedField","DocumentExtraction"],["ExtractedField","User"],["CysFieldDefinition","Organization"],["CysReadiness","Client"],["CysReadiness","User"],["CysFieldValue","Client"],["CysFieldValue","ClientDocument"],["CysFieldValue","ExtractedField"],["CysFieldValue","User"],["Invite","Organization"],["Invite","Role"],["Invite","User"],["Invite","User"],["Sequence","Organization"],["Sequence","User"],["SequenceStep","Sequence"],["SequenceEnrollment","Sequence"],["SequenceEnrollment","Client"],["ScheduledMessage","Organization"],["ScheduledMessage","Client"],["ScheduledMessage","User"],["SavedFilter","Organization"],["SavedFilter","User"],["CloserBrief","Organization"],["CloserBrief","Client"],["CloserBrief","User"],["CloserBrief","User"],["CoachingNote","Organization"],["CoachingNote","User"],["CoachingNote","User"],["CoachingNote","Client"],["CoachingNote","Call"],["NurtureTouch","Organization"],["NurtureTouch","Client"],["NurtureTouch","User"],["HotLeadReview","Organization"],["HotLeadReview","Client"],["HotLeadReview","User"],["InboundEvent","Organization"],["InboundEvent","Client"],["InboundDocument","Organization"],["InboundDocument","Client"],["ConnectorCredential","Organization"],["ConnectorCredential","Connector"],["ConnectorCredential","User"],["AdSet","Organization"],["AdSet","Campaign"],["EngineRun","Organization"],["EngineStep","EngineRun"],["Insight","Organization"],["Insight","EngineRun"],["Insight","User"],["DeployRun","Organization"],["DeployRun","User"]],"groups":["Access & org","Clients & pipeline","Intake","Communications","Documents & AI","CYS & submission","Qualification","Scheduling & pay","Close-rate ops","Work & marketing","Engine","System"],"enums":45,"totalRows":11285};
+
+// ---------- palette / theme ----------
+const css = () => getComputedStyle(document.documentElement);
+let C = {};
+function readTheme() {
+  const s = css();
+  C = {
+    ground: s.getPropertyValue('--ground').trim(),
+    ink: s.getPropertyValue('--ink').trim(),
+    muted: s.getPropertyValue('--muted').trim(),
+    faint: s.getPropertyValue('--faint').trim(),
+    accent: s.getPropertyValue('--accent').trim(),
+    surface: s.getPropertyValue('--surface').trim(),
+    groups: Array.from({length:10},(_,i)=>s.getPropertyValue('--g'+i).trim()),
+  };
+}
+readTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTheme(); paintLegend(); layout(); draw(); });
+
+// ---------- graph data ----------
+const groups = DATA.groups;
+const gIndex = Object.fromEntries(groups.map((g,i)=>[g,i]));
+// ring order: grouped by domain, alphabetical inside each group
+const nodes = Object.keys(DATA.models)
+  .map(n => { const m = DATA.models[n];
+    return { id:n, g:gIndex[m.group], group:m.group, fields:m.fields, rows:m.rows, uniques:m.uniques,
+             a:0, x:0, y:0, r: 4.5 + Math.sqrt(m.fields)*0.9 }; })
+  .sort((a,b)=> a.g-b.g || a.id.localeCompare(b.id));
+const byName = Object.fromEntries(nodes.map(n=>[n.id,n]));
+const links = DATA.edges.map(([a,b]) => ({ s:byName[a], t:byName[b] }));
+const inDeg = {}, outDeg = {};
+nodes.forEach(n=>{inDeg[n.id]=0; outDeg[n.id]=0;});
+links.forEach(l=>{outDeg[l.s.id]++; inDeg[l.t.id]++;});
+const touching = {};   // node id -> Set of node ids sharing a chord
+nodes.forEach(n=>touching[n.id]=new Set([n.id]));
+links.forEach(l=>{touching[l.s.id].add(l.t.id); touching[l.t.id].add(l.s.id);});
+const maxRows = Math.max(...nodes.map(n=>n.rows), 1);
+
+// ---------- radial layout ----------
+let cx=0, cy=0, R=0;
+const GAP = 0.055;                 // radians of breathing room between domains
+function layout() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  cx = w/2; cy = h/2;
+  R = Math.min(w, h)/2 - 138;      // leave margin for labels
+  const nGroups = new Set(nodes.map(n=>n.g)).size;
+  const step = (Math.PI*2 - GAP*nGroups) / nodes.length;
+  let a = -Math.PI/2;              // start at 12 o'clock
+  let prevG = nodes[0].g;
+  for (const n of nodes) {
+    if (n.g !== prevG) { a += GAP; prevG = n.g; }
+    n.a = a + step/2;
+    n.x = cx + Math.cos(n.a) * (R - 20);
+    n.y = cy + Math.sin(n.a) * (R - 20);
+    n.a0 = a; n.a1 = a + step;     // arc span for the band
+    a += step;
+  }
+}
+
+// ---------- canvas ----------
+const stage = document.getElementById('stage');
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const tip = document.getElementById('tip');
+let view = { x:0, y:0, k:1 };
+let mode = 'domain';
+let hover = null, selected = null;
+
+function nodeColor(n) {
+  if (mode==='domain') return C.groups[n.g];
+  const t = Math.log(1+n.rows)/Math.log(1+maxRows);
+  return t===0 ? C.faint : C.accent;
+}
+function nodeAlpha(n) {
+  if (mode!=='rows') return 1;
+  return 0.3 + 0.7*(Math.log(1+n.rows)/Math.log(1+maxRows));
+}
+
+function chordPath(l) {
+  // control points pulled toward the centre — the classic bundled-chord curve
+  const k = 0.28;
+  const c1x = cx + (l.s.x-cx)*k, c1y = cy + (l.s.y-cy)*k;
+  const c2x = cx + (l.t.x-cx)*k, c2y = cy + (l.t.y-cy)*k;
+  ctx.beginPath();
+  ctx.moveTo(l.s.x, l.s.y);
+  ctx.bezierCurveTo(c1x, c1y, c2x, c2y, l.t.x, l.t.y);
+}
+
+function draw() {
+  ctx.save();
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.translate(view.x,view.y); ctx.scale(view.k,view.k);
+  const focus = hover || selected;
+
+  // domain arc bands
+  const spans = {};
+  for (const n of nodes) {
+    if (!spans[n.g]) spans[n.g] = [n.a0, n.a1];
+    else spans[n.g][1] = n.a1;
+  }
+  for (const g of Object.keys(spans)) {
+    const [a0,a1] = spans[g];
+    ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1);
+    ctx.strokeStyle = C.groups[g]; ctx.globalAlpha = 0.5; ctx.lineWidth = 9; ctx.lineCap='round';
+    ctx.stroke();
+  }
+  ctx.lineCap='butt';
+
+  // chords
+  for (const l of links) {
+    const lit = focus && (l.s===focus || l.t===focus);
+    ctx.strokeStyle = C.groups[(lit?focus:l.s).g];
+    ctx.globalAlpha = focus ? (lit ? 0.85 : 0.04) : 0.16;
+    ctx.lineWidth = lit ? 1.8 : 1.1;
+    chordPath(l); ctx.stroke();
+  }
+
+  // node dots
+  for (const n of nodes) {
+    const dim = focus && !touching[focus.id].has(n.id);
+    ctx.globalAlpha = dim ? 0.25 : nodeAlpha(n);
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+    ctx.fillStyle = nodeColor(n); ctx.fill();
+    if (n===selected || n===hover) {
+      ctx.globalAlpha = 1; ctx.lineWidth = 2; ctx.strokeStyle = C.ink; ctx.stroke();
+    }
+  }
+
+  // radial labels
+  ctx.font = '500 10.5px "IBM Plex Mono", monospace';
+  for (const n of nodes) {
+    const rel = focus && touching[focus.id].has(n.id);
+    const dim = focus && !rel;
+    ctx.globalAlpha = dim ? 0.22 : 1;
+    ctx.fillStyle = (n===focus) ? C.ink : (rel ? C.ink : C.muted);
+    const lr = R + 16;
+    const lx = cx + Math.cos(n.a)*lr, ly = cy + Math.sin(n.a)*lr;
+    ctx.save(); ctx.translate(lx, ly);
+    const left = Math.cos(n.a) < 0;
+    ctx.rotate(left ? n.a + Math.PI : n.a);
+    ctx.textAlign = left ? 'right' : 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.id, 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------- interaction ----------
+function toWorld(px,py){ return [(px-view.x)/view.k, (py-view.y)/view.k]; }
+function pick(px,py){
+  const [x,y]=toWorld(px,py);
+  for (const n of nodes) if ((x-n.x)**2+(y-n.y)**2 <= (n.r+5)**2) return n;
+  // fall back to the label ring: pick by angle proximity near the rim
+  const dx=x-cx, dy=y-cy, d=Math.sqrt(dx*dx+dy*dy);
+  if (d > R-34 && d < R+96) {
+    const a=Math.atan2(dy,dx);
+    let best=null, bd=0.05;
+    for (const n of nodes){ let da=Math.abs(Math.atan2(Math.sin(a-n.a),Math.cos(a-n.a))); if (da<bd){bd=da;best=n;} }
+    return best;
+  }
+  return null;
+}
+let panning=false, lastX=0, lastY=0, moved=false;
+cv.addEventListener('pointerdown', e => {
+  panning=true; moved=false; lastX=e.offsetX; lastY=e.offsetY;
+  cv.classList.add('dragging'); cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove', e => {
+  if (panning){
+    if (Math.hypot(e.offsetX-lastX, e.offsetY-lastY) > 3) moved=true;
+    if (moved){ view.x+=e.offsetX-lastX; view.y+=e.offsetY-lastY; lastX=e.offsetX; lastY=e.offsetY; draw(); }
+    return;
+  }
+  const n=pick(e.offsetX,e.offsetY);
+  if (n!==hover){ hover=n; draw(); }
+  if (n){ tip.style.display='block';
+    tip.style.left=(e.offsetX+14)+'px'; tip.style.top=(e.offsetY+14)+'px';
+    tip.innerHTML = `<b>${n.id}</b><span>${n.group} · ${n.fields} fields · ${n.rows.toLocaleString()} rows · ${inDeg[n.id]}⟶in ${outDeg[n.id]}⟶out</span>`;
+  } else tip.style.display='none';
+});
+cv.addEventListener('pointerup', e => {
+  if (!moved){ const n=pick(e.offsetX,e.offsetY); selected = (n && n!==selected) ? n : null; renderDetail(); }
+  panning=false; cv.classList.remove('dragging'); draw();
+});
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY<0 ? 1.12 : 1/1.12;
+  const [wx,wy]=toWorld(e.offsetX,e.offsetY);
+  view.k = Math.min(Math.max(view.k*f, .4), 4);
+  view.x = e.offsetX - wx*view.k; view.y = e.offsetY - wy*view.k;
+  draw();
+}, {passive:false});
+
+// ---------- side panels ----------
+function paintLegend(){
+  const comp=document.getElementById('comp'), leg=document.getElementById('legend');
+  const totals = groups.map((g,gi)=> nodes.filter(n=>n.g===gi).reduce((a,n)=>a+n.rows,0));
+  const sum = totals.reduce((a,b)=>a+b,0)||1;
+  comp.innerHTML = totals.map((t,i)=>`<i style="flex:${Math.max(t,1)};background:${C.groups[i]}"></i>`).join('');
+  leg.innerHTML = groups.map((g,i)=>`<span><i style="background:${C.groups[i]}"></i>${g} ${Math.round(totals[i]/sum*100)}%</span>`).join('');
+}
+function renderDetail(){
+  const el=document.getElementById('detail');
+  if (!selected){ el.innerHTML='<p class="empty">Click a dot on the ring to inspect its fields, rows, and relations. Hover to trace its chords. Scroll to zoom, drag to pan.</p>'; return; }
+  const n=selected;
+  const out = links.filter(l=>l.s===n).map(l=>l.t.id);
+  const inn = links.filter(l=>l.t===n).map(l=>l.s.id);
+  el.innerHTML = `
+    <h3><i style="background:${C.groups[n.g]}"></i>${n.id}</h3>
+    <div class="grp">${n.group}</div>
+    <dl><dt>fields</dt><dd>${n.fields}</dd>
+        <dt>rows</dt><dd>${n.rows.toLocaleString()}</dd>
+        <dt>references</dt><dd>${out.length}</dd>
+        <dt>referenced by</dt><dd>${inn.length}</dd></dl>
+    ${out.length?`<div class="rel"><b>references →</b> ${out.join(', ')}</div>`:''}
+    ${inn.length?`<div class="rel"><b>← referenced by</b> ${inn.join(', ')}</div>`:''}
+    ${n.uniques.length?`<div class="uni">unique: ${n.uniques.map(u=>'('+u.replace(/\s/g,'')+')').join(' · ')}</div>`:''}`;
+}
+document.getElementById('mode-domain').onclick = e => { mode='domain'; e.target.classList.add('on'); document.getElementById('mode-rows').classList.remove('on'); draw(); };
+document.getElementById('mode-rows').onclick = e => { mode='rows'; e.target.classList.add('on'); document.getElementById('mode-domain').classList.remove('on'); draw(); };
+document.getElementById('btn-reset').onclick = () => { view={x:0,y:0,k:1}; draw(); };
+
+function fit() {
+  const dpr = devicePixelRatio || 1;
+  cv.width = stage.clientWidth * dpr; cv.height = stage.clientHeight * dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  layout(); draw();
+}
+addEventListener('resize', fit);
+paintLegend();
+fit();
+document.fonts && document.fonts.ready.then(draw);
+</script>

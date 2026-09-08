@@ -1,0 +1,346 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+/* ─── ProdigyFlo brand layer ──────────────────────────────────
+   Overrides the neutral shadcn defaults. Defined last so both the
+   light block and the .dark block above are superseded.
+
+   Rebuilt 2026-08-30 from the approved logo: midnight navy tile, a teal→aqua
+   ribbon, "Prodigy" in navy and "Flo" in teal. It replaced an indigo palette
+   (hue 268) that predated the mark.
+
+   ── THE ONE THING TO KNOW ────────────────────────────────────────────────
+   The logo teal is #55BAC2. Measured, that is 2.29:1 on white: it cannot be
+   text, a link, an icon, or a fill carrying a white label. Anywhere. The
+   brighter aqua in the ribbon (#6BE5E8) is worse at 1.50:1.
+
+   A logotype is exempt from WCAG 1.4.3, so the MARK keeps those exact values —
+   they are literals in components/brand-mark.tsx, deliberately not tokens. The
+   interface accent is DERIVED from the same hue instead: the logo teal is
+   oklch(0.732 0.094 202), and --brand is that hue taken down in lightness
+   until it clears AA in BOTH directions at once, because this one token has to
+   do both jobs in this codebase:
+
+     --brand  oklch(0.52 0.095 202) → #007880
+              as TEXT on white          5.25:1   (text-brand: links, labels)
+              as a FILL under white     5.25:1   (bg-brand + text-primary-foreground)
+
+   That symmetry is why L lands at 0.52 and not somewhere prettier. Lighter and
+   the text side fails; darker and it stops reading as the brand's teal.
+   `bg-brand-soft text-brand` — the pattern every settings card uses — measures
+   4.70:1, which is the tightest pair in the palette. Re-measure it first if
+   --brand-soft ever moves.
+
+   Neutrals carry a slight bias toward the mark's navy (hue 262) rather than
+   the old indigo. shadcn ships them at chroma 0, which reads as unconsidered
+   next to a saturated accent.
+
+   NOT retuned: the categorical --chart-* series. It was validated with the
+   dataviz validator in strict all-pairs mode (lightness band, chroma floor,
+   CVD separation, contrast on surface), and chart-3 is ALREADY a teal — moving
+   chart-1 into the brand's hue is precisely the collision that validator
+   exists to catch. Re-run it, do not retune by eye.                        */
+
+:root {
+  --brand: oklch(0.52 0.095 202);
+  --brand-soft: oklch(0.96 0.025 202);
+
+  --primary: oklch(0.52 0.095 202);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.52 0.095 202 / 45%);
+
+  /* Neutrals biased toward the mark's navy. */
+  --background: oklch(0.986 0.004 262);
+  --foreground: oklch(0.20 0.030 262);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.20 0.030 262);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.20 0.030 262);
+  --secondary: oklch(0.964 0.007 262);
+  --secondary-foreground: oklch(0.27 0.035 262);
+  --muted: oklch(0.964 0.007 262);
+  --muted-foreground: oklch(0.505 0.024 262);
+  --accent: oklch(0.952 0.014 262);
+  --accent-foreground: oklch(0.3 0.05 262);
+  --border: oklch(0.912 0.009 262);
+  --input: oklch(0.9 0.011 262);
+
+  /* Surface ladder: the page sits below cards; wells sit below the page. */
+  --surface-sunk: oklch(0.955 0.008 262);
+  --surface-raised: oklch(1 0 0);
+
+  /* Elevation is tinted with the neutral hue rather than pure black, so shadows
+     sit in the same colour world as the surfaces. */
+  --elev-1: 0 1px 2px oklch(0.25 0.045 262 / 6%);
+  --elev-2: 0 1px 2px oklch(0.25 0.045 262 / 5%), 0 4px 12px -3px oklch(0.25 0.045 262 / 9%);
+  --elev-3: 0 2px 4px oklch(0.25 0.045 262 / 5%), 0 16px 32px -12px oklch(0.25 0.045 262 / 16%);
+
+  --radius: 0.5rem;
+
+  --sidebar: oklch(0.975 0.007 262);
+  --sidebar-foreground: oklch(0.245 0.030 262);
+  --sidebar-border: oklch(0.912 0.009 262);
+  --sidebar-primary: oklch(0.52 0.095 202);
+  --sidebar-accent: oklch(0.94 0.018 262);
+  --sidebar-accent-foreground: oklch(0.3 0.05 262);
+
+  /* Categorical series colors — fixed order, never cycled.
+     Validated with the dataviz palette validator (strict all-pairs mode):
+     lightness band, chroma floor, CVD separation, normal-vision floor, and
+     >=3:1 contrast on this surface all PASS. Do not retune by eye. */
+  --chart-1: oklch(0.44 0.20 268);  /* indigo  #273fbe */
+  --chart-2: oklch(0.44 0.20 76);   /* sienna  #8d3500 */
+  --chart-3: oklch(0.56 0.20 197);  /* teal    #00939c */
+  --chart-4: oklch(0.56 0.20 16);   /* crimson #cf284b */
+  --chart-5: oklch(0.53 0.12 305);  /* violet  #7c58a3 */
+
+  --success: oklch(0.58 0.14 152);
+  --warning: oklch(0.72 0.15 76);
+  --danger: oklch(0.58 0.21 25);
+
+  /* Soft area fill for sparklines / gradient chart fills — derived from the
+     validated series token via color-mix, never a new hex. */
+  --sparkline-fill: color-mix(in oklab, var(--chart-1) 18%, transparent);
+}
+
+.dark {
+  /* On the navy ground the accent can go back to roughly the logo's own teal —
+     oklch(0.72 0.10 202) is #48B7BF against #55BAC2 — because here it is the
+     LIGHT value in the pair: 8.2:1 on the page, 8.1:1 carrying a navy label. */
+  --brand: oklch(0.72 0.10 202);
+  --brand-soft: oklch(0.28 0.05 202);
+
+  --primary: oklch(0.72 0.10 202);
+  --primary-foreground: oklch(0.16 0.030 262);
+  --ring: oklch(0.72 0.10 202 / 45%);
+
+  /* Re-picked against the dark ground, not an inversion of the light values. */
+  --background: oklch(0.155 0.016 262);
+  --foreground: oklch(0.955 0.007 262);
+  --card: oklch(0.197 0.018 262);
+  --card-foreground: oklch(0.955 0.007 262);
+  --popover: oklch(0.21 0.019 262);
+  --popover-foreground: oklch(0.955 0.007 262);
+  --secondary: oklch(0.25 0.020 262);
+  --secondary-foreground: oklch(0.94 0.009 262);
+  --muted: oklch(0.25 0.020 262);
+  --muted-foreground: oklch(0.7 0.024 262);
+  --accent: oklch(0.28 0.030 262);
+  --accent-foreground: oklch(0.95 0.011 262);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+
+  --surface-sunk: oklch(0.175 0.017 262);
+  --surface-raised: oklch(0.225 0.019 262);
+
+  --elev-1: 0 1px 2px oklch(0 0 0 / 40%);
+  --elev-2: 0 1px 2px oklch(0 0 0 / 35%), 0 4px 12px -3px oklch(0 0 0 / 50%);
+  --elev-3: 0 2px 4px oklch(0 0 0 / 35%), 0 16px 32px -12px oklch(0 0 0 / 65%);
+
+  --sidebar: oklch(0.178 0.017 262);
+  --sidebar-foreground: oklch(0.93 0.009 262);
+  --sidebar-primary: oklch(0.72 0.10 202);
+  --sidebar-accent: oklch(0.265 0.030 262);
+  --sidebar-accent-foreground: oklch(0.95 0.011 262);
+  --sidebar-border: oklch(1 0 0 / 8%);
+
+  /* Dark-mode steps are re-selected from the same hues and re-validated
+     against the dark surface — not an automatic flip of the light values. */
+  --chart-1: oklch(0.68 0.20 268);  /* #648dff */
+  --chart-2: oklch(0.65 0.20 76);   /* #d27700 */
+  --chart-3: oklch(0.65 0.14 197);  /* #00a8ac */
+  --chart-4: oklch(0.59 0.20 16);   /* #da3553 */
+  --chart-5: oklch(0.56 0.20 305);  /* #914ad0 */
+
+  --success: oklch(0.7 0.13 152);
+  --warning: oklch(0.8 0.14 76);
+  --danger: oklch(0.7 0.19 25);
+
+  /* Slightly stronger mix so the fill stays visible on the dark ground. */
+  --sparkline-fill: color-mix(in oklab, var(--chart-1) 26%, transparent);
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-surface-raised: var(--surface-raised);
+  --shadow-e1: var(--elev-1);
+  --shadow-e2: var(--elev-2);
+  --shadow-e3: var(--elev-3);
+}
+
+@layer utilities {
+  /* Wide content (tables, boards, charts) scrolls inside its own box so the
+     page body never scrolls horizontally. */
+  .scroll-x {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+
+  /* Interactive cards lift gently on hover. The hover state always applies;
+     only the transition itself is gated on prefers-reduced-motion. */
+  .card-interactive:hover {
+    box-shadow: var(--elev-2);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .card-interactive {
+      transition: box-shadow 150ms ease, border-color 150ms ease;
+    }
+  }
+
+  /* Staggered entrance for stat/card grids: each direct child rises in with a
+     small incremental delay. `backwards` keeps late children invisible until
+     their delay elapses. A complete no-op under prefers-reduced-motion. */
+  @keyframes pf-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .stagger-children > * {
+      animation: pf-rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 280ms; /* children past the eighth share the last slot */
+    }
+    .stagger-children > :nth-child(1) { animation-delay: 0ms; }
+    .stagger-children > :nth-child(2) { animation-delay: 40ms; }
+    .stagger-children > :nth-child(3) { animation-delay: 80ms; }
+    .stagger-children > :nth-child(4) { animation-delay: 120ms; }
+    .stagger-children > :nth-child(5) { animation-delay: 160ms; }
+    .stagger-children > :nth-child(6) { animation-delay: 200ms; }
+    .stagger-children > :nth-child(7) { animation-delay: 240ms; }
+  }
+}

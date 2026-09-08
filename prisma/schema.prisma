@@ -1,0 +1,2469 @@
+// ProdigyFlo — Sales Client Overview
+// Prisma schema. Every tenant-scoped model carries organizationId for isolation.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum RoleKey {
+  SUPER_ADMIN
+  ADMIN
+  REGIONAL_MANAGER
+  SALES_MANAGER
+  CLOSER
+  DOCUMENT_COLLECTOR
+  MARKETING
+  CLIENT
+}
+
+enum StageKey {
+  NEW_LEAD
+  SURVEY_STARTED
+  SURVEY_COMPLETED
+  INFO_VERIFICATION
+  CONSENT_PENDING
+  CREDIT_PULL_PENDING
+  CREDIT_PULL_COMPLETED
+  QUALIFICATION_REVIEW
+  QUALIFIED
+  NOT_QUALIFIED
+  APPOINTMENT_SCHEDULING
+  APPOINTMENT_SCHEDULED
+  PRESENTATION_COMPLETED
+  FOLLOW_UP
+  PAYMENT_SELECTION
+  DOCUMENT_COLLECTION
+  COMMUNICATION_EVIDENCE_REVIEW
+  ATTORNEY_DOCUMENT_REVIEW
+  DEAL_READY_FOR_SUBMISSION
+  SUBMITTED
+  CORRECTIONS_REQUESTED
+  APPROVED
+  CLOSED_WON
+  CLOSED_LOST
+  ON_HOLD
+}
+
+enum StageCategory {
+  INTAKE
+  QUALIFICATION
+  SALES
+  FULFILLMENT
+  SUBMISSION
+  TERMINAL
+}
+
+enum ClientStatus {
+  ACTIVE
+  ON_HOLD
+  DISQUALIFIED
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum SurveyStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum ConsentType {
+  SOFT_CREDIT_PULL
+  ELECTRONIC_COMMUNICATION
+  TCPA_CONTACT
+  PRIVACY_POLICY
+  ESIGN_DISCLOSURE
+  DOCUMENT_RELEASE
+}
+
+enum VerificationType {
+  EMAIL
+  PHONE
+  IDENTITY
+  ADDRESS
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  EXPIRED
+}
+
+enum CreditPullStatus {
+  NOT_REQUESTED
+  CONSENT_REQUIRED
+  PENDING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum QualificationOutcome {
+  QUALIFIED
+  NOT_QUALIFIED
+  NEEDS_MORE_INFO
+  PENDING
+}
+
+enum AppointmentType {
+  DISCOVERY
+  PRESENTATION
+  FOLLOW_UP
+  DOCUMENT_REVIEW
+  CLOSING
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  RESCHEDULED
+}
+
+enum PaymentPath {
+  CASH
+  CARD
+  ACH
+  FINANCING
+  UNDECIDED
+}
+
+enum PaymentStatus {
+  NOT_STARTED
+  PENDING
+  DEPOSIT_PAID
+  PAID_IN_FULL
+  FAILED
+  REFUNDED
+}
+
+enum FinancingStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  PENDING
+  APPROVED
+  DECLINED
+  ADDITIONAL_INFO_REQUIRED
+  EXPIRED
+}
+
+enum DocumentStatus {
+  REQUESTED
+  RECEIVED
+  PROCESSING
+  UNDER_REVIEW
+  MISSING_INFORMATION
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum DocumentCategory {
+  COMMUNICATION_EVIDENCE
+  ATTORNEY_REQUIRED
+  CONTRACT
+  IDENTITY
+  INCOME
+  OTHER
+}
+
+enum CommunicationChannel {
+  CALL
+  SMS
+  IMESSAGE
+  EMAIL
+  PORTAL_MESSAGE
+  MESSENGER
+  IN_PERSON
+  NOTE
+}
+
+enum CommunicationDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CommunicationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+}
+
+enum CallOutcome {
+  CONNECTED
+  VOICEMAIL
+  NO_ANSWER
+  BUSY
+  WRONG_NUMBER
+  DECLINED
+  FAILED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum SubmissionDestination {
+  CYS
+  ATTORNEY
+}
+
+enum SubmissionStatus {
+  DRAFT
+  READY
+  SUBMITTED
+  ACKNOWLEDGED
+  CORRECTIONS_REQUESTED
+  RESUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+enum AIRecommendationType {
+  ONBOARDING_ANALYSIS
+  QUALIFICATION
+  CLOSER_ASSIGNMENT
+  NEXT_BEST_ACTION
+  FOLLOW_UP_DRAFT
+}
+
+enum AIRecommendationStatus {
+  PENDING_REVIEW
+  ACCEPTED
+  OVERRIDDEN
+  DISMISSED
+}
+
+enum ConnectorKind {
+  CREDIT_BUREAU
+  TWILIO_VOICE
+  TWILIO_SMS
+  IMESSAGE
+  EMAIL
+  CALENDAR
+  META_ADS
+  PAYMENT
+  FINANCING
+  CYS
+  ATTORNEY
+  FILE_STORAGE
+  AI_PROVIDER
+  GO_HIGH_LEVEL
+}
+
+enum ConnectorStatus {
+  NOT_CONFIGURED
+  MOCK
+  CONNECTED
+  ERROR
+  DISABLED
+}
+
+enum AttributionTouch {
+  FIRST
+  LAST
+  MIDDLE
+}
+
+enum NotificationKind {
+  ASSIGNMENT
+  APPOINTMENT
+  DOCUMENT
+  SUBMISSION
+  SLA_WARNING
+  MESSAGE
+  SYSTEM
+}
+
+// ─────────────────────────────────────────────────────────────
+// Organization hierarchy & access control
+// ─────────────────────────────────────────────────────────────
+
+model Organization {
+  id                   String    @id @default(cuid())
+  name                 String
+  slug                 String    @unique
+  /// AGENCY (the master account whose users may switch into child accounts)
+  /// or CLIENT (a customer account, optionally parented to an agency).
+  kind                 String    @default("CLIENT")
+  /// Self-relation: a CLIENT account owned by an AGENCY points at it here.
+  parentOrganizationId String?
+  timezone             String    @default("America/Los_Angeles")
+  settings             Json      @default("{}")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+
+  parentOrganization Organization?  @relation("OrgTree", fields: [parentOrganizationId], references: [id], onDelete: SetNull)
+  childOrganizations Organization[] @relation("OrgTree")
+
+  regions          Region[]
+  teams            Team[]
+  users            User[]
+  roles            Role[]
+  clients          Client[]
+  pipelines        Pipeline[]
+  campaigns        Campaign[]
+  leadSources      LeadSource[]
+  connectors       Connector[]
+  auditEvents      AuditEvent[]
+  documentPackages DocumentPackage[]
+  closerBriefs     CloserBrief[]
+  coachingNotes    CoachingNote[]
+  nurtureTouches   NurtureTouch[]
+  hotLeadReviews   HotLeadReview[]
+  inboundEvents    InboundEvent[]
+  inboundDocuments InboundDocument[]
+  surveys          Survey[]
+  notifications    Notification[]
+
+  intakeSources        IntakeSource[]
+  intakeSubmissions    IntakeSubmission[]
+  invites              Invite[]
+  sequences            Sequence[]
+  scheduledMessages    ScheduledMessage[]
+  savedFilters         SavedFilter[]
+  messageTemplates     MessageTemplate[]
+  cysFieldDefinitions  CysFieldDefinition[]
+  connectorCredentials ConnectorCredential[]
+  adSets               AdSet[]
+  engineRuns           EngineRun[]
+  insights             Insight[]
+  deployRuns           DeployRun[]
+  phoneNumbers         PhoneNumber[]
+  telephonyWallet      TelephonyWallet?
+  walletEntries        WalletEntry[]
+
+  @@index([parentOrganizationId])
+}
+
+model Region {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  timezone       String    @default("America/Los_Angeles")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  teams        Team[]
+  users        User[]
+  clients      Client[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model Team {
+  id             String    @id @default(cuid())
+  organizationId String
+  regionId       String?
+  name           String
+  managerId      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  region       Region?      @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  manager      User?        @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members      User[]       @relation("TeamMembers")
+  clients      Client[]
+
+  @@index([organizationId])
+  @@index([regionId])
+}
+
+model Permission {
+  id          String @id @default(cuid())
+  key         String @unique
+  description String
+  category    String
+
+  roles RolePermission[]
+}
+
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            RoleKey
+  name           String
+  description    String?
+  isSystem       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  RolePermission[]
+  users        User[]
+  invites      Invite[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id             String  @id @default(cuid())
+  organizationId String
+  roleId         String
+  regionId       String?
+  teamId         String?
+  managerId      String?
+
+  email        String
+  passwordHash String
+  name         String
+  /// The organization's true owner. Deliberately invisible in the UI — the role
+  /// label stays "Super Admin" so the owner reads as a peer. Grants: sole right
+  /// to mint Super Admins, unmanageable by anyone else.
+  isOwner      Boolean @default(false)
+  nickname     String?
+  /// Optional post-login landing route override (e.g. a demo user pinned to /recovery).
+  landingPath  String?
+  phone        String?
+  avatarUrl    String?
+  title        String?
+
+  // Email identity: a company address (alias@<domain>) that forwards to the
+  // user's own inbox via Cloudflare Email Routing, plus signature preferences.
+  emailAlias            String?
+  forwardingEmail       String?
+  forwardingStatus      String    @default("none") // none | pending | active
+  signatureStyle        String    @default("formal") // formal | friendly
+  signatureIncludePhone Boolean   @default(true)
+  languages             String[]  @default([])
+  licensedIn            String[]  @default([])
+  specialties           String[]  @default([])
+  isActive              Boolean   @default(true)
+  maxWorkload           Int       @default(40)
+  lastLoginAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+  region       Region?      @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  team         Team?        @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  manager      User?        @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports      User[]       @relation("UserManager")
+
+  managedTeams         Team[]                @relation("TeamManager")
+  clientPortalLink     Client?               @relation("ClientUser")
+  ownedClients         Client[]              @relation("ClientOwner")
+  assignments          Assignment[]          @relation("AssignmentAssignee")
+  assignmentsMade      Assignment[]          @relation("AssignmentAssigner")
+  appointments         Appointment[]         @relation("AppointmentOwner")
+  availability         AvailabilitySlot[]
+  presentations        Presentation[]
+  qualificationReviews QualificationReview[]
+  documentReviews      DocumentReview[]
+  communications       Communication[]
+  tasksAssigned        Task[]                @relation("TaskAssignee")
+  tasksCreated         Task[]                @relation("TaskCreator")
+  notes                Note[]
+  stageChanges         StageHistory[]
+  submissions          Submission[]
+  aiOverrides          AIRecommendation[]    @relation("AIReviewer")
+  auditEvents          AuditEvent[]
+  notifications        Notification[]
+  sessions             UserSession[]
+  collectorDocuments   ClientDocument[]      @relation("DocumentCollector")
+
+  verifiedFields        ExtractedField[]      @relation("FieldVerifier")
+  sentInvites           Invite[]              @relation("InviteSender")
+  acceptedInvite        Invite?               @relation("InviteAccepted")
+  sequencesCreated      Sequence[]            @relation("SequenceAuthor")
+  scheduledMessages     ScheduledMessage[]    @relation("ScheduledSender")
+  savedFilters          SavedFilter[]
+  cysVerifications      CysFieldValue[]       @relation("CysVerifier")
+  closerBriefsRequested CloserBrief[]         @relation("BriefRequester")
+  closerBriefsViewed    CloserBrief[]         @relation("BriefViewer")
+  coachingGiven         CoachingNote[]        @relation("CoachAuthor")
+  coachingReceived      CoachingNote[]        @relation("CoachSubject")
+  nurtureTouchesSent    NurtureTouch[]        @relation("NurtureSender")
+  hotLeadReviews        HotLeadReview[]       @relation("HotLeadReviewer")
+  cysApprovals          CysReadiness[]        @relation("CysApprover")
+  messageTemplates      MessageTemplate[]     @relation("TemplateAuthor")
+  intakeSourcesOwned    IntakeSource[]        @relation("IntakeDefaultOwner")
+  credentialsCreated    ConnectorCredential[] @relation("CredentialCreator")
+  insightsReviewed      Insight[]             @relation("InsightReviewer")
+  deployRunsStarted     DeployRun[]           @relation("DeployStarter")
+  authTokens            AuthToken[]
+  phoneNumbersAssigned  PhoneNumber[]         @relation("PhoneNumberAssignee")
+  phoneNumbersCreated   PhoneNumber[]         @relation("PhoneNumberCreator")
+  walletEntriesCreated  WalletEntry[]         @relation("WalletEntryCreator")
+
+  @@unique([organizationId, email])
+  @@unique([organizationId, emailAlias])
+  @@index([organizationId])
+  @@index([teamId])
+  @@index([regionId])
+  @@index([managerId])
+}
+
+model UserSession {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  ipHash     String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Short-lived, single-use tokens behind the self-service auth flows
+/// (password reset + magic-link sign-in). Only the sha256 hash is stored;
+/// the plaintext appears once, inside the emailed link. Deliberately org-less:
+/// login is org-blind (email is globally unique by policy), so the token binds
+/// to the user directly and cascades away with the account.
+model AuthToken {
+  id              String    @id @default(cuid())
+  userId          String
+  kind            String // PASSWORD_RESET | MAGIC_LINK
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  usedAt          DateTime?
+  requestedIpHash String?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Pipeline
+// ─────────────────────────────────────────────────────────────
+
+model Pipeline {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stages       PipelineStage[]
+  clients      Client[]
+
+  @@index([organizationId])
+}
+
+model PipelineStage {
+  id         String        @id @default(cuid())
+  pipelineId String
+  key        StageKey
+  name       String
+  category   StageCategory
+  position   Int
+  slaHours   Int?
+  isTerminal Boolean       @default(false)
+
+  requiredFields  String[]   @default([])
+  checklist       Json       @default("[]")
+  allowedNextKeys StageKey[] @default([])
+  autoAdvance     Boolean    @default(false)
+  description     String?
+
+  pipeline     Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  clients      Client[]
+  stageHistory StageHistory[]
+
+  @@unique([pipelineId, key])
+  @@index([pipelineId])
+}
+
+model StageHistory {
+  id              String    @id @default(cuid())
+  clientId        String
+  stageId         String
+  fromKey         StageKey?
+  toKey           StageKey
+  enteredAt       DateTime  @default(now())
+  exitedAt        DateTime?
+  durationMinutes Int?
+  changedById     String?
+  automated       Boolean   @default(false)
+  reason          String?
+  note            String?
+
+  client    Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  stage     PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  changedBy User?         @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([stageId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Client
+// ─────────────────────────────────────────────────────────────
+
+model Client {
+  id             String  @id @default(cuid())
+  organizationId String
+  pipelineId     String
+  currentStageId String
+  regionId       String?
+  teamId         String?
+  ownerId        String?
+  portalUserId   String? @unique
+
+  firstName         String
+  lastName          String
+  email             String
+  phone             String
+  preferredLanguage String       @default("en")
+  preferredContact  String       @default("phone")
+  // Instagram identity for leads from Instagram DMs/comments/story replies
+  // (which carry a handle, not an email/phone). instagramUserId is the STABLE
+  // Instagram-scoped sender id — the dedupe key that maps a repeat messager to
+  // one client; instagramHandle is the best-effort display @username, backfilled
+  // when a profile lookup succeeds. Both null for every other lead source.
+  instagramUserId   String?
+  instagramHandle   String?
+  status            ClientStatus @default(ACTIVE)
+
+  leadSourceId String?
+  campaignId   String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  utmTerm      String?
+  utmContent   String?
+
+  estimatedValue       Decimal?  @db.Decimal(12, 2)
+  probability          Int?
+  // AI probability-to-close (0-100). A prioritization signal, never a decision:
+  // humans qualify; this only orders the call queue. See src/lib/closeops.ts.
+  aiCloseProbability   Int?
+  aiCloseProbabilityAt DateTime?
+  expectedCloseAt      DateTime?
+  lostReason           String?
+  holdReason           String?
+  disqualifiedReason   String?
+
+  stageEnteredAt DateTime  @default(now())
+  firstContactAt DateTime?
+  lastActivityAt DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id])
+  currentStage PipelineStage @relation(fields: [currentStageId], references: [id])
+  region       Region?       @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  owner        User?         @relation("ClientOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  portalUser   User?         @relation("ClientUser", fields: [portalUserId], references: [id], onDelete: SetNull)
+  leadSource   LeadSource?   @relation(fields: [leadSourceId], references: [id], onDelete: SetNull)
+  campaign     Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  addresses             ClientAddress[]
+  surveyResponses       SurveyResponse[]
+  consents              Consent[]
+  verifications         Verification[]
+  creditPulls           CreditPull[]
+  qualificationReviews  QualificationReview[]
+  contracts             Contract[]
+  stageHistory          StageHistory[]
+  assignments           Assignment[]
+  appointments          Appointment[]
+  presentations         Presentation[]
+  paymentMethods        PaymentMethod[]
+  financingApplications FinancingApplication[]
+  documents             ClientDocument[]
+  communications        Communication[]
+  tasks                 Task[]
+  notes                 Note[]
+  attributionEvents     AttributionEvent[]
+  deal                  Deal?
+  submissions           Submission[]
+  aiRecommendations     AIRecommendation[]
+  intakeSubmissions     IntakeSubmission[]
+  cysReadiness          CysReadiness?
+  cysFieldValues        CysFieldValue[]
+  sequenceEnrollments   SequenceEnrollment[]
+  scheduledMessages     ScheduledMessage[]
+  closerBriefs          CloserBrief[]
+  coachingNotes         CoachingNote[]
+  nurtureTouches        NurtureTouch[]
+  hotLeadReviews        HotLeadReview[]
+  inboundEvents         InboundEvent[]
+  inboundDocuments      InboundDocument[]
+
+  // One live client per Instagram sender per org (nulls stay distinct in
+  // Postgres, so non-Instagram leads are unaffected). Enforces the dedupe.
+  @@unique([organizationId, instagramUserId])
+  @@index([organizationId])
+  @@index([currentStageId])
+  @@index([ownerId])
+  @@index([teamId])
+  @@index([regionId])
+  @@index([organizationId, status])
+  @@index([campaignId])
+  @@index([leadSourceId])
+  @@index([organizationId, aiCloseProbability])
+}
+
+model ClientAddress {
+  id         String   @id @default(cuid())
+  clientId   String
+  label      String   @default("primary")
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  country    String   @default("US")
+  isPrimary  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Survey
+// ─────────────────────────────────────────────────────────────
+
+model Survey {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  schema         Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  responses    SurveyResponse[]
+
+  @@index([organizationId])
+}
+
+model SurveyResponse {
+  id              String       @id @default(cuid())
+  surveyId        String
+  clientId        String
+  status          SurveyStatus @default(IN_PROGRESS)
+  currentStep     Int          @default(0)
+  answers         Json         @default("{}")
+  resumeTokenHash String?      @unique
+  startedAt       DateTime     @default(now())
+  completedAt     DateTime?
+  abandonedAt     DateTime?
+  updatedAt       DateTime     @updatedAt
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([surveyId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Consent, verification, credit
+// ─────────────────────────────────────────────────────────────
+
+model Consent {
+  id          String      @id @default(cuid())
+  clientId    String
+  type        ConsentType
+  granted     Boolean
+  textVersion String
+  text        String
+  purpose     String
+  ipHash      String?
+  userAgent   String?
+  grantedAt   DateTime    @default(now())
+  revokedAt   DateTime?
+  expiresAt   DateTime?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, type])
+}
+
+model Verification {
+  id           String             @id @default(cuid())
+  clientId     String
+  type         VerificationType
+  status       VerificationStatus @default(PENDING)
+  value        String?
+  maskedValue  String?
+  method       String?
+  verifiedAt   DateTime?
+  verifiedById String?
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, type])
+  @@index([clientId])
+}
+
+model CreditPull {
+  id                 String           @id @default(cuid())
+  clientId           String
+  consentId          String?
+  provider           String           @default("mock")
+  status             CreditPullStatus @default(NOT_REQUESTED)
+  permissiblePurpose String?
+
+  scoreBand          String?
+  scoreRangeLow      Int?
+  scoreRangeHigh     Int?
+  tradelines         Int?
+  derogatoryMarks    Int?
+  utilizationPct     Int?
+  monthlyObligations Decimal?  @db.Decimal(12, 2)
+  externalRef        String?
+  requestedAt        DateTime?
+  completedAt        DateTime?
+  expiresAt          DateTime?
+  failureReason      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+model QualificationReview {
+  id         String               @id @default(cuid())
+  clientId   String
+  outcome    QualificationOutcome @default(PENDING)
+  reviewerId String?
+  reviewedAt DateTime?
+
+  aiRecommendedOutcome QualificationOutcome?
+  aiConfidence         Int?
+  aiReasons            Json                  @default("[]")
+  missingEvidence      Json                  @default("[]")
+  rulesEvaluated       Json                  @default("[]")
+  overrideReason       String?
+  decisionNotes        String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reviewer User?  @relation(fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+}
+
+model Contract {
+  id               String    @id @default(cuid())
+  clientId         String
+  counterparty     String
+  productType      String?
+  signedAt         DateTime?
+  termMonths       Int?
+  monthlyAmount    Decimal?  @db.Decimal(12, 2)
+  totalAmount      Decimal?  @db.Decimal(12, 2)
+  escalatorPct     Decimal?  @db.Decimal(5, 2)
+  documentId       String?
+  extractedFields  Json      @default("{}")
+  extractionSource String?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Assignment, scheduling, presentation
+// ─────────────────────────────────────────────────────────────
+
+model Assignment {
+  id                 String    @id @default(cuid())
+  clientId           String
+  assigneeId         String
+  assignedById       String?
+  role               RoleKey   @default(CLOSER)
+  isActive           Boolean   @default(true)
+  reason             String?
+  aiRecommendationId String?
+  wasOverride        Boolean   @default(false)
+  overrideReason     String?
+  assignedAt         DateTime  @default(now())
+  unassignedAt       DateTime?
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignee   User   @relation("AssignmentAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+  assignedBy User?  @relation("AssignmentAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([assigneeId])
+}
+
+model AvailabilitySlot {
+  id          String @id @default(cuid())
+  userId      String
+  weekday     Int
+  startMinute Int
+  endMinute   Int
+  timezone    String @default("America/Los_Angeles")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Appointment {
+  id                  String            @id @default(cuid())
+  clientId            String
+  ownerId             String
+  type                AppointmentType   @default(PRESENTATION)
+  status              AppointmentStatus @default(SCHEDULED)
+  startsAt            DateTime
+  endsAt              DateTime
+  timezone            String            @default("America/Los_Angeles")
+  location            String?
+  meetingUrl          String?
+  externalEventId     String?
+  calendarConnectorId String?
+  reminderSentAt      DateTime?
+  confirmedAt         DateTime?
+  cancelledAt         DateTime?
+  rescheduledFromId   String?
+  outcome             String?
+  outcomeNotes        String?
+  noShowRecordedAt    DateTime?
+  prepBrief           Json?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  owner        User          @relation("AppointmentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  presentation Presentation?
+
+  @@index([clientId])
+  @@index([ownerId])
+  @@index([startsAt])
+}
+
+model Presentation {
+  id            String    @id @default(cuid())
+  clientId      String
+  appointmentId String?   @unique
+  presenterId   String
+  completedAt   DateTime?
+  checklist     Json      @default("[]")
+  materialsUrl  String?
+  notes         String?
+  objections    Json      @default("[]")
+  followUpAt    DateTime?
+  followUpNotes String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  presenter   User         @relation(fields: [presenterId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Payment & financing
+// ─────────────────────────────────────────────────────────────
+
+model PaymentMethod {
+  id       String        @id @default(cuid())
+  clientId String
+  path     PaymentPath   @default(UNDECIDED)
+  status   PaymentStatus @default(NOT_STARTED)
+  provider String?
+
+  providerToken  String?
+  brand          String?
+  last4          String?
+  expMonth       Int?
+  expYear        Int?
+  amount         Decimal?  @db.Decimal(12, 2)
+  depositAmount  Decimal?  @db.Decimal(12, 2)
+  receiptRef     String?
+  failureCode    String?
+  failureMessage String?
+  selectedAt     DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+model FinancingApplication {
+  id                      String          @id @default(cuid())
+  clientId                String
+  provider                String          @default("mock")
+  status                  FinancingStatus @default(NOT_SUBMITTED)
+  requestedAmount         Decimal?        @db.Decimal(12, 2)
+  approvedAmount          Decimal?        @db.Decimal(12, 2)
+  termMonths              Int?
+  aprPct                  Decimal?        @db.Decimal(5, 2)
+  monthlyPayment          Decimal?        @db.Decimal(12, 2)
+  externalRef             String?
+  decisionAt              DateTime?
+  decisionReason          String?
+  additionalInfoRequested Json            @default("[]")
+  submittedAt             DateTime?
+  expiresAt               DateTime?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Documents
+// ─────────────────────────────────────────────────────────────
+
+model DocumentPackage {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requirements DocumentRequirement[]
+
+  @@index([organizationId])
+}
+
+model DocumentRequirement {
+  id                 String           @id @default(cuid())
+  packageId          String
+  key                String
+  name               String
+  category           DocumentCategory @default(OTHER)
+  description        String?
+  isRequired         Boolean          @default(true)
+  isAttorneyRequired Boolean          @default(false)
+  position           Int              @default(0)
+  allowedMimeTypes   String[]         @default([])
+  maxSizeMb          Int              @default(25)
+  expiresAfterDays   Int?
+
+  package   DocumentPackage  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  documents ClientDocument[]
+
+  @@unique([packageId, key])
+  @@index([packageId])
+}
+
+model ClientDocument {
+  id                   String         @id @default(cuid())
+  clientId             String
+  requirementId        String?
+  collectorId          String?
+  status               DocumentStatus @default(REQUESTED)
+  version              Int            @default(1)
+  supersedesId         String?
+  fileName             String?
+  storageKey           String?
+  mimeType             String?
+  sizeBytes            Int?
+  checksum             String?
+  scanStatus           String         @default("pending")
+  label                String?
+  clientVisibleComment String?
+  internalComment      String?
+  rejectionReason      String?
+  requestedAt          DateTime       @default(now())
+  receivedAt           DateTime?
+  expiresAt            DateTime?
+  slaDueAt             DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  client      Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requirement DocumentRequirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  collector   User?                @relation("DocumentCollector", fields: [collectorId], references: [id], onDelete: SetNull)
+  reviews     DocumentReview[]
+  extractions DocumentExtraction[]
+  cysValues   CysFieldValue[]      @relation("CysSourceDocument")
+
+  @@index([clientId])
+  @@index([collectorId])
+  @@index([status])
+}
+
+model DocumentReview {
+  id         String         @id @default(cuid())
+  documentId String
+  reviewerId String
+  decision   DocumentStatus
+  reason     String?
+  reviewedAt DateTime       @default(now())
+
+  document ClientDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reviewer User           @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Communications
+// ─────────────────────────────────────────────────────────────
+
+model Communication {
+  id          String                 @id @default(cuid())
+  clientId    String
+  userId      String?
+  channel     CommunicationChannel
+  direction   CommunicationDirection
+  status      CommunicationStatus    @default(SENT)
+  subject     String?
+  body        String?
+  isInternal  Boolean                @default(false)
+  templateKey String?
+  connectorId String?
+  externalRef String?
+  occurredAt  DateTime               @default(now())
+  createdAt   DateTime               @default(now())
+
+  client  Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  call    Call?
+  message Message?
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([occurredAt])
+}
+
+model Call {
+  id              String @id @default(cuid())
+  communicationId String @unique
+
+  fromMasked               String?
+  toMasked                 String?
+  durationSeconds          Int         @default(0)
+  outcome                  CallOutcome @default(CONNECTED)
+  recordingRef             String?
+  recordingDurationSeconds Int?
+  voicemailLeft            Boolean     @default(false)
+  /// 5-step funnel adherence recorded when the call is logged:
+  /// [{ step: string, done: boolean }]. See FUNNEL_STEPS in src/lib/adherence.ts.
+  adherence                Json        @default("[]")
+
+  communication Communication  @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  qaNotes       CoachingNote[]
+}
+
+model Message {
+  id              String    @id @default(cuid())
+  communicationId String    @unique
+  fromMasked      String?
+  toMasked        String?
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  failureCode     String?
+  optOutDetected  Boolean   @default(false)
+  attachments     Json      @default("[]")
+
+  communication Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Work management
+// ─────────────────────────────────────────────────────────────
+
+model Task {
+  id          String       @id @default(cuid())
+  clientId    String?
+  assigneeId  String?
+  createdById String?
+  title       String
+  description String?
+  status      TaskStatus   @default(OPEN)
+  priority    TaskPriority @default(NORMAL)
+  dueAt       DateTime?
+  completedAt DateTime?
+  stageKey    StageKey?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  client    Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignee  User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy User?   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([assigneeId, status])
+  @@index([dueAt])
+}
+
+model Note {
+  id         String   @id @default(cuid())
+  clientId   String
+  authorId   String?
+  body       String
+  isInternal Boolean  @default(true)
+  pinned     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  author User?  @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Marketing & attribution
+// ─────────────────────────────────────────────────────────────
+
+model LeadSource {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String
+  name           String
+  channel        String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clients           Client[]
+  campaigns         Campaign[]
+  attributionEvents AttributionEvent[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model Campaign {
+  id             String    @id @default(cuid())
+  organizationId String
+  leadSourceId   String?
+  name           String
+  externalId     String?
+  channel        String
+  status         String    @default("active")
+  startedAt      DateTime?
+  endedAt        DateTime?
+  budget         Decimal?  @db.Decimal(12, 2)
+  /// Lifetime spend cap mirrored to the ad platform (Meta campaign spend_cap).
+  spendCap       Decimal?  @db.Decimal(12, 2)
+  spend          Decimal   @default(0) @db.Decimal(12, 2)
+  impressions    Int       @default(0)
+  clicks         Int       @default(0)
+  utmCampaign    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadSource        LeadSource?         @relation(fields: [leadSourceId], references: [id], onDelete: SetNull)
+  clients           Client[]
+  attributionEvents AttributionEvent[]
+  dailyStats        CampaignDailyStat[]
+  adSets            AdSet[]
+
+  @@index([organizationId])
+}
+
+/// One row per campaign per day — the spend/performance series behind the
+/// Meta Ads charts. Written by provider sync (or the mock generator).
+model CampaignDailyStat {
+  id          String   @id @default(cuid())
+  campaignId  String
+  /// Optional ad-set attribution - campaign-level rows leave this null.
+  adSetId     String?
+  date        DateTime @db.Date
+  spend       Decimal  @default(0) @db.Decimal(12, 2)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  leads       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date])
+  @@index([campaignId])
+  @@index([adSetId])
+}
+
+model AttributionEvent {
+  id           String           @id @default(cuid())
+  clientId     String
+  campaignId   String?
+  leadSourceId String?
+  touch        AttributionTouch @default(MIDDLE)
+  channel      String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  referrer     String?
+  landingPath  String?
+  occurredAt   DateTime         @default(now())
+
+  client     Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  campaign   Campaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  leadSource LeadSource? @relation(fields: [leadSourceId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([campaignId])
+  @@index([occurredAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Deal & submission
+// ─────────────────────────────────────────────────────────────
+
+model Deal {
+  id              String     @id @default(cuid())
+  clientId        String     @unique
+  status          DealStatus @default(OPEN)
+  value           Decimal    @default(0) @db.Decimal(12, 2)
+  currency        String     @default("USD")
+  probability     Int        @default(0)
+  expectedCloseAt DateTime?
+  wonAt           DateTime?
+  lostAt          DateTime?
+  lostReason      String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+}
+
+model Submission {
+  id                     String                @id @default(cuid())
+  clientId               String
+  dealId                 String?
+  destination            SubmissionDestination @default(CYS)
+  status                 SubmissionStatus      @default(DRAFT)
+  connectorId            String?
+  externalRef            String?
+  packageManifest        Json                  @default("[]")
+  validationReport       Json                  @default("{}")
+  approvedById           String?
+  approvedAt             DateTime?
+  submittedAt            DateTime?
+  acknowledgedAt         DateTime?
+  correctionsRequested   Json                  @default("[]")
+  correctionsRequestedAt DateTime?
+  resubmittedAt          DateTime?
+  rejectionReason        String?
+  attemptNumber          Int                   @default(1)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  deal       Deal?  @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  approvedBy User?  @relation(fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI, connectors, notifications, audit
+// ─────────────────────────────────────────────────────────────
+
+model AIRecommendation {
+  id       String                 @id @default(cuid())
+  clientId String
+  type     AIRecommendationType
+  status   AIRecommendationStatus @default(PENDING_REVIEW)
+  provider String                 @default("mock")
+  model    String?
+
+  summary            String?
+  facts              Json    @default("[]")
+  inferences         Json    @default("[]")
+  recommendation     Json    @default("{}")
+  confidence         Int?
+  reasons            Json    @default("[]")
+  missingInformation Json    @default("[]")
+  complianceFlags    Json    @default("[]")
+
+  reviewedById     String?
+  reviewedAt       DateTime?
+  overrideReason   String?
+  promptTokens     Int?
+  completionTokens Int?
+  createdAt        DateTime  @default(now())
+
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reviewer User?  @relation("AIReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([clientId, type])
+}
+
+model Connector {
+  id             String          @id @default(cuid())
+  organizationId String
+  kind           ConnectorKind
+  name           String
+  status         ConnectorStatus @default(MOCK)
+  isEnabled      Boolean         @default(true)
+
+  config         Json      @default("{}")
+  secretRef      String?
+  fieldMapping   Json      @default("{}")
+  lastSyncAt     DateTime?
+  lastSyncStatus String?
+  lastErrorAt    DateTime?
+  lastError      String?
+  webhookUrl     String?
+  webhookHealthy Boolean   @default(true)
+  retryCount     Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  syncLogs     ConnectorLog[]
+  credentials  ConnectorCredential[]
+
+  @@unique([organizationId, kind])
+  @@index([organizationId])
+}
+
+model ConnectorLog {
+  id          String   @id @default(cuid())
+  connectorId String
+  level       String   @default("info")
+  event       String
+  detail      Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  connector Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@index([connectorId, createdAt])
+}
+
+model Notification {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  kind           NotificationKind @default(SYSTEM)
+  title          String
+  body           String?
+  href           String?
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model AuditEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorId        String?
+  actorLabel     String?
+  action         String
+  entityType     String
+  entityId       String?
+  summary        String?
+  before         Json?
+  after          Json?
+  ipHash         String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Intake — forms, sheets and webhooks (Phase 2)
+// ─────────────────────────────────────────────────────────────
+
+enum InboundCategory {
+  CONTACT
+  DOCUMENT
+  OPPORTUNITY
+  NOTE
+  APPOINTMENT
+  OTHER
+}
+
+enum IntakeAuthMode {
+  /// Sender signs each request body with HMAC-SHA256 (X-Intake-Signature).
+  HMAC
+  /// Sender presents a static shared token header (X-Connector-Token) — the
+  /// only method GoHighLevel workflow webhooks can produce without a proxy.
+  TOKEN
+}
+
+enum IntakeSourceKind {
+  WEB_FORM
+  GOOGLE_SHEET
+  CSV_IMPORT
+  META_LEAD_ADS
+  GO_HIGH_LEVEL
+  GENERIC_WEBHOOK
+  ZAPIER
+}
+
+enum IntakeStatus {
+  RECEIVED
+  APPLIED
+  DUPLICATE
+  NEEDS_MAPPING
+  FAILED
+}
+
+/// A configured origin for inbound leads. One row per form or spreadsheet, so an
+/// organization can run many at once (unlike Connector, which is one per kind).
+model IntakeSource {
+  id                  String           @id @default(cuid())
+  organizationId      String
+  kind                IntakeSourceKind
+  /// Catalog definition id from src/lib/connectors/catalog.ts (e.g. "gohighlevel").
+  connectorDefId      String?
+  name                String
+  slug                String
+  /// How the caller authenticates. HMAC (signed body) or TOKEN (static header).
+  authMode            IntakeAuthMode   @default(HMAC)
+  /// SHA-256 of the shared secret/token. Callers present the plaintext; we never store it.
+  secretHash          String?
+  /// { crmField: incomingKey } — configurable without a deploy.
+  fieldMapping        Json             @default("{}")
+  /// Which CRM fields identify an existing person. Order matters: first hit wins.
+  dedupeKeys          String[]         @default(["email", "phone"])
+  defaultOwnerId      String?
+  defaultLeadSourceId String?
+  isEnabled           Boolean          @default(true)
+  /// GOOGLE_SHEET only.
+  sheetId             String?
+  sheetTab            String?
+  lastRowCursor       Int              @default(0)
+  lastSyncAt          DateTime?
+  lastSyncStatus      String?
+  lastError           String?
+  lastErrorAt         DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  defaultOwner User?              @relation("IntakeDefaultOwner", fields: [defaultOwnerId], references: [id], onDelete: SetNull)
+  submissions  IntakeSubmission[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+/// One inbound payload. (sourceId, externalId) is unique, which is what makes
+/// webhook delivery idempotent: a replay updates this row instead of creating a lead.
+model IntakeSubmission {
+  id             String       @id @default(cuid())
+  organizationId String
+  sourceId       String
+  externalId     String
+  status         IntakeStatus @default(RECEIVED)
+  rawPayload     Json         @default("{}")
+  mappedPayload  Json         @default("{}")
+  unmappedKeys   String[]     @default([])
+  clientId       String?
+  createdClient  Boolean      @default(false)
+  matchedOn      String?
+  error          String?
+  attemptCount   Int          @default(1)
+  processedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source       IntakeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceId, externalId])
+  @@index([organizationId, status])
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Messaging templates (Phase 3)
+// ─────────────────────────────────────────────────────────────
+
+model MessageTemplate {
+  id             String               @id @default(cuid())
+  organizationId String
+  key            String
+  name           String
+  channel        CommunicationChannel
+  locale         String               @default("en")
+  subject        String?
+  body           String
+  description    String?
+  isActive       Boolean              @default(true)
+  createdById    String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("TemplateAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, key, locale])
+  @@index([organizationId, channel])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Document analysis (Phase 4)
+// ─────────────────────────────────────────────────────────────
+
+enum ExtractionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum FieldVerification {
+  UNVERIFIED
+  VERIFIED
+  CORRECTED
+  REJECTED
+}
+
+/// One AI pass over one document version. Never mutated after COMPLETED — a
+/// re-run creates a new row so the review history stays intact.
+model DocumentExtraction {
+  id                String           @id @default(cuid())
+  documentId        String
+  status            ExtractionStatus @default(PENDING)
+  provider          String           @default("mock")
+  model             String?
+  detectedTypeKey   String?
+  detectedTypeLabel String?
+  typeConfidence    Int?
+  pageCount         Int?
+  rawText           String?
+  summary           String?
+  warnings          Json             @default("[]")
+  missingFieldKeys  String[]         @default([])
+  error             String?
+  promptTokens      Int?
+  completionTokens  Int?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+
+  document ClientDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  fields   ExtractedField[]
+
+  @@index([documentId])
+  @@index([status])
+}
+
+/// A single AI-proposed value. `value` is what the model read; `correctedValue`
+/// is what a human said it really is. Downstream code must read the corrected
+/// value when present, and must treat UNVERIFIED as "not client data yet".
+model ExtractedField {
+  id              String            @id @default(cuid())
+  extractionId    String
+  key             String
+  label           String
+  value           String?
+  normalizedValue String?
+  confidence      Int               @default(0)
+  sourcePage      Int?
+  sourceSnippet   String?
+  verification    FieldVerification @default(UNVERIFIED)
+  correctedValue  String?
+  conflictNote    String?
+  reviewerNote    String?
+  verifiedById    String?
+  verifiedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  extraction DocumentExtraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+  verifiedBy User?              @relation("FieldVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  cysValues  CysFieldValue[]    @relation("CysSourceField")
+
+  @@unique([extractionId, key])
+  @@index([extractionId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// CYS readiness (Phase 5)
+// ─────────────────────────────────────────────────────────────
+
+enum CysSourceType {
+  CLIENT_FIELD
+  ADDRESS_FIELD
+  DOCUMENT_FIELD
+  SURVEY_FIELD
+  MANUAL
+}
+
+enum CysValueStatus {
+  MISSING
+  SUGGESTED
+  VERIFIED
+  CONFLICT
+}
+
+/// The configurable CYS field map. No CYS API is assumed — this describes the
+/// shape of the package we hand over, and is editable in Settings.
+model CysFieldDefinition {
+  id             String        @id @default(cuid())
+  organizationId String
+  key            String
+  label          String
+  groupName      String        @default("General")
+  position       Int           @default(0)
+  isRequired     Boolean       @default(true)
+  dataType       String        @default("string")
+  sourceType     CysSourceType @default(CLIENT_FIELD)
+  /// Dot-path into the source, e.g. client.email or document.utility_bill.account_number.
+  sourcePath     String?
+  helpText       String?
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model CysReadiness {
+  id                 String    @id @default(cuid())
+  clientId           String    @unique
+  completionPct      Int       @default(0)
+  requiredTotal      Int       @default(0)
+  requiredVerified   Int       @default(0)
+  checklist          Json      @default("[]")
+  packageJson        Json?
+  packageGeneratedAt DateTime?
+  approvedById       String?
+  approvedAt         DateTime?
+  approvalNote       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  approvedBy User?  @relation("CysApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+}
+
+/// The resolved value for one CYS field on one client, plus where it came from.
+model CysFieldValue {
+  id                     String         @id @default(cuid())
+  clientId               String
+  fieldKey               String
+  value                  String?
+  status                 CysValueStatus @default(MISSING)
+  confidence             Int?
+  sourceLabel            String?
+  sourceDocumentId       String?
+  sourceExtractedFieldId String?
+  conflictValue          String?
+  note                   String?
+  verifiedById           String?
+  verifiedAt             DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceDocument ClientDocument? @relation("CysSourceDocument", fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  sourceField    ExtractedField? @relation("CysSourceField", fields: [sourceExtractedFieldId], references: [id], onDelete: SetNull)
+  verifiedBy     User?           @relation("CysVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@unique([clientId, fieldKey])
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Staff invites
+// ─────────────────────────────────────────────────────────────
+
+/// A one-time, expiring invitation to join the organization's staff. Only the
+/// SHA-256 of the link token is stored; the plaintext is shown once at creation
+/// (and again on an explicit link reset, which rotates the token).
+model Invite {
+  id             String    @id @default(cuid())
+  organizationId String
+  /// Null = an open single-use link: whoever opens it first joins with this
+  /// role, providing their own email. Stamped at acceptance for the record.
+  email          String?
+  roleId         String
+  teamId         String?
+  regionId       String?
+  tokenHash      String    @unique
+  /// Copied onto the created user at acceptance. Never exposed in the UI.
+  isOwner        Boolean   @default(false)
+  invitedById    String?
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  acceptedUserId String?   @unique
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  invitedBy    User?        @relation("InviteSender", fields: [invitedById], references: [id], onDelete: SetNull)
+  acceptedUser User?        @relation("InviteAccepted", fields: [acceptedUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, email])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Messaging automation (P1)
+// ─────────────────────────────────────────────────────────────
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  STOPPED
+  FAILED
+}
+
+enum ScheduledMessageStatus {
+  PENDING
+  SENT
+  CANCELLED
+  FAILED
+}
+
+/// An automated follow-up sequence: ordered, delayed template sends. A client
+/// enrolls manually or when entering `triggerStageKey`; a reply stops steps
+/// marked stopIfReplied, and consent is re-checked at every send.
+model Sequence {
+  id              String    @id @default(cuid())
+  organizationId  String
+  name            String
+  description     String?
+  isActive        Boolean   @default(true)
+  triggerStageKey StageKey?
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?                @relation("SequenceAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  steps        SequenceStep[]
+  enrollments  SequenceEnrollment[]
+
+  @@index([organizationId])
+}
+
+model SequenceStep {
+  id            String               @id @default(cuid())
+  sequenceId    String
+  position      Int
+  delayHours    Int                  @default(24)
+  channel       CommunicationChannel
+  templateKey   String
+  stopIfReplied Boolean              @default(true)
+
+  sequence Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceId, position])
+}
+
+model SequenceEnrollment {
+  id            String           @id @default(cuid())
+  sequenceId    String
+  clientId      String
+  status        EnrollmentStatus @default(ACTIVE)
+  currentStep   Int              @default(0)
+  nextRunAt     DateTime?
+  stoppedReason String?
+  enrolledById  String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  sequence Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  client   Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceId, clientId])
+  @@index([status, nextRunAt])
+}
+
+/// A one-off message queued for a future time, sent by the job runner through
+/// the same consent-gated send path as a manual message.
+model ScheduledMessage {
+  id              String                 @id @default(cuid())
+  organizationId  String
+  clientId        String
+  userId          String?
+  channel         CommunicationChannel
+  templateKey     String?
+  subject         String?
+  body            String?
+  sendAt          DateTime
+  status          ScheduledMessageStatus @default(PENDING)
+  attempts        Int                    @default(0)
+  error           String?
+  communicationId String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user         User?        @relation("ScheduledSender", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, sendAt])
+  @@index([clientId])
+}
+
+/// A saved set of list filters, personal or shared with the whole team.
+model SavedFilter {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  name           String
+  route          String   @default("/clients")
+  params         Json     @default("{}")
+  isShared       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, route])
+}
+
+// ── Close-rate operations (Phase 1-3 operating model) ─────────────────
+
+enum CoachingKind {
+  ONE_ON_ONE
+  CALL_QA
+}
+
+/// Pre-call AI Closer Brief. Reading material for the closer — never a
+/// decision. Adoption is measured by viewedAt (Phase 1: "strong AI Brief
+/// adoption across all closers").
+model CloserBrief {
+  id             String  @id @default(cuid())
+  organizationId String
+  clientId       String
+  requestedById  String
+  provider       String  @default("mock")
+  model          String?
+
+  content     Json     @default("{}")
+  generatedAt DateTime @default(now())
+
+  viewedAt   DateTime?
+  viewedById String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requestedBy  User         @relation("BriefRequester", fields: [requestedById], references: [id])
+  viewedBy     User?        @relation("BriefViewer", fields: [viewedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, clientId, generatedAt])
+}
+
+/// Weekly 1-on-1 coaching and call QA (Phase 1 operating rhythm).
+model CoachingNote {
+  id             String       @id @default(cuid())
+  organizationId String
+  subjectId      String
+  authorId       String
+  kind           CoachingKind
+  clientId       String?
+  callId         String?
+
+  /// Call QA score 1-10; null for 1-on-1 coaching.
+  score        Int?
+  strengths    String?
+  improvements String?
+  body         String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subject      User         @relation("CoachSubject", fields: [subjectId], references: [id], onDelete: Cascade)
+  author       User         @relation("CoachAuthor", fields: [authorId], references: [id])
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  call         Call?        @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, subjectId, createdAt])
+}
+
+// ── Phase 2 operating model ──────────────────────────────────────────
+
+enum NurtureKind {
+  VIDEO
+  EMAIL
+  SMS
+  CALL_PREP
+}
+
+/// Pre-call nurture touch (Phase 2: mandatory personalized video before the
+/// closing call). confirmedAt = the client acknowledged/viewed it.
+model NurtureTouch {
+  id             String      @id @default(cuid())
+  organizationId String
+  clientId       String
+  senderId       String
+  kind           NurtureKind @default(VIDEO)
+  url            String?
+  note           String?
+  sentAt         DateTime    @default(now())
+  confirmedAt    DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sender       User         @relation("NurtureSender", fields: [senderId], references: [id])
+
+  @@index([organizationId, clientId, sentAt])
+}
+
+enum HotLeadDecision {
+  APPROVED
+  REJECTED
+}
+
+/// Lead Qualifier sign-off on a hot lead (Phase 2: a qualifier reviews every
+/// lead at/above the threshold before closers work it). Latest row wins.
+model HotLeadReview {
+  id                  String          @id @default(cuid())
+  organizationId      String
+  clientId            String
+  reviewerId          String
+  decision            HotLeadDecision
+  reason              String?
+  /// Probability at review time, so a later rescore can flag staleness.
+  probabilityAtReview Int?
+  createdAt           DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reviewer     User         @relation("HotLeadReviewer", fields: [reviewerId], references: [id])
+
+  @@index([organizationId, clientId, createdAt])
+  @@index([organizationId, decision])
+}
+
+// ── Inbound receiver — the classified stream of everything a connector sends ──
+
+/// Every payload a connector delivers, classified for the /inbound workspace.
+/// Layered on top of the intake pipeline: the lead upsert still runs, and this
+/// captures WHAT the event was (a contact, a doc-status change, a stage move)
+/// and which client it resolved to — so non-lead events (docs, statuses) are
+/// legible instead of masquerading as duplicate leads.
+model InboundEvent {
+  id             String  @id @default(cuid())
+  organizationId String
+  sourceId       String
+  connectorDefId String?
+  submissionId   String?
+  clientId       String?
+
+  category   InboundCategory @default(OTHER)
+  eventType  String
+  externalId String
+  summary    String
+
+  rawPayload Json @default("{}")
+  normalized Json @default("{}")
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, category])
+  @@index([clientId])
+  @@index([sourceId])
+}
+
+/// A document and its latest status as reported by a connector (the CYS doc
+/// lifecycle). Upserted by (org, externalId) so repeated status pushes update
+/// the same row — the Inbound → Documents view reads from here.
+model InboundDocument {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String?
+  sourceId       String?
+  externalId     String
+  name           String
+  status         String
+  note           String?
+  url            String?
+  receivedAt     DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, clientId])
+  @@index([organizationId, status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enhancement wave — credential vault, ad sets, engine, deploys
+// ─────────────────────────────────────────────────────────────
+
+/// One encrypted credential field for a connector (AES-256-GCM, see
+/// src/lib/crypto.ts). Only ciphertext + a display last4 ever touch the
+/// database — plaintext exists in server memory for the duration of a call.
+model ConnectorCredential {
+  id             String  @id @default(cuid())
+  organizationId String
+  connectorId    String
+  fieldKey       String
+  ciphertext     String
+  iv             String
+  authTag        String
+  keyVersion     Int     @default(1)
+  last4          String?
+  createdById    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connector    Connector    @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("CredentialCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([connectorId, fieldKey])
+  @@index([organizationId])
+}
+
+/// An ad set under a campaign (Meta Ads). Synced by the provider (or the
+/// deterministic mock); daily stats attribute to it via CampaignDailyStat.adSetId.
+model AdSet {
+  id             String   @id @default(cuid())
+  organizationId String
+  campaignId     String
+  externalId     String?
+  name           String
+  status         String   @default("active")
+  dailyBudget    Decimal? @db.Decimal(12, 2)
+  spend          Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([campaignId])
+}
+
+/// One execution of a code-defined DAG (e.g. 'insight_scan'). Rows are
+/// execution state only — step graphs are defined in code, never in the DB.
+model EngineRun {
+  id             String    @id @default(cuid())
+  organizationId String
+  kind           String
+  /// PENDING | RUNNING | COMPLETED | FAILED
+  status         String    @default("PENDING")
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  error          String?
+  stats          Json?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  steps        EngineStep[]
+  insights     Insight[]
+
+  @@index([organizationId, status])
+}
+
+/// One step of an EngineRun. Claimed atomically by the jobs tick; retried with
+/// backoff via nextRunAt.
+model EngineStep {
+  id        String   @id @default(cuid())
+  runId     String
+  key       String
+  dependsOn String[] @default([])
+  /// PENDING | READY | RUNNING | COMPLETED | FAILED | SKIPPED
+  status    String   @default("PENDING")
+  attempts  Int      @default(0)
+  input     Json?
+  output    Json?
+  error     String?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  nextRunAt  DateTime?
+
+  run EngineRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status])
+  @@index([status, nextRunAt])
+}
+
+/// A reviewable AI insight. The model proposes; a named human accepts or
+/// dismisses — and the measured outcome feeds the next run’s retrieval.
+model Insight {
+  id             String  @id @default(cuid())
+  organizationId String
+  runId          String?
+  kind           String
+  title          String
+  body           String
+  /// Retrieval citations: [{ source, ref, text }]
+  evidence       Json    @default("[]")
+  score          Float?
+  /// PENDING_REVIEW | ACCEPTED | DISMISSED | EXPIRED
+  status         String  @default("PENDING_REVIEW")
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  /// Measured after-effects, written once the accepted insight has had time to land.
+  outcome      Json?
+  createdAt    DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  run          EngineRun?   @relation(fields: [runId], references: [id], onDelete: SetNull)
+  reviewedBy   User?        @relation("InsightReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+}
+
+/// One production deploy started from the deploy console.
+model DeployRun {
+  id             String    @id @default(cuid())
+  organizationId String
+  startedById    String
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  /// RUNNING | SUCCEEDED | FAILED
+  status         String    @default("RUNNING")
+  commitHash     String?
+  logPath        String?
+  summary        String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  startedBy    User         @relation("DeployStarter", fields: [startedById], references: [id])
+
+  @@index([organizationId, startedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Telephony — phone numbers, routing, and the prepaid wallet
+// ─────────────────────────────────────────────────────────────
+
+/// How a number's inbound calls are answered. Every mode still writes the call
+/// to the client timeline; they differ only in who (if anyone) is rung first.
+enum CallRouting {
+  /// Ring one fixed number (the account's main line forwards to a cell/desk).
+  FORWARD
+  /// Ring the number's assigned users in order, each for RING_SECONDS.
+  TEAM
+  /// Never ring — greet and take a voicemail.
+  VOICEMAIL_ONLY
+}
+
+enum PhoneNumberKind {
+  LOCAL
+  TOLL_FREE
+}
+
+enum PhoneNumberStatus {
+  /// Purchase accepted by the provider but webhooks are not confirmed yet.
+  PENDING
+  ACTIVE
+  /// Kept at the provider but parked — an unpaid wallet suspends, never releases.
+  SUSPENDED
+  /// Given back to the provider. The row stays for billing history.
+  RELEASED
+}
+
+/// Who pays for a number: the account's own prepaid wallet, or the agency's
+/// card on file (internal accounts only — see TELEPHONY_INTERNAL_SLUGS).
+enum TelephonyBilling {
+  WALLET
+  AGENCY_CARD
+}
+
+/// One phone number owned by one account. `e164` is globally unique: a number
+/// belongs to exactly one org at a time, which is what makes inbound routing
+/// (To -> org) unambiguous.
+model PhoneNumber {
+  id             String            @id @default(cuid())
+  organizationId String
+  e164           String            @unique
+  friendlyName   String
+  kind           PhoneNumberKind   @default(LOCAL)
+  status         PhoneNumberStatus @default(PENDING)
+
+  /// Set on exactly one ACTIVE number per org (enforced in setPrimaryNumber):
+  /// the account's main line, used as the default SMS From.
+  isPrimary Boolean @default(false)
+
+  areaCode String?
+  region   String?
+  locality String?
+
+  /// 'mock' | 'twilio' — which adapter minted it, so a released number is
+  /// always handed back to the provider that sold it.
+  provider     String  @default("mock")
+  providerSid  String?
+  /// { sms: bool, mms: bool, voice: bool } as reported by the provider.
+  capabilities Json    @default("{}")
+
+  routing           CallRouting @default(VOICEMAIL_ONLY)
+  /// FORWARD mode target, E.164.
+  forwardTo         String?
+  /// TEAM mode dial order: User ids, rung sequentially.
+  teamUserIds       Json        @default("[]")
+  voicemailGreeting String?
+  recordCalls       Boolean     @default(false)
+  /// Optional owner — a rep's direct line rather than an account line.
+  assignedUserId    String?
+
+  billingMode      TelephonyBilling @default(WALLET)
+  monthlyCostCents Int              @default(0)
+  setupCostCents   Int              @default(0)
+  /// When the next monthly charge is due (null once RELEASED).
+  nextRenewalAt    DateTime?
+  releasedAt       DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedUser  User?         @relation("PhoneNumberAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  createdBy     User?         @relation("PhoneNumberCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  walletEntries WalletEntry[]
+
+  @@index([organizationId, status])
+  @@index([nextRenewalAt])
+}
+
+/// One prepaid balance per account. Internal accounts carry billingMode
+/// AGENCY_CARD and never need a balance — their charges land on the agency
+/// card and are recorded as ledger entries for visibility, not as a gate.
+model TelephonyWallet {
+  id                       String           @id @default(cuid())
+  organizationId           String           @unique
+  balanceCents             Int              @default(0)
+  billingMode              TelephonyBilling @default(WALLET)
+  /// Balance below which the account can no longer buy numbers, in cents.
+  /// Purchases must leave at least this much behind.
+  reserveCents             Int              @default(0)
+  autoReloadEnabled        Boolean          @default(false)
+  autoReloadThresholdCents Int              @default(1000)
+  autoReloadAmountCents    Int              @default(2500)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries      WalletEntry[]
+}
+
+enum WalletEntryKind {
+  TOPUP
+  NUMBER_SETUP
+  NUMBER_MONTHLY
+  USAGE_SMS
+  USAGE_VOICE
+  REFUND
+  ADJUSTMENT
+}
+
+/// Append-only telephony ledger. `amountCents` is signed — positive credits the
+/// account, negative debits it — and `balanceAfterCents` is the running balance
+/// captured inside the same transaction as the wallet update, so the ledger can
+/// always be replayed against the wallet.
+model WalletEntry {
+  id                String          @id @default(cuid())
+  organizationId    String
+  walletId          String
+  kind              WalletEntryKind
+  amountCents       Int
+  balanceAfterCents Int
+  description       String
+  phoneNumberId     String?
+  /// Provider/processor reference (Stripe session, Twilio SID) when there is one.
+  externalRef       String?
+  createdById       String?
+  createdAt         DateTime        @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wallet       TelephonyWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  phoneNumber  PhoneNumber?    @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  createdBy    User?           @relation("WalletEntryCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([walletId, createdAt])
+}

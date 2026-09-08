@@ -1,0 +1,63 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+# ...but the template carries no secrets and documents required config.
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+.env
+/uploads
+
+# uploaded client documents (local storage driver)
+/storage
+
+# schema backup from the P0 migration
+prisma/schema.prisma.bak
+
+# local run logs
+/server.log
+/server.err.log
+
+# report build cache (the generated pages in reports/out ARE tracked — the app
+# serves them at /settings/progress)
+reports/last-build.json
+
+# playwright artifacts
+test-results/
+playwright-report/

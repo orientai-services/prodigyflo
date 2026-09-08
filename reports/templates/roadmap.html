@@ -1,0 +1,703 @@
+<title>ProdigyFlo Roadmap</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #f5f7fa;
+    --surface: #ffffff;
+    --sunk: #eceff5;
+    --ink: #14161c;
+    --muted: #5b6274;
+    --faint: #858da3;
+    --line: #e0e4ec;
+    --accent: #3d46c4;
+    --accent-soft: #e8eaff;
+    --ok: #156b3f;
+    --ok-soft: #e3f2e9;
+    --warn: #9a5b08;
+    --warn-soft: #faf0dd;
+    --hold: #5b6274;
+    --hold-soft: #eceff5;
+    --shadow: 0 1px 2px rgba(20,22,28,.05), 0 10px 28px -12px rgba(20,22,28,.14);
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d0f15; --surface: #161a23; --sunk: #1d222d;
+      --ink: #e9ebf1; --muted: #9aa2b6; --faint: #7a8299; --line: #262c39;
+      --accent: #949bf8; --accent-soft: #232846;
+      --ok: #62c08d; --ok-soft: #17301f;
+      --warn: #d9a44a; --warn-soft: #33270f;
+      --hold: #9aa2b6; --hold-soft: #1d222d;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 30px -14px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0d0f15; --surface: #161a23; --sunk: #1d222d;
+    --ink: #e9ebf1; --muted: #9aa2b6; --faint: #7a8299; --line: #262c39;
+    --accent: #949bf8; --accent-soft: #232846;
+    --ok: #62c08d; --ok-soft: #17301f;
+    --warn: #d9a44a; --warn-soft: #33270f;
+    --hold: #9aa2b6; --hold-soft: #1d222d;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 30px -14px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---- masthead ---- */
+  .masthead { padding: 64px 0 36px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 16px;
+  }
+  .masthead h1 {
+    font-family: Newsreader, ui-serif, Georgia, serif; font-weight: 500;
+    font-size: clamp(2.2rem, 5vw, 3.1rem); line-height: 1.08;
+    letter-spacing: -.018em; text-wrap: balance; margin: 0 0 14px;
+  }
+  .lede { max-width: 62ch; margin: 0; color: var(--muted); font-size: 1.0625rem; }
+  .lede strong { color: var(--ink); font-weight: 500; }
+  .lede a { color: var(--accent); text-decoration: none; border-bottom: 1px solid; }
+
+  .related { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+  .related a {
+    display: inline-flex; gap: 6px; align-items: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 6px 14px; font-size: 13.5px; color: var(--ink); text-decoration: none;
+    box-shadow: var(--shadow); transition: border-color .15s, color .15s;
+  }
+  .related a:hover { border-color: var(--accent); color: var(--accent); }
+  .related .stamp { font-size: 12px; color: var(--faint); margin-left: auto; }
+  .related .stamp code { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; background: var(--sunk); border-radius: 4px; padding: 1px 6px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 30px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px;
+  }
+  .tile b {
+    display: block; font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums; font-weight: 500; font-size: 1.5rem; line-height: 1.2;
+  }
+  .tile span { font-size: 12.5px; color: var(--faint); }
+  .tile.good b { color: var(--ok); }
+
+  /* ---- pills ---- */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 11px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; letter-spacing: .01em; white-space: nowrap;
+  }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.shipped { background: var(--ok-soft); color: var(--ok); }
+  .pill.next { background: var(--accent-soft); color: var(--accent); }
+  .pill.blocked { background: var(--warn-soft); color: var(--warn); }
+  .pill.deferred { background: var(--hold-soft); color: var(--hold); }
+
+  /* ---- priority sections ---- */
+  .prio { padding: 56px 0 0; }
+  .prio-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 0 0 8px; }
+  .prio-head h2 {
+    font-family: Newsreader, ui-serif, Georgia, serif; font-weight: 500;
+    font-size: 1.8rem; letter-spacing: -.012em; margin: 0; scroll-margin-top: 24px;
+  }
+  .prio-tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px; letter-spacing: .08em; color: var(--faint); text-transform: uppercase;
+  }
+  .prio-sub { color: var(--muted); font-size: 15px; margin: 0 0 26px; max-width: 66ch; }
+
+  /* ---- phase cards ---- */
+  .phases { display: flex; flex-direction: column; gap: 14px; }
+  .phase {
+    display: grid; grid-template-columns: 44px 1fr auto; gap: 0 18px; align-items: start;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px;
+  }
+  .phase-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px; color: var(--faint); padding-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .phase h3 { margin: 0 0 6px; font-size: 1.0625rem; font-weight: 600; letter-spacing: -.005em; }
+  .phase p { margin: 0; color: var(--muted); font-size: 14.5px; max-width: 72ch; }
+  .phase ul.done {
+    margin: 10px 0 0; padding: 0; list-style: none;
+    display: flex; flex-wrap: wrap; gap: 6px 8px;
+  }
+  .phase ul.done li {
+    font-size: 12.5px; color: var(--muted);
+    background: var(--sunk); border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 9px;
+  }
+  .phase ul.done li::before { content: "✓ "; color: var(--ok); font-weight: 600; }
+  .phase ul.todo { margin: 10px 0 0 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+  .phase ul.todo li { margin: 3px 0; }
+  .phase .pill { margin-top: 2px; }
+
+  /* ---- deferred compact ---- */
+  .compact { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .compact .cell {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .compact h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+  .compact ul { margin: 0; padding-left: 16px; color: var(--muted); font-size: 13.5px; }
+  .compact li { margin: 2px 0; }
+
+  /* ---- definition of done ---- */
+  .dod {
+    margin-top: 26px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 22px 24px;
+  }
+  .dod h3 { margin: 0 0 4px; font-size: 1.0625rem; }
+  .dod p.note { margin: 0 0 14px; font-size: 13.5px; color: var(--faint); }
+  .dod ul { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 34px; }
+  .dod li {
+    break-inside: avoid; font-size: 14px; color: var(--muted);
+    padding: 4px 0 4px 24px; position: relative;
+  }
+  .dod li::before {
+    content: "✓"; position: absolute; left: 0; top: 3px;
+    color: var(--ok); font-weight: 700;
+  }
+  @media (max-width: 640px) { .dod ul { columns: 1; } }
+
+  /* ---- reflections ---- */
+  .reflect { display: flex; flex-direction: column; gap: 12px; }
+  .rcard {
+    display: grid; grid-template-columns: 10px 1fr; gap: 16px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 20px 16px 0;
+    overflow: hidden;
+  }
+  .rcard .bar { border-radius: var(--radius) 0 0 var(--radius); }
+  .rcard.warn .bar { background: var(--warn); }
+  .rcard.info .bar { background: var(--accent); }
+  .rcard h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .rcard p { margin: 0; color: var(--muted); font-size: 14px; max-width: 76ch; }
+  .rcard p b { color: var(--ink); font-weight: 600; }
+  .rcard code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px;
+    background: var(--sunk); border-radius: 4px; padding: 1px 5px;
+  }
+
+  footer {
+    margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--line);
+    color: var(--faint); font-size: 13.5px; max-width: 72ch;
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Sales Client Overview · status as of __DATE__</p>
+    <h1>ProdigyFlo Roadmap</h1>
+    <p class="lede">
+      The MVP workflow — <strong>form or Google Sheet → CRM record → email/text follow-up →
+      document upload → AI analysis → human verification → CYS-ready package</strong> — is
+      built, tested, and live in production at
+      <a href="https://prodigyflo.ai">prodigyflo.ai</a>. Every P0 phase shipped — and the P1 wave,
+      the P2 AI assists, the buildable P3 pieces, and the <strong>close-rate operating model</strong>
+      (Phase 1–3 command center) are live too.
+    </p>
+    <div class="tiles">
+      <div class="tile good"><b>7 / 7</b><span>P0 phases complete</span></div>
+    <div class="related">
+      <a href="https://claude.ai/code/artifact/6c42e219-1ac0-41a5-90cc-6d0836089708">🕸️ Schema map</a>
+      <a href="https://claude.ai/code/artifact/5d7fd68e-687d-4171-8676-c29ef51c50c5">🖼️ Screens walkthrough</a>
+      <a href="https://prodigyflo.ai">⚡ Live app</a>
+      <span class="stamp">last change: <code>__COMMIT__</code></span>
+    </div>
+      <div class="tile"><b>__ROUTES__</b><span>routes in production</span></div>
+      <div class="tile"><b>__TESTS__</b><span>tests passing (__SUITES__ suites)</span></div>
+      <div class="tile"><b>13 / 13</b><span>definition-of-done items met</span></div>
+      <div class="tile"><b>LIVE</b><span>prodigyflo.ai · TLS · own droplet</span></div>
+    </div>
+  </header>
+
+  <!-- ══════════════ P0 ══════════════ -->
+  <section class="prio">
+    <div class="prio-head">
+      <h2>Shipped — the P0 MVP</h2>
+      <span class="prio-tag">Priority 0 · critical</span>
+    </div>
+    <p class="prio-sub">
+      Everything the steering prompt marked "required for the MVP." Each phase is a working
+      vertical slice — database, server logic, interface, permissions, and tests together.
+      No fake buttons, no static-only screens.
+    </p>
+
+    <div class="phases">
+      <article class="phase">
+        <span class="phase-num">0</span>
+        <div>
+          <h3>Confirm the workflow</h3>
+          <p>Fifteen documented decisions in <code>ASSUMPTIONS.md</code>: lead = client record,
+             statuses = configurable pipeline stages, duplicate rules, document types, roles,
+             consent requirements, and — critically — no CYS API is invented.</p>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+
+      <article class="phase">
+        <span class="phase-num">1</span>
+        <div>
+          <h3>Lead &amp; contact CRM</h3>
+          <ul class="done">
+            <li>lead record, six tabs</li><li>merged activity timeline (10 sources)</li>
+            <li>tasks &amp; notes</li><li>search / sort / filters</li>
+            <li>duplicate detection before insert</li><li>manual create &amp; edit</li>
+            <li>CSV import (idempotent) &amp; export</li><li>configurable statuses</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+
+      <article class="phase">
+        <span class="phase-num">2</span>
+        <div>
+          <h3>Forms, Sheets &amp; webhook syncing</h3>
+          <ul class="done">
+            <li>signed webhook endpoint (HMAC)</li><li>replay-proof idempotency</li>
+            <li>Google Sheets sync w/ row cursor</li><li>configurable field mapping</li>
+            <li>source &amp; submission ids kept</li><li>sync history + failure view</li>
+            <li>retry &amp; per-submission mapping repair</li><li>validation with clear errors</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+
+      <article class="phase">
+        <span class="phase-num">3</span>
+        <div>
+          <h3>Email &amp; SMS follow-up <span style="color:var(--faint);font-weight:400">(MVP messaging)</span></h3>
+          <ul class="done">
+            <li>send email / SMS from the record</li><li>16 reusable EN + ES templates</li>
+            <li>history on the timeline</li><li>delivery / failure / pending status</li>
+            <li>consent gate enforced server-side</li><li>follow-up task on send</li>
+            <li>appointment &amp; document reminders</li><li>unresolved placeholders block sending</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+
+      <article class="phase">
+        <span class="phase-num">4</span>
+        <div>
+          <h3>Document collection &amp; analysis</h3>
+          <ul class="done">
+            <li>secure upload (magic-byte validation)</li><li>version chain — never overwrite</li>
+            <li>signed, permission-checked file access</li><li>type detection &amp; field extraction</li>
+            <li>confidence + source page per field</li><li>side-by-side human verification</li>
+            <li>missing-field &amp; conflict warnings</li><li>approve blocked while unverified</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+
+      <article class="phase">
+        <span class="phase-num">5</span>
+        <div>
+          <h3>CYS field mapping &amp; readiness</h3>
+          <ul class="done">
+            <li>configurable CYS field map</li><li>value resolution with provenance</li>
+            <li>conflict &amp; low-confidence highlighting</li><li>live completion %</li>
+            <li>server-enforced approval gate</li><li>structured package w/ document manifest</li>
+            <li>submission tracking (manual delivery)</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+
+      <article class="phase">
+        <span class="phase-num">6</span>
+        <div>
+          <h3>Security &amp; operational readiness</h3>
+          <ul class="done">
+            <li>server-enforced RBAC (8 roles, 47 permissions)</li><li>append-only audit trail</li>
+            <li>consent records</li><li>file validation &amp; signed access</li>
+            <li>synthetic demo data only</li><li>permission + integration tests</li>
+            <li>end-to-end workflow coverage</li><li>production build verified</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+    </div>
+
+    <div class="dod">
+      <h3>MVP definition of done — 13 of 13</h3>
+      <p class="note">Every criterion from the steering prompt, each verified against the running app.</p>
+      <ul>
+        <li>A form or Sheet can create or update a lead</li>
+        <li>Duplicate submissions never create duplicate records</li>
+        <li>Staff can view and manage the lead in the CRM</li>
+        <li>Staff can send and track an email or text</li>
+        <li>A client document uploads securely</li>
+        <li>The system identifies documents and extracts structured data</li>
+        <li>Extracted values shown beside the original document</li>
+        <li>Staff can correct and approve extracted values</li>
+        <li>Missing CYS information is clearly identified</li>
+        <li>Approved information maps into a CYS-ready record</li>
+        <li>A structured CYS-ready package can be generated</li>
+        <li>Every action appears in the audit history</li>
+        <li>Permissions, tests, and the production build pass</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ══════════════ P1 ══════════════ -->
+  <section class="prio">
+    <div class="prio-head">
+      <h2>The P1 wave — shipped</h2>
+      <span class="prio-tag">Priority 1 · high</span>
+    </div>
+    <p class="prio-sub">
+      Built after the MVP proved reliable. One item remains blocked on the outside world.
+    </p>
+
+    <div class="phases">
+      <article class="phase">
+        <span class="phase-num">3+</span>
+        <div>
+          <h3>Messaging automation</h3>
+          <ul class="done">
+            <li>inbound email/SMS webhook (STOP revokes consent)</li>
+            <li>two-way conversation threads</li>
+            <li>scheduled messages with cancel</li>
+            <li>follow-up sequences, stage-triggered</li>
+            <li>reply stops a sequence</li>
+            <li>failed-send retries with backoff</li>
+            <li>team inbox with unanswered filter</li>
+            <li>5-minute job runner (systemd timer)</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+
+      <article class="phase">
+        <span class="phase-num">5+</span>
+        <div>
+          <h3>Direct CYS integration</h3>
+          <ul class="todo">
+            <li>Direct submission, confirmation, external reference number</li>
+            <li>Status sync, correction requests, resubmission, retries</li>
+          </ul>
+          <p style="margin-top:8px">Still waiting on API documentation and credentials for the CYS
+          portal — the readiness workspace and package format are built to receive it.</p>
+        </div>
+        <span class="pill blocked">Blocked — external</span>
+      </article>
+
+      <article class="phase">
+        <span class="phase-num">7</span>
+        <div>
+          <h3>Operational improvements</h3>
+          <ul class="done">
+            <li>kanban pipeline board (gated drag)</li>
+            <li>saved filters, personal + shared</li>
+            <li>bulk stage / reassign / note</li>
+            <li>quick owner reassign</li>
+            <li>overdue &amp; SLA-stall alerts</li>
+            <li>document / submission / source / conversion reports</li>
+            <li>manager dashboard with workload + close rates</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </article>
+    </div>
+  </section>
+
+  <!-- ══════════════ P2 / P3 ══════════════ -->
+  <section class="prio">
+    <div class="prio-head">
+      <h2>P2 &amp; P3 — mostly shipped</h2>
+      <span class="prio-tag">Priority 2 &amp; 3</span>
+    </div>
+    <p class="prio-sub">
+      The AI assists and every P3 piece that can honestly work without external credentials are
+      live. What remains is credential-bound and activates the day the keys exist.
+    </p>
+    <div class="compact">
+      <div class="cell">
+        <h3><span class="pill shipped">P2 · shipped</span></h3>
+        <ul>
+          <li>AI lead &amp; document summaries — human-reviewed</li>
+          <li>Suggested next actions (accept → real tasks)</li>
+          <li>Draft follow-up messages</li>
+          <li>Discrepancy detection across CRM / documents / intake</li>
+          <li>Qualification signals — informs review, never decides</li>
+          <li>Sequence-based workflow automation &amp; scheduling</li>
+        </ul>
+        <p style="margin-top:8px;font-size:12.5px">Every AI output lands as a pending
+        recommendation with confidence and reasons; a person accepts or dismisses it.
+        Intelligent staff assignment stays deferred.</p>
+      </div>
+      <div class="cell">
+        <h3><span class="pill shipped">P3 · shipped</span></h3>
+        <ul>
+          <li>Client portal — stage tracker, uploads, messages</li>
+          <li>Attorney submission workflow, document-gated</li>
+          <li>Marketing attribution (first/last touch)</li>
+          <li>Revenue forecasting from measured stage history</li>
+          <li>Customer-journey timing report</li>
+          <li>Meta / Facebook ads + Lead Ads intake</li>
+        </ul>
+        <p style="margin-top:8px;font-size:12.5px">Still deferred (credential-bound):
+        Twilio voice dialer, iMessage, financing / payment integrations, AI closer assignment.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="prio">
+    <div class="prio-head">
+      <h2>Close-rate operating model — shipped</h2>
+      <span class="prio-tag">Perspective restructure</span>
+    </div>
+    <p class="prio-sub">
+      The whole platform got a second pass so every section owns its metrics: marketing
+      numbers live in Marketing, closer numbers live in Sales, and the three-phase
+      close-rate playbook is built in as a live command center.
+    </p>
+    <div class="cards">
+      <div class="card">
+        <div>
+          <h3>Sales command</h3>
+          <ul class="done">
+            <li>Phase 1–3 tracker with live target-vs-actual (35% → 60% → 90% close rate)</li>
+            <li>Hot-leads call queue ordered by AI probability-to-close</li>
+            <li>AI Closer Briefs on every client, adoption tracked on view</li>
+            <li>Coaching &amp; call QA (weekly 1-on-1s, scored call reviews)</li>
+            <li>Phase switching + hot-lead threshold for admins, audited</li>
+            <li>Qualifier queue — human sign-off on every hot lead, drift-stale detection</li>
+            <li>Pre-call nurture queue — personal touch logged before every dial</li>
+            <li>Call logging with the 5-step funnel adherence checklist</li>
+            <li>AI closer assignment — suggest, human accepts or overrides</li>
+            <li>Daily huddle board — morning huddle + end-of-day wrap</li>
+            <li>Portal nurture — the client opening the video confirms it</li>
+            <li>Audited CSV exports; committed Playwright e2e smoke suite</li>
+            <li>Monday weekly digest to managers; notifications center; full ⌘K coverage</li>
+            <li>AI calibration &amp; trust — reliability curve, Brier score, threshold advice</li>
+            <li>Per-recipient scoped digest; data-health monitor (clean-data hygiene)</li>
+            <li>Adversarial security audit — 22 findings found &amp; fixed, verified live</li>
+            <li>Proactive Attention feed — synthesizes every metric into a daily action list</li>
+            <li>Connectors hub — catalog-driven integrations; GoHighLevel live via token auth</li>
+            <li>CYS inbound receiver — classified event stream + document statuses, live</li>
+            <li>GoHighLevel connected via token-header auth (proven end-to-end on prod)</li>
+            <li>Lead Recovery Flow — separately-branded investor app (confined demo login)</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </div>
+      <div class="card">
+        <div>
+          <h3>Clear perspectives</h3>
+          <ul class="done">
+            <li>Marketing overview: leads by source/campaign, spend, CPL/CPQL, intake funnel</li>
+            <li>Closer scoreboard with transparent gamification tied to AI accuracy</li>
+            <li>Nav regrouped: Work / Sales / Marketing / Clients / Insight / Setup</li>
+            <li>Role homes: managers → Sales command, closers → hot leads, marketing → Marketing</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </div>
+    </div>
+    <p style="margin-top:10px;font-size:12.5px">The AI probability score is a prioritization
+    signal only — it orders the queue and feeds the dashboards; a person always makes the
+    qualification and close decisions.</p>
+  </section>
+
+
+  <!-- ══════════════ Enhancement wave ══════════════ -->
+  <section class="prio">
+    <div class="prio-head">
+      <h2>Enhancement wave — shipped</h2>
+      <span class="prio-tag">Engine · vault · ads · deploy · polish</span>
+    </div>
+    <p class="prio-sub">
+      A platform-wide pass (2026-08-28): a self-improving AI engine, secure credential
+      storage, a Meta ads command center, in-app deployments, real send adapters, and a
+      UI overhaul — collapsible dashboards, right-sized charts, motion, mobile polish.
+    </p>
+    <div class="cards">
+      <div class="card">
+        <div>
+          <h3>Prodigy Engine (DAG + RAG)</h3>
+          <ul class="done">
+            <li>Claim-based DAG runner inside the jobs tick — retries, backoff, time budget</li>
+            <li>Retrieval layer over org data with citations on every insight</li>
+            <li>Learning loop: each scan conditions on past accepted/dismissed insights + measured outcomes</li>
+            <li>/engine review UI with step-tracker run history; insights card on the dashboard</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </div>
+      <div class="card">
+        <div>
+          <h3>Credential vault &amp; step-up auth</h3>
+          <ul class="done">
+            <li>AES-256-GCM per-connector API-key storage, masked display, write-only fields</li>
+            <li>Password re-confirmation (step-up) gates vault and deploy surfaces</li>
+            <li>Honest Mock vs Connected status split across the connectors hub</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </div>
+      <div class="card">
+        <div>
+          <h3>Meta Ads command center</h3>
+          <ul class="done">
+            <li>Campaign → ad-set drill-down, budgets, lifetime spend caps, account creation</li>
+            <li>fb&gt; console mapping typed commands onto the same audited actions</li>
+            <li>Per-campaign spend attribution fixed (level=campaign insights)</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </div>
+      <div class="card">
+        <div>
+          <h3>Deploy console &amp; adapters</h3>
+          <ul class="done">
+            <li>Owner-only in-app deploys: detached runs, live log tail, history, ops allowlist</li>
+            <li>Resend email + Twilio SMS adapters (env or vault credentialed)</li>
+            <li>Vision OCR for photographed documents; contract-signed write path</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ Agency model ══════════════ -->
+  <section class="prio">
+    <div class="prio-head">
+      <h2>Agency model — shipped &amp; migrated</h2>
+      <span class="prio-tag">Master account · client accounts</span>
+    </div>
+    <p class="prio-sub">
+      ProdigyFlo became what it actually is: a marketing-agency platform. One master
+      account owns client accounts; agency staff switch between them; production was
+      restructured and stripped of every synthetic record (2026-08-28, backups kept).
+    </p>
+    <div class="cards">
+      <div class="card">
+        <div>
+          <h3>Account hierarchy &amp; switcher</h3>
+          <ul class="done">
+            <li>ProdigyFlo (agency) → Solar Contract Services + Cancel Your Solar client accounts</li>
+            <li>Signed per-request org switch — permissions stay home-org, data scopes to the active account</li>
+            <li>/agency console: self-serve client-account creation on an idempotent org bootstrap</li>
+            <li>Single-org hardcodes retired: Meta webhook routing, unmatched-inbound fallback, template sync, global email uniqueness</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </div>
+      <div class="card">
+        <div>
+          <h3>Real-data migration &amp; GHL import</h3>
+          <ul class="done">
+            <li>Org renamed; 250 synthetic clients, 2,063 demo files, 33 demo logins removed from production</li>
+            <li>GHL data isolated in the Cancel Your Solar account (produce vs recycle separation)</li>
+            <li>Resumable GoHighLevel pull importer (vault-credentialed, idempotent) — awaiting the API token</li>
+          </ul>
+        </div>
+        <span class="pill shipped">Shipped</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ Reflections ══════════════ -->
+  <section class="prio">
+    <div class="prio-head">
+      <h2>What to reflect on</h2>
+      <span class="prio-tag">Honest state of the MVP</span>
+    </div>
+    <p class="prio-sub">
+      "Shipped" is accurate but not the whole story. These are the areas where the MVP is
+      deliberately provisional, and what each one waits on.
+    </p>
+
+    <div class="reflect">
+      <article class="rcard info"><span class="bar"></span><div>
+        <h3>Real send adapters are in — credentials switch them on</h3>
+        <p>Resend (email) and Twilio (SMS) adapters now ship behind the same interfaces; the
+        default remains the <b>labelled mock</b> until <code>EMAIL_PROVIDER=resend</code> /
+        <code>SMS_PROVIDER=twilio</code> plus keys are set — in env or in each connector's
+        encrypted credential vault (Settings → Connectors, password step-up gated). Sheets
+        sync remains mock-only.</p>
+      </div></article>
+
+      <article class="rcard warn"><span class="bar"></span><div>
+        <h3>The CYS field map is an informed guess</h3>
+        <p>The starter map covers a solar-cancellation handover, but it has <b>not been
+        reconciled against the CYS portal's real intake fields</b>. Because the map is
+        configuration — edited in Settings, no deploy — reconciling it is a 30-minute session
+        with someone who has portal access, and it should happen before the first real handover.</p>
+      </div></article>
+
+      <article class="rcard info"><span class="bar"></span><div>
+        <h3>Demo accounts deactivated in production</h3>
+        <p>The 2026-08-28 agency migration <b>deactivated all 33 seeded demo logins</b>.
+        Active accounts are now only the real agency users plus the Lead Recovery investor
+        demo (confined to its own view). The seed still creates demo accounts for local
+        development, where they belong.</p>
+      </div></article>
+
+      <article class="rcard info"><span class="bar"></span><div>
+        <h3>Photographed documents: vision OCR wired, keyed off Anthropic</h3>
+        <p>JPEG/PNG/WebP uploads now travel to the Anthropic extractor as image content under
+        the same provenance contract (values literally visible, confidence, exact snippet;
+        fields land <b>unverified</b> for human review). With <code>AI_PROVIDER=mock</code> the
+        system still honestly refuses to read photos; HEIC keeps the no-OCR warning.</p>
+      </div></article>
+
+      <article class="rcard info"><span class="bar"></span><div>
+        <h3>AI extraction runs in mock mode by default</h3>
+        <p><code>AI_PROVIDER=mock</code> ships deterministic extraction so the review workflow is
+        testable and free. The Anthropic provider is already implemented — switching it on is a
+        config change plus API spend, and every AI value still requires human verification either way.</p>
+      </div></article>
+
+      <article class="rcard info"><span class="bar"></span><div>
+        <h3>Production is real-data-only now</h3>
+        <p>The agency migration <b>purged all 250 synthetic clients</b> (full backups kept) —
+        production holds only what real connectors deliver. The caveat inverts: the workflow
+        still hasn't met real-world messiness at volume — odd phone formats, half-filled
+        forms, blurry uploads. Expect a tuning pass as the GHL import and live intake land.</p>
+      </div></article>
+
+      <article class="rcard info"><span class="bar"></span><div>
+        <h3>Multi-tenant by construction, single-tenant by experience</h3>
+        <p>Every query is scoped through one visibility rule and cross-organization isolation is
+        covered by tests — but only one organization has ever lived in the database. A second
+        company onboarding would be the real test.</p>
+      </div></article>
+
+      <article class="rcard info"><span class="bar"></span><div>
+        <h3>Small operational clock ticking</h3>
+        <p>The DigitalOcean provisioning token expires <b>Nov 22, 2026</b> (same day the current
+        TLS certs renew automatically). Domains auto-renew: prodigyflo.ai at $80/yr,
+        prodigyflo.com at $10.46/yr. Droplet is $12/mo.</p>
+      </div></article>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Beyond the roadmap itself, the MVP also shipped: production deployment on its own droplet
+      and domains (prodigyflo.ai canonical; .com and vialab.app aliases redirect), a design-system
+      pass, a 19-screen walkthrough gallery, a committed deploy runbook, staff invites (by email or single-use link) with
+      role-rank guardrails, the Meta Ads section (campaigns, spend, Lead Ads webhook, CLI), and
+      per-user profiles with company-email forwarding (alias@prodigyflo.ai via Cloudflare) and
+      switchable email signatures feeding seven B2B outreach templates. Working docs live in the repo:
+      <code>ASSUMPTIONS.md</code>, <code>MVP_STATUS.md</code>, <code>deploy/README.md</code>.
+    </p>
+  </footer>
+</div>

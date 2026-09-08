@@ -1,0 +1,10 @@
+[Unit]
+Description=ProdigyFlo job runner (sequences, scheduled messages, retries)
+Wants=network-online.target
+After=network-online.target prodigyflo.service
+
+[Service]
+Type=oneshot
+# JOBS_TOKEN lives in /etc/prodigyflo.env alongside the app's other secrets.
+EnvironmentFile=/etc/prodigyflo.env
+ExecStart=/usr/bin/curl -fsS --max-time 240 -X POST -H "Authorization: Bearer ${JOBS_TOKEN}" http://127.0.0.1:3050/api/jobs/run
