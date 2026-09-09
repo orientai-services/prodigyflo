@@ -255,7 +255,7 @@ export async function recordCloserYes(
   json.closer_approved_by_name = actor.name
   await db.cysReadiness.upsert({
     where: { clientId },
-    create: { clientId, packageJson: json },
+    create: { clientId, packageJson: json as object },
     update: { packageJson: json as object },
   })
   await assemblePacket(clientId)

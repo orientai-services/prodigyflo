@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import type { S3Client } from '@aws-sdk/client-s3'
 import type { FileStorage, PutMeta } from './types'
 import { signFileToken } from './sign'
 import { objectStorageEnv, s3ForcePathStyle, s3PutExtra } from './s3-config'
@@ -13,7 +14,9 @@ const NAMED_KEY_RE = /^avatars\/[a-z0-9]{10,40}\.(jpg|png|webp)$/
 
 export class S3FileStorage implements FileStorage {
   readonly name = 's3'
-  private client: { send: (cmd: unknown) => Promise<unknown> } | null = null
+  // Type-only import: erased at compile time, so the SDK is still loaded lazily
+  // by the dynamic import in s3() and never enters the bundle statically.
+  private client: S3Client | null = null
   private readonly bucket: string
   private readonly prefix: string
 
@@ -24,11 +27,11 @@ export class S3FileStorage implements FileStorage {
     this.prefix = (process.env.FILE_STORAGE_PREFIX ?? 'documents').replace(/\/$/, '')
   }
 
-  private async s3() {
+  private async s3(): Promise<S3Client> {
     if (this.client) return this.client
     const mod = await import('@aws-sdk/client-s3')
     const env = objectStorageEnv()
-    this.client = new mod.S3Client({
+    const client = new mod.S3Client({
       region: env.region,
       endpoint: env.endpoint || undefined,
       forcePathStyle: s3ForcePathStyle(env.endpoint),
@@ -37,7 +40,8 @@ export class S3FileStorage implements FileStorage {
         secretAccessKey: env.secretAccessKey,
       },
     })
-    return this.client
+    this.client = client
+    return client
   }
 
   private objectKey(key: string): string {

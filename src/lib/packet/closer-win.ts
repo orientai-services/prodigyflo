@@ -7,8 +7,8 @@
  * Never promise a legal result. Best-case is a target, not a guarantee.
  */
 
-import { pathLabel, trenchLabel, type Path, type Trench } from './route'
-import { str } from './schema'
+import { pathLabel, trenchLabel } from './route'
+import { str, type Path, type Trench } from './schema'
 import { federalLevers, leverFor, stateLeversForFile } from './state-levers'
 
 export type CloserWinInput = {
