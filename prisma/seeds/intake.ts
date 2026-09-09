@@ -50,6 +50,50 @@ export async function seedIntake(db: PrismaClient, ctx: SeedCtx) {
     },
   })
 
+  await db.intakeSource.upsert({
+    where: { organizationId_slug: { organizationId, slug: 'scs-website' } },
+    update: {
+      authMode: 'TOKEN',
+      secretHash: sha256('local-dev-token'),
+      isEnabled: true,
+      fieldMapping: {
+        firstName: 'first_name',
+        lastName: 'last_name',
+        email: 'email',
+        phone: 'phone',
+        postalCode: 'zip_code',
+        addressLine1: 'data.property.address_line1',
+        city: 'data.property.city',
+        state: 'data.property.state',
+        estimatedValue: 'estimated_value',
+        note: 'summary',
+      },
+    },
+    create: {
+      organizationId,
+      kind: 'WEB_FORM',
+      name: 'SCS website',
+      slug: 'scs-website',
+      authMode: 'TOKEN',
+      secretHash: sha256('local-dev-token'),
+      fieldMapping: {
+        firstName: 'first_name',
+        lastName: 'last_name',
+        email: 'email',
+        phone: 'phone',
+        postalCode: 'zip_code',
+        addressLine1: 'data.property.address_line1',
+        city: 'data.property.city',
+        state: 'data.property.state',
+        estimatedValue: 'estimated_value',
+        note: 'summary',
+      },
+      dedupeKeys: ['email', 'phone'],
+      defaultOwnerId: owner?.id ?? null,
+      defaultLeadSourceId: leadSource.id,
+    },
+  })
+
   const sheet = await db.intakeSource.upsert({
     where: { organizationId_slug: { organizationId, slug: 'facebook-leads-sheet' } },
     update: {},

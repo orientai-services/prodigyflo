@@ -12,6 +12,7 @@ import { CommunicationsTab } from '@/components/client/communications-tab'
 import { DocumentsTab } from '@/components/client/documents-tab'
 import { CysTab } from '@/components/client/cys-tab'
 import { CloseOpsStrip, CloserBriefSection } from './closeops-section'
+import { PacketPanel } from './packet-panel'
 import { AssignmentPanel } from './assignment-panel'
 import { NurturePanel } from '@/components/client/nurture-panel'
 import { LogCallButton } from '@/components/client/log-call-dialog'
@@ -91,6 +92,7 @@ export default async function ClientDetailPage({
               </div>
             )}
             <CloserBriefSection clientId={clientId} />
+            <PacketPanel clientId={clientId} />
             <div className="grid items-start gap-4 lg:grid-cols-2">
               {canAny(user, [...ASSIGNMENT_PANEL_PERMISSIONS]) && <AssignmentPanel clientId={clientId} />}
               <NurturePanel clientId={clientId} user={user} />

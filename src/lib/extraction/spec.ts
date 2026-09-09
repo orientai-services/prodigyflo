@@ -70,6 +70,56 @@ export const DOC_TYPE_SPECS: DocTypeSpec[] = [
       { key: 'escalator_pct', label: 'Annual escalator (%)', required: false, kind: 'percent' },
     ],
   },
+  {
+    key: 'finance_agreement',
+    label: 'Financing agreement',
+    requirementKeys: ['finance_agreement', 'loan_or_til', 'til', 'loan_agreement'],
+    keywords: ['truth in lending', 'amount financed', 'apr', 'dealer fee', 'promissory', 'loan agreement'],
+    fields: [
+      { key: 'lender_name', label: 'Lender', required: true, kind: 'text' },
+      { key: 'account_number', label: 'Account / loan #', required: false, kind: 'text' },
+      { key: 'amount_financed', label: 'Amount financed', required: true, kind: 'money' },
+      { key: 'dealer_fee', label: 'Dealer fee', required: false, kind: 'money' },
+      { key: 'apr', label: 'APR', required: false, kind: 'percent' },
+      { key: 'term_months', label: 'Term (months)', required: true, kind: 'number' },
+      { key: 'monthly_payment', label: 'Monthly payment', required: true, kind: 'money' },
+      { key: 'first_payment_date', label: 'First payment date', required: false, kind: 'date' },
+    ],
+  },
+  {
+    key: 'proposal',
+    label: 'Proposal / savings estimate',
+    requirementKeys: ['proposal', 'savings_estimate'],
+    keywords: ['proposal', 'savings estimate', 'estimated savings', 'production estimate'],
+    fields: [
+      { key: 'promised_monthly', label: 'Promised monthly', required: false, kind: 'money' },
+      { key: 'promised_savings', label: 'Promised savings', required: false, kind: 'money' },
+      { key: 'quoted_utility', label: 'Quoted utility bill', required: false, kind: 'money' },
+    ],
+  },
+  {
+    key: 'lender_statement',
+    label: 'Lender statement',
+    requirementKeys: ['lender_statement', 'loan_statement'],
+    keywords: ['account statement', 'loan statement', 'current balance', 'amount due'],
+    fields: [
+      { key: 'lender_name', label: 'Lender', required: false, kind: 'text' },
+      { key: 'account_number', label: 'Account #', required: false, kind: 'text' },
+      { key: 'monthly_payment', label: 'Monthly payment', required: true, kind: 'money' },
+      { key: 'current_payoff', label: 'Current payoff', required: false, kind: 'money' },
+    ],
+  },
+  {
+    key: 'payoff_letter',
+    label: 'Payoff quote',
+    requirementKeys: ['payoff', 'payoff_letter'],
+    keywords: ['payoff', 'good through', 'payoff amount'],
+    fields: [
+      { key: 'payoff_amount', label: 'Payoff amount', required: true, kind: 'money' },
+      { key: 'good_through', label: 'Good-through date', required: false, kind: 'date' },
+      { key: 'account_number', label: 'Account #', required: false, kind: 'text' },
+    ],
+  },
 ]
 
 /** Fallback when nothing matches — no fields, so nothing can be "missing". */

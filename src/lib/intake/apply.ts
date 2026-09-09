@@ -331,6 +331,20 @@ export async function processInbound(
   }
 
   const outcome = await applyToCrm(source, rawPayload, { actor })
+  if (outcome.clientId) {
+    try {
+      const { ingestScsPacket, isSchema42Payload } = await import('@/lib/intake/scs-packet')
+      if (isSchema42Payload(rawPayload)) {
+        await ingestScsPacket({
+          organizationId: source.organizationId,
+          clientId: outcome.clientId,
+          rawPayload,
+        })
+      }
+    } catch (err) {
+      console.error('[intake] scs-packet ingest failed', err)
+    }
+  }
   submission = await db.intakeSubmission.update({
     where: { id: submission.id },
     data: {
