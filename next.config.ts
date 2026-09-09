@@ -1,8 +1,7 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  // C:\Users\RZER has its own package-lock.json; without this Next walks up and
-  // picks the wrong workspace root.
+  // Pin the workspace root so Next does not walk into a parent lockfile.
   turbopack: { root: __dirname },
   serverExternalPackages: ['@prisma/client', 'bcryptjs'],
 }

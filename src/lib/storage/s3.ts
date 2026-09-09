@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto'
 import type { FileStorage, PutMeta } from './types'
 import { signFileToken } from './sign'
+import { objectStorageEnv, s3ForcePathStyle, s3PutExtra } from './s3-config'
 
 /**
- * S3 / Spaces driver. Production documents go here — never local disk, never
- * in-memory. Same interface as LocalFileStorage so callers do not branch.
+ * S3 / Spaces / Supabase Storage driver. Production documents go here — never
+ * local disk, never in-memory. Same interface as LocalFileStorage so callers
+ * do not branch.
  */
 const KEY_RE = /^[A-Za-z0-9_-]{8,64}\.bin$/
 const NAMED_KEY_RE = /^avatars\/[a-z0-9]{10,40}\.(jpg|png|webp)$/
@@ -16,7 +18,7 @@ export class S3FileStorage implements FileStorage {
   private readonly prefix: string
 
   constructor() {
-    const bucket = process.env.FILE_STORAGE_BUCKET || process.env.DO_SPACES_BUCKET
+    const bucket = objectStorageEnv().bucket
     if (!bucket) throw new Error('FILE_STORAGE_BUCKET (or DO_SPACES_BUCKET) is required for the s3 driver.')
     this.bucket = bucket
     this.prefix = (process.env.FILE_STORAGE_PREFIX ?? 'documents').replace(/\/$/, '')
@@ -25,14 +27,14 @@ export class S3FileStorage implements FileStorage {
   private async s3() {
     if (this.client) return this.client
     const mod = await import('@aws-sdk/client-s3')
-    const endpoint = process.env.FILE_STORAGE_ENDPOINT || process.env.DO_SPACES_ENDPOINT
+    const env = objectStorageEnv()
     this.client = new mod.S3Client({
-      region: process.env.FILE_STORAGE_REGION || process.env.DO_SPACES_REGION || 'us-east-1',
-      endpoint: endpoint || undefined,
-      forcePathStyle: false,
+      region: env.region,
+      endpoint: env.endpoint || undefined,
+      forcePathStyle: s3ForcePathStyle(env.endpoint),
       credentials: {
-        accessKeyId: process.env.FILE_STORAGE_ACCESS_KEY || process.env.DO_SPACES_KEY || '',
-        secretAccessKey: process.env.FILE_STORAGE_SECRET_KEY || process.env.DO_SPACES_SECRET || '',
+        accessKeyId: env.accessKeyId,
+        secretAccessKey: env.secretAccessKey,
       },
     })
     return this.client
@@ -48,7 +50,7 @@ export class S3FileStorage implements FileStorage {
     const key = `${randomBytes(16).toString('hex')}.bin`
     const { PutObjectCommand } = await import('@aws-sdk/client-s3')
     await (await this.s3()).send(
-      new PutObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key), Body: buf, ACL: 'private' }),
+      new PutObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key), Body: buf, ...s3PutExtra() }),
     )
     return { key }
   }
@@ -57,7 +59,7 @@ export class S3FileStorage implements FileStorage {
     if (!NAMED_KEY_RE.test(key)) throw new Error('Invalid named storage key.')
     const { PutObjectCommand } = await import('@aws-sdk/client-s3')
     await (await this.s3()).send(
-      new PutObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key), Body: buf, ACL: 'private' }),
+      new PutObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key), Body: buf, ...s3PutExtra() }),
     )
   }
 

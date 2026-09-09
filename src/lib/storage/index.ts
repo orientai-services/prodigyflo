@@ -10,7 +10,7 @@ export function getFileStorage(): FileStorage {
   if (cached) return cached
   const driver = (process.env.FILE_STORAGE_DRIVER || 'local').toLowerCase()
   if (driver === 'local') {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
       throw new Error('FILE_STORAGE_DRIVER=local is not allowed in production. Use s3 or spaces.')
     }
     cached = new LocalFileStorage()

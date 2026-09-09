@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ProdigyFlo
 
-## Getting Started
+Internal ops CRM for Solar Contract Services. Not a homeowner-facing site — that is [SCS Intake](https://github.com/lxrdgatsby/scs-intake).
 
-First, run the development server:
+**Stack:** Next.js 16 · React 19 · Prisma 7 · PostgreSQL · Auth.js · S3-compatible storage.
+
+Read **[HANDOFF.md](./HANDOFF.md)** before changing product behavior or deploying.
+
+## Quick start
+
+Node **20.19+** and PostgreSQL 16. Any machine — nothing is tied to a previous laptop.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git checkout feat/schema-42-packet
+cp .env.example .env
+# set DATABASE_URL, AUTH_SECRET, AUTH_URL=http://localhost:3001,
+#     DEMO_STAFF_PASSWORD, FILE_STORAGE_DRIVER=local  (see HANDOFF.md)
+createdb prodigyflo
+npm install
+npx prisma generate
+npm run db:migrate
+npm run db:seed
+npx next dev -p 3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Login: `admin@prodigyflo.ai` / the `DEMO_STAFF_PASSWORD` you set. Do not use `Demo!2345`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | What it does |
+|---|---|
+| `npx next dev -p 3001` | Dev server (leave 3000 for SCS) |
+| `npm run build` | Production build |
+| `npm run db:migrate` | `prisma migrate deploy` |
+| `npm run db:seed` | Demo org + staff + SCHEMA_42 CYS defs |
+| `npm test` | Vitest (needs `DATABASE_URL`) |
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Vercel + Supabase. Two projects, two databases. Details in `HANDOFF.md` and `deploy/README.md`. The `deploy/` droplet scripts are legacy — do not run them on Vercel.

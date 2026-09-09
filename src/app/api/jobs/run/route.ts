@@ -1,5 +1,5 @@
-import { timingSafeEqual } from 'node:crypto'
 import type { NextRequest } from 'next/server'
+import { cronAuthorized } from '@/lib/cron-auth'
 import { db } from '@/lib/db'
 import { runDueWork } from '@/lib/automation/engine'
 import { loadActor } from '@/lib/automation/actor'
@@ -10,6 +10,8 @@ import { sendWeeklyDigests } from '@/lib/digest'
 import { tickEngine } from '@/lib/engine/runner'
 import { scheduleInsightScan } from '@/lib/engine/insights'
 import { renewNumbers } from '@/lib/telephony/renewal'
+
+export const maxDuration = 300
 
 /** Per-org clients rescored per run — only matters while a backlog drains. */
 const SCORE_BATCH_PER_ORG = 15
@@ -99,21 +101,12 @@ async function freshenScores(): Promise<{ scored: number; skipped: number; candi
 }
 
 /**
- * Job-runner endpoint, hit by the systemd timer (deploy/jobs.timer) every
- * five minutes. Authentication is a bearer token compared timing-safe against
- * JOBS_TOKEN; when the env var is unset the endpoint refuses everything.
+ * Job-runner endpoint. Hit by Vercel Cron (`vercel.json`) or the droplet
+ * systemd timer (deploy/jobs.timer) every five minutes. Accepts Bearer
+ * CRON_SECRET or JOBS_TOKEN; refuses everything when neither is set.
  */
-export async function POST(request: NextRequest) {
-  const token = process.env.JOBS_TOKEN
-  const header = request.headers.get('authorization') ?? ''
-  const presented = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
-
-  if (!token || !presented) {
-    return Response.json({ error: 'Unauthorized.' }, { status: 401 })
-  }
-  const a = Buffer.from(presented, 'utf8')
-  const b = Buffer.from(token, 'utf8')
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+async function run(request: NextRequest) {
+  if (!cronAuthorized(request, [process.env.JOBS_TOKEN])) {
     return Response.json({ error: 'Unauthorized.' }, { status: 401 })
   }
 
@@ -137,3 +130,6 @@ export async function POST(request: NextRequest) {
   const telephony = await renewNumbers(new Date())
   return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine, telephony })
 }
+
+export const POST = run
+export const GET = run
