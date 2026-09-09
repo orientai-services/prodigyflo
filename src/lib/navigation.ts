@@ -99,7 +99,10 @@ const SECTIONS: NavSection[] = [
       { href: '/settings/intake', label: 'Intake sources', icon: 'Plug', anyOf: ['connectors:read'] },
       { href: '/settings/templates', label: 'Message templates', icon: 'MessageSquare', anyOf: ['connectors:manage'] },
       { href: '/settings/cys', label: 'CYS field map', icon: 'ListChecks', anyOf: ['submissions:prepare'] },
-      { href: '/settings/progress', label: 'Planning & progress', icon: 'Compass' },
+      // Planning boards and their report index are not in this deployment, so
+      // the entry that pointed at /settings/progress is withdrawn rather than
+      // left linking at a 404. Individual reports remain reachable directly at
+      // /settings/progress/<report>. Restore this when the boards land.
       { href: '/settings/deploy', label: 'Deployments', icon: 'Rocket', ownerOnly: true },
     ],
   },
