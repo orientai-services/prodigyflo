@@ -40,6 +40,11 @@ export function verifySignature(
   return timingSafeEqual(expected, received)
 }
 
+/**
+ * Shared contract with SCS `src/server/delivery/prodigyflo.ts`:
+ * TOKEN mode reads X-Connector-Token; HMAC mode reads X-Intake-Signature.
+ * SCS sends both on every POST so either authMode on slug `scs-website` works.
+ */
 /** Header GoHighLevel (and any static-token sender) presents its shared token in. */
 export const TOKEN_HEADER = 'x-connector-token'
 

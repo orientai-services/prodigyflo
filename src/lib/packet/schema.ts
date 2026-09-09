@@ -7,6 +7,14 @@ export type PacketStatus =
   | 'STRAWBERRY_QUEUED'
   | 'SUBMITTED'
   | 'CLOSED'
+
+/** Strawberry may type only after floor READY + human closer YES. */
+export type StrawberryStatus =
+  | 'DO NOT RUN'
+  | 'HELD FOR CLOSER'
+  | 'STRAWBERRY QUEUED'
+  | 'SUBMITTED'
+  | 'CLOSED'
 export type Path = 'scs_closer' | 'tradebloc_dc_capital' | 'collection' | 'recovery'
 export type Trench = '0_39' | '40_59' | '60_plus' | 'unknown'
 

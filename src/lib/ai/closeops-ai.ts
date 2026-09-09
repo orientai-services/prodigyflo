@@ -6,6 +6,8 @@ import { can, clientScope, ForbiddenError, type SessionUser } from '@/lib/rbac'
 import { getAIProvider } from './index'
 import { buildAssistContext } from './assists'
 import type { CloserBriefContent } from './provider'
+import { assemblePacket } from '@/lib/packet/data'
+import { closerWinToBriefContent } from '@/lib/packet/closer-win'
 
 /**
  * Close-rate operations AI: probability-to-close scoring and Closer Briefs.
@@ -61,6 +63,10 @@ export function asBriefContent(value: unknown): CloserBriefContent {
     objections,
     talkingPoints: strArray(raw.talkingPoints),
     recommendedNextStep: str(raw.recommendedNextStep),
+    redline: strArray(raw.redline),
+    cancelPath: strArray(raw.cancelPath),
+    closeTalk: str(raw.closeTalk) || undefined,
+    outcomeCeiling: str(raw.outcomeCeiling) || undefined,
   }
 }
 
@@ -187,7 +193,11 @@ export async function generateBrief(user: SessionUser, clientId: string): Promis
   if (!context) return { ok: false, error: 'Client not found or out of your scope.' }
 
   const provider = getAIProvider()
-  const content = await provider.generateCloserBrief(context)
+  const packet = await assemblePacket(clientId)
+  const content: CloserBriefContent =
+    packet?.solarPacket && packet.closerWin
+      ? closerWinToBriefContent(packet.closerWin)
+      : await provider.generateCloserBrief(context)
 
   const row = await db.closerBrief.create({
     data: {

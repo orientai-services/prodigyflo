@@ -26,13 +26,16 @@ async function login(page: Page, email: string, password: string): Promise<void>
   ).toBeTruthy()
 }
 
+const demoPassword = process.env.DEMO_STAFF_PASSWORD
+if (!demoPassword) throw new Error('DEMO_STAFF_PASSWORD is required for e2e auth setup')
+
 setup('authenticate: staff admin', async ({ page }) => {
-  await login(page, 'admin@prodigyflo.ai', 'Demo!2345')
+  await login(page, 'admin@prodigyflo.ai', demoPassword)
   await page.context().storageState({ path: STAFF_STATE })
 })
 
 setup('authenticate: portal client', async ({ page }) => {
-  await login(page, 'client@prodigyflo.ai', 'Demo!2345')
+  await login(page, 'client@prodigyflo.ai', demoPassword)
   expect(new URL(page.url()).pathname.startsWith('/portal'), `client login landed on ${page.url()}`).toBeTruthy()
   await page.context().storageState({ path: PORTAL_STATE })
 })

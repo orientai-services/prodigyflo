@@ -125,6 +125,48 @@ export type ResolvedWorkspace = {
  * A row a human already verified in the workspace is never clobbered by
  * re-resolution — their decision outranks whatever the sources now say.
  */
+/** Re-resolve the CYS mirror without a staff session — used by SCS ingest. */
+export async function refreshCysMirror(organizationId: string, clientId: string): Promise<void> {
+  const [definitions, sources, existing] = await Promise.all([
+    loadDefinitions(organizationId),
+    loadSources(clientId),
+    db.cysFieldValue.findMany({ where: { clientId } }),
+  ])
+  const humanVerified = new Set(
+    existing.filter((v) => v.verifiedById !== null && v.status === 'VERIFIED').map((v) => v.fieldKey),
+  )
+  const resolved = resolveAll(definitions, sources).filter((r) => !humanVerified.has(r.fieldKey))
+  await db.$transaction(
+    resolved.map((r) =>
+      db.cysFieldValue.upsert({
+        where: { clientId_fieldKey: { clientId, fieldKey: r.fieldKey } },
+        create: {
+          clientId,
+          fieldKey: r.fieldKey,
+          value: r.value,
+          status: r.status,
+          confidence: r.confidence,
+          sourceLabel: r.sourceLabel,
+          sourceDocumentId: r.sourceDocumentId,
+          sourceExtractedFieldId: r.sourceExtractedFieldId,
+          conflictValue: r.conflictValue,
+          note: r.note,
+        },
+        update: {
+          value: r.value,
+          status: r.status,
+          confidence: r.confidence,
+          sourceLabel: r.sourceLabel,
+          sourceDocumentId: r.sourceDocumentId,
+          sourceExtractedFieldId: r.sourceExtractedFieldId,
+          conflictValue: r.conflictValue,
+          note: r.note,
+        },
+      }),
+    ),
+  )
+}
+
 export async function resolveForClient(
   user: SessionUser,
   clientId: string,

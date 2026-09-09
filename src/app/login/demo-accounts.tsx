@@ -27,13 +27,8 @@ export function DemoAccounts() {
     <div className="max-w-md">
       <h2 className="text-sm font-semibold">Demo accounts</h2>
       <p className="text-muted-foreground mt-1 text-sm">
-        Synthetic data only. Every account uses the password{' '}
-        <button
-          onClick={() => copy('Demo!2345')}
-          className="bg-muted hover:bg-accent rounded px-1.5 py-0.5 font-mono text-xs"
-        >
-          Demo!2345
-        </button>
+        Synthetic data only. Staff password is not shown here — it lives in{' '}
+        <code className="font-mono text-xs">DEMO_STAFF_PASSWORD</code>.
       </p>
 
       <ul className="mt-5 space-y-1">

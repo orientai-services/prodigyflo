@@ -301,4 +301,11 @@ export type CloserBriefContent = {
   objections: CloserBriefObjection[]
   talkingPoints: string[]
   recommendedNextStep: string
+  /** Internal redline from the packet. Never render to the homeowner. */
+  redline?: string[]
+  /** Case-by-case best-probability cancel path. Target, not a promise. */
+  cancelPath?: string[]
+  /** Spoken close. Facts only. */
+  closeTalk?: string
+  outcomeCeiling?: string
 }

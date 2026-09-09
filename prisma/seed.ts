@@ -172,7 +172,11 @@ async function main() {
     )
   }
 
-  const pw = await bcrypt.hash('Demo!2345', 10)
+  const demoPassword = process.env.DEMO_STAFF_PASSWORD
+  if (!demoPassword) {
+    throw new Error('Set DEMO_STAFF_PASSWORD before seeding. Do not use the public Demo!2345 password.')
+  }
+  const pw = await bcrypt.hash(demoPassword, 10)
   const mkUser = (data: Record<string, unknown>) =>
     db.user.create({ data: { organizationId: org.id, passwordHash: pw, ...data } as never })
 
@@ -1094,7 +1098,7 @@ async function main() {
   })
 
   console.log(`✓ seeded ${clientCount} clients (${totals.won} won, ${totals.lost} lost)`)
-  console.log('\nDemo accounts — password for all: Demo!2345')
+  console.log('\nDemo accounts — password is DEMO_STAFF_PASSWORD (not printed).')
   console.log('  super@prodigyflo.ai       Super Admin')
   console.log('  admin@prodigyflo.ai       Admin / Operations')
   console.log('  rm.west@prodigyflo.ai     Regional Manager')

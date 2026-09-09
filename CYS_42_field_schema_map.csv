@@ -1,0 +1,43 @@
+field_id,key,field_name,source,stage_1_ask,required_for_ready,client_sees,scs_current_source,prodigyflo_current_source,notes
+1,first_name,First name,S1,Yes,Yes,Yes,leads.first_name / contactSchema.first_name,Client.firstName,Required to start
+2,last_name,Last name,S1,Yes,Yes,Yes,leads.last_name / contactSchema.last_name,Client.lastName,Required
+3,phone,Phone,S1,Yes,Yes,Yes,leads.phone / contactSchema.phone,Client.phone,Required
+4,email,Email,S1,Yes,Yes,Yes,leads.email / contactSchema.email,Client.email,Save-your-place magic link
+5,property_street,Property street,S1,Yes,Yes,Yes,leads.address_line1 / contactSchema.address_line1 (optional today),ClientAddress.line1,Make required on contact step
+6,city,City,S1,Yes,Yes,Yes,leads.city / contactSchema.city (optional today),ClientAddress.city,Make required on contact step
+7,state,State,S1,Yes,Yes,Yes,leads.state (derived from ZIP index; not asked),ClientAddress.state,Surface as dropdown; keep ZIP lookup fill
+8,zip,ZIP,S1,Yes,Yes,Yes,eligibilitySchema.zip AND contactSchema.zip,ClientAddress.postalCode,Already required
+9,mailing_same_as_property,Mailing same as property,S1,Optional,No,Yes,MISSING,MISSING,Default Yes; new contact field
+10,owner_of_record,Owner of record,S1,Yes,No,Yes,leads.owner_occupied boolean only,MISSING as enum,Replace boolean with owner/spouse/other; keep owner_occupied derived
+11,sale_or_refi,Sale or refinance in play,S1,Yes,No,Yes,experience.urgency_driver=selling_refi only,MISSING dedicated field,Add dedicated Yes/No/Not sure; do not rely on urgency_driver
+12,pain_type,Pain type,S1,Yes,No,Yes,experience_flags[] (16 flags) + SITUATIONS slugs,MISSING as single enum,Map existing flags onto 6 SCS situation types; keep flags internally
+13,pain_narrative,Pain in their words,S1,Yes,No,Yes,experience.narrative,Note on Client,Already collected
+14,product_type_guess,Product type if they know,S1,Soft,No,Yes,eligibility.agreement_type loan|lease|ppa|cash|unsure,MISSING on Client (contract later),Keep; GX field 26 overwrites
+15,lender_guess,Lender if they know,S1,Soft,No,Yes,eligibility.lender_servicer + LENDERS list,CysField financing_lender MANUAL,Add Titan Flexbuy Skyline to LENDERS
+16,monthly_guess,Monthly payment if they know,S1,Soft,Yes,Yes,money.monthly_solar_payment,extraction solar_contract.monthly_payment,Rough number fine
+17,installer_guess,Installer if they know,S1,Soft,No,Yes,eligibility.installer + INSTALLERS,extraction solar_contract.installer_name,Already collected
+18,how_signed,How they signed,S1,Soft,No,Yes,MISSING (situation page signed-on-a-tablet exists),MISSING,New eligibility or experience field: tablet|paper|not_sure
+19,doc_contract,Signed install / purchase agreement,S2,No,Conditional,Upload only,DOC_TYPES.agreement,DocumentRequirement solar_contract,READY needs 19 or 20
+20,doc_finance,Financing agreement + disclosures,S2,No,Conditional,Upload only,DOC_TYPES.loan_or_til,NO extraction spec,Add finance_agreement type to ProdigyFlo spec.ts
+21,doc_proposal,Proposal / savings estimate,S2,No,No,Upload only,DOC_TYPES.proposal,NO extraction spec,Add proposal type
+22,doc_statement,Current lender statement,S2,No,No,Upload only,DOC_TYPES.loan_statement,NO extraction spec,Add lender_statement type
+23,doc_payoff,Payoff quote,S2,No,No,Upload only,MISSING from DOC_TYPES,MISSING,Add doc type; payoff may stay MISSING
+24,doc_utility_bill,Latest utility bill,S2,No,No,Upload only,DOC_TYPES.utility_bill,utility_bill spec exists,Already extracted
+25,doc_photo_id,Photo ID,S2,No,No,Upload only,MISSING from DOC_TYPES,government_id spec exists,Add to SCS DOC_TYPES; bind to government_id
+26,product_confirmed,Product type confirmed,GX,No,Yes,No,SCS extraction exists but not promoted as confirmed,solar_contract type detection,Beats field 14
+27,lender_confirmed,Lender confirmed,GX,No,Yes,No,NOT extracted today,financing_lender is MANUAL,Must extract from finance doc
+28,account_number,Account / loan number,GX,No,No,No,NOT extracted,utility_bill.account_number only,Need loan account from finance/statement
+29,contract_value,Original contract value,GX,No,No,No,money.remaining_balance is not this,MISSING,Amount financed / system price from page
+30,dealer_fee,Dealer fee,GX,No,No,No,MISSING,MISSING,MISSING if not on page; never invent
+31,apr_or_escalator,APR / escalator,GX,No,No,No,money.interest_rate (self-report); solar_contract.escalator_pct,escalator_pct extracted,APR from finance; escalator from lease/PPA
+32,term_months,Term months,GX,No,No,No,MISSING as months (Gatsby closer sheet uses years),solar_contract.term_months,Already in extraction spec
+33,first_payment_or_install,First payment / install date,GX,No,No,No,eligibility.signed_month/year only,solar_contract.contract_date,Whichever the doc shows
+34,current_payoff,Current payoff,GX,No,No,No,MISSING,MISSING,Only if statement or payoff letter has it
+35,utility_company_and_bill,Utility company + bill amount,GX,No,No,No,money.monthly_utility_bill self-report,utility_bill.utility_name + amount_due,From field 24
+36,told_vs_signed,Told vs signed conflict,GX,No,No,No,experience_flags promised_offset etc,fieldConflicts on closer brief,One sentence closer hook
+37,legal_hook_flags,Legal hook flags,GX+OPS,No,No,No,theories.server.ts INTERNAL (never client),MISSING as SCS field,Possible only; not advice; never render to homeowner
+38,path,Path,AUTO+OPS,No,No,No,MISSING,MISSING,SCS closer | Tradebloc/DC Capital | Collection | Recovery
+39,fee_trench,Fee trench,AUTO,No,No,No,MISSING,Client.estimatedValue is remaining_balance,Derive $0-39k / $40-59k / $60k+ from field 29
+40,closeability,Closeability A/B/C,AUTO,No,No,No,SCS score 0-100 is a different instrument,CysReadiness.completionPct is different,A=READY B=callable C=do not Dashboard
+41,docs_missing,Docs missing list,AUTO,No,No,No,documents.awaiting_upload boolean only,readiness blockers,Feeds CHASE copy; not a client form
+42,dashboard_status,Dashboard / Strawberry status,OPS,No,No,No,MISSING,CysReadiness.approvedAt / submissions,NOT STARTED | PAYLOAD READY | STRAWBERRY QUEUED | SUBMITTED | CLOSED

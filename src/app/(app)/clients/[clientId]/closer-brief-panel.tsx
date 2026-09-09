@@ -68,6 +68,46 @@ function BriefBody({ brief }: { brief: BriefView }) {
         </div>
       )}
 
+      {c.redline && c.redline.length > 0 && (
+        <div>
+          <SectionLabel>Redline (internal)</SectionLabel>
+          <ul className="space-y-1">
+            {c.redline.map((t) => (
+              <li key={t} className="text-sm leading-relaxed">
+                {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {c.cancelPath && c.cancelPath.length > 0 && (
+        <div>
+          <SectionLabel>Best-probability path</SectionLabel>
+          <ul className="space-y-1">
+            {c.cancelPath.map((t) => (
+              <li key={t} className="text-sm leading-relaxed">
+                {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {c.outcomeCeiling && (
+        <div>
+          <SectionLabel>Outcome ceiling</SectionLabel>
+          <p className="text-sm leading-relaxed">{c.outcomeCeiling}</p>
+        </div>
+      )}
+
+      {c.closeTalk && (
+        <div>
+          <SectionLabel>Close talk</SectionLabel>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{c.closeTalk}</p>
+        </div>
+      )}
+
       {c.talkingPoints.length > 0 && (
         <div>
           <SectionLabel>Talking points</SectionLabel>

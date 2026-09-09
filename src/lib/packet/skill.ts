@@ -1,12 +1,14 @@
 export function buildStrawberrySkill(fileId: string, payload: string): string {
   return [
-    `Skill: SCS Packet Upload`,
-    `Use only when STATUS = READY and a DASHBOARD PAYLOAD exists for ${fileId}.`,
+    `Skill: CYS Packet Upload`,
+    `Use only when STATUS = READY and CLOSER_YES = true and a DASHBOARD PAYLOAD exists for ${fileId}.`,
     ``,
     `Preconditions`,
+    `- Grok floor manager stamped READY`,
+    `- Closer-win brief is in the audit packet`,
+    `- Human closer said YES do it`,
     `- Logged into the SCS Dashboard`,
     `- Payload below is in the conversation`,
-    `- Human said run upload`,
     ``,
     `Steps`,
     `1. Open SCS Dashboard → New Client`,

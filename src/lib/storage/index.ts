@@ -1,18 +1,26 @@
 import 'server-only'
 import type { FileStorage } from './types'
 import { LocalFileStorage } from './local'
+import { S3FileStorage } from './s3'
 
 let cached: FileStorage | null = null
 
-/** Driver selection lives here and nowhere else. `FILE_STORAGE_DRIVER=local` is the default. */
+/** Driver selection lives here and nowhere else. Production must be `s3` / `spaces`. */
 export function getFileStorage(): FileStorage {
   if (cached) return cached
-  const driver = process.env.FILE_STORAGE_DRIVER || 'local'
+  const driver = (process.env.FILE_STORAGE_DRIVER || 'local').toLowerCase()
   if (driver === 'local') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('FILE_STORAGE_DRIVER=local is not allowed in production. Use s3 or spaces.')
+    }
     cached = new LocalFileStorage()
     return cached
   }
-  throw new Error(`Unknown FILE_STORAGE_DRIVER "${driver}" — only "local" is implemented.`)
+  if (driver === 's3' || driver === 'spaces') {
+    cached = new S3FileStorage()
+    return cached
+  }
+  throw new Error(`Unknown FILE_STORAGE_DRIVER "${driver}" — use "local" (dev) or "s3"/"spaces" (prod).`)
 }
 
 export const SIGNED_URL_TTL_SECONDS = Math.max(60, Number(process.env.FILE_SIGNED_URL_TTL ?? 300) || 300)
