@@ -31,7 +31,6 @@ code looks right and has never met the case it was written for.
 | D1 | **Does `utility_bill` stay in the upload list?** The narrowing on 2026-09-10 named three documents to gather (agreement, loan document, PTO letter) and five to remove. Electricity bills were in neither list, so they were kept — the mirror's payment-vs-bill arithmetic and the 6-before/12-after window both depend on them. | Confirm the read, or drop it and remove the window logic with it. | Dakota |
 | D2 | **What ProdigyFlo becomes.** Closers, READY and Strawberry submitting to CYS/attorney were built to fulfil cancellations. Under referral, "Submit" is a handoff and "closer" is an advisor. | Staff train on the old vocabulary until this is settled. | Dakota |
 | D3 | **Shape of cross-document identity verification.** The requirement (`SCS - INTAKE - AI ANALYSIS DOCS - IMPORTANT .rtf` on `main`): first name, last name and home address verified against the intake form on every document; utility bill is the only *name* exception (may be a spouse's); **address must match across all documents**. `signer_name` and `address_line1` are now extracted with quotes, so the anchor exists. Open: what happens on a mismatch — flag to staff, ask the homeowner, or block? | Real fraud/eligibility logic. Deciding the failure behaviour is the hard part, not the comparison. | Dakota |
-| D7 | **What happens when two uploaded pages disagree.** Multi-file upload made this common: one contract photographed page by page becomes N documents, each extracted alone. A 3-page test produced two conflicts, both at `high` confidence on both sides — page 3's header read as `ppa` where pages 1–2 read `loan`, and a "monthly payment after month 18" line read as the monthly payment. `proposedFields` folds them into one value per field and `beats()` returns false on a tie, so **the earliest upload wins**. It is stable (ordering is total as of `ac9f7bd`) but arbitrary: photograph the pages in a different order and the homeowner is shown `ppa` and `$205` as high-confidence fact, with one citation and no sign the other reading exists. Options: surface the conflict on `/review` and make the homeowner pick; prefer the document whose page carries the most corroborating fields; or keep first-wins and accept it. | This is the mirror's own principle at stake — it restates a homeowner's documents, and here it would restate one of two contradictory readings without saying so. Not a bug in the merge; a question the merge was never asked before. | Dakota |
 | D4 | **Compensation disclosure.** Providers pay per referral; current copy deliberately says "a provider that handles cases like yours" rather than "the best provider for you" — an introduction, not a ranking, which needs no disclosure to stay honest. If the copy ever strengthens to a recommendation, a disclosure has to appear with it. | Revenue model is not final. | Dakota + counsel |
 | D5 | **Provider registry.** Partners are unofficial and unsigned. Nothing names a provider anywhere yet, deliberately. | Blocks the introduction step at the end of the journey. | Dakota |
 | D6 | **`money` and `experience` steps.** `flows.ts` does not require either before booking, but both are presented as mandatory-feeling steps. Two of the five longest screens are optional. | Collapsing them is the single biggest completion-rate lever in the funnel. | Dakota |
@@ -46,6 +45,18 @@ code looks right and has never met the case it was written for.
 - **Yahoo and iCloud mail search** fall back to written instructions;
   `mailSearchUrl` returns null for both. Fine, but the instructions are not
   written yet.
+- **Two chunks of one group can still disagree.** A group larger than
+  `EXTRACTION_MAX_PARTS` (8) is split across calls, and two chunks of one
+  contract can contradict each other exactly as two files used to. It is the
+  honest limit of the design: an ordinary contract is never split, forty phone
+  photos are. Raising the cap trades against request size and latency.
+- **The model now resolves conflicts, and can resolve one wrongly.** On the
+  three-page fixture it read `monthly_solar_payment` as 205.00 — the "after
+  month 18" figure on page 3 — rather than the 189.00 on page 2. Upload order
+  used to pick 189 by luck. Grouping replaced an arbitrary answer with a
+  reasoned one, which is the right trade, but it is not the same as infallible;
+  a real escalating payment needs the field to distinguish first payment from
+  later ones.
 - **A deleted document's readings still count.** `proposedFields` selects on
   `lead_id` and `status='succeeded'` and never joins `documents`, so a value
   read from a file the homeowner removed keeps being proposed and confirmed.
