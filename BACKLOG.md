@@ -7,9 +7,38 @@ still owed before some of it can be.
 Update in the same commit as the work. When an item ships, move a one-line entry
 into the STATUS.md closed table and delete it here.
 
-**Last updated:** 2026-09-10
+**Last updated:** 2026-09-10 (second checkpoint)
 
 ---
+
+## 0 · Checklist
+
+The open items, in the order to take them. Each points at its row below; tick
+here when the row is deleted and the closed line lands in STATUS.md.
+
+**Before real traffic**
+- [ ] `check:env` guard — production env verified against what the code needs (§3 *Nothing checks that production's env…*). Cost a day of mock extraction already; `RESEND_API_KEY` and Turnstile are the next drift.
+- [ ] D9 to counsel — the balance-floor sentence, verbatim from STATUS.md.
+- [ ] D10 to counsel — the AI-drafted account; decide whether ProdigyFlo needs a `narrative_drafted` flag.
+- [ ] Calendly event `cancel-your-solar-contract-review`: confirm the first custom question is the phone, or phone lands nowhere (§3 *Phone prefill lands in a1*).
+- [ ] T8 — watch the first real booking: prefilled form, webhook match.
+- [ ] B3 Resend, B4 Turnstile, B5 fake clients, B6 token rotation (STATUS.md §0).
+
+**Correctness, known and bounded**
+- [ ] Deleted-document join in `proposedFields` and `extractionProgress` (§3 *A deleted document's readings still count*). One production lead carries 22 dead rows today.
+- [ ] `first_payment_month` field, extracted and confirmed, so the payment count survives deferrals (§3 *The payment count assumes…*).
+- [ ] Per-lead cap on narrative drafts (§3 *Narrative drafting has no per-lead cap*).
+- [ ] Cap on batch upload size, with the count shown before it starts (§3 *No cap on batch size*).
+- [ ] Grouping vs a lead's history — supersede or fold (§3 *Grouping fixes a batch…*). Decision, not a bug.
+
+**Decisions still owed**
+- [ ] D1 `utility_bill` stays? · D2 what ProdigyFlo becomes · D3 cross-document identity · D4 compensation disclosure · D5 provider registry · D6 money/experience steps.
+
+**Tests owed**
+- [ ] T1 handwriting on a real scan · T3 vision path · T5 sign into ProdigyFlo at all · T7 batch vs a real 20-page contract · T9 narrative rewrite rate · T6 identity verification once D3 is built.
+
+**Accounts**
+- [ ] Supabase: the live SCS project (`vspmjtdwlcqfclkgksel`) sits in an org the Claude connector cannot see, while an empty `scs-intake-prod` sits in the one it can. Consolidate before it bites in an incident.
 
 ## 1 · Tests owed
 
@@ -21,6 +50,8 @@ code looks right and has never met the case it was written for.
 | T1 | **Handwriting detection against a real document.** The schema, ranking, storage and UI all ship, but no document with actual handwriting has ever been run through it. | The whole feature is untested against its purpose. A scan with margin notes, a struck-through figure, or a number changed by hand would exercise: does the model find it, transcribe it verbatim, set `alters_printed` correctly, and does a handwritten value actually displace the printed one in `proposedFields`? | a real scan with handwriting on it |
 | T3 | **Vision path.** `input_mode: 'vision'` has never run — every test used a text-layer PDF. Phone photos of paperwork are the common case and take a different code path. | The most likely real-world input is the least tested one. | photos of a real agreement |
 | T5 | **The ProdigyFlo CRM, at all.** `/login` returns 200 and nobody has ever signed in. The SCHEMA_42 packet panel, closer-win brief and READY gating are unverified end to end. | Half the product has never been looked at. | nothing — just needs doing |
+| T8 | **The first real Calendly booking arrives prefilled and matched.** The iframe URL now carries `name`, `email`, `a1` and `utm_content=lead:<id>`; what was verified is the URL, not the filled-in boxes, which live in a cross-origin iframe behind a time-slot pick. The first genuine booking proves both halves: name/email already in the form, and the webhook matching it to the lead. | Every booking before 2026-09-10 was retyped and any fallback-link booking was unmatched. | a real booking |
+| T9 | **Narrative filter rewrite rate.** `narrative_drafted` events carry `attempts`; a run of 2s means the model keeps reaching for banned words and the prompt needs work, and a homeowner with an honest "they promised a refund" tile trips it too (the filter over-blocks `refund`/`owed`/`void` as whole words, deliberately). | The filter is the guarantee; its false-positive rate is unmeasured. | ~50 real drafts |
 | T7 | **Batch upload against a real multi-page contract.** Proven with a 3-page synthetic split across three files. A real one is 20+ pages, so the conflict rate below scales with it. | The failure mode found in D7 gets 20x more likely, and phone photos arrive out of order. | a real contract, photographed page by page |
 | T6 | **Cross-document identity verification** (see D3) once implemented. | It is fraud/eligibility logic; a false negative lets a mismatched name through. | D3 decided, then built |
 
