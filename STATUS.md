@@ -94,6 +94,8 @@ Nothing mid-flight. The mirror and the reframe are both shipped.
 | 09-10 | `/findings` renders the mirror after `/review`, with page + quote citations and gaps naming the document that answers them |
 | 09-10 | **Per-field confirmation.** Every machine-read value needs a decision — confirmed, edited or cleared — before the file advances. Enforced server-side from our own extraction rows, so omitting a field from the payload cannot smuggle it through |
 | 09-10 | Mirror reads endorsed values, not extractor proposals — it was restating values the homeowner had just corrected |
+| 09-10 | **Multi-file upload.** Every document row takes a whole batch at once. Fixed a stale-closure bug found on the way: `upload` closed over `docs`, so two files in flight both appended to the same captured array and the second silently overwrote the first — nothing errored, a file just never appeared. Verified in the browser with a 3-file batch, all three persisted across a reload |
+| 09-10 | "Learn how to find or get your [document]" now renders under all eight upload rows — the primary agreement card was missing one, and acronyms were being lower-cased to "ucc-1" |
 | 09-10 | Document uploads working end to end — presigned PUT → private Supabase bucket → DB row; anonymous fetch refused (400) |
 | 09-10 | Calendly booking step fixed — was a dead end, `NEXT_PUBLIC_CALENDLY_EVENT_URL` unset |
 | 09-10 | Full funnel proven end to end, unattended — upload → extraction → 5 steps → consent → `qualified` → delivery enqueued → cron dispatch → client in ProdigyFlo |
