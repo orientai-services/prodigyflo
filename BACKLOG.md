@@ -47,6 +47,13 @@ code looks right and has never met the case it was written for.
 - **Yahoo and iCloud mail search** fall back to written instructions;
   `mailSearchUrl` returns null for both. Fine, but the instructions are not
   written yet.
+- **Phone prefill lands in Calendly custom answer `a1`.** That fills the
+  booking form's phone box only if the event type's FIRST custom question is
+  the phone number. If it is not — or the event uses "invitee provides a
+  number" as the call location — the phone arrives in the wrong field or
+  nowhere. Confirm in the event settings for
+  `cancel-your-solar-contract-review`. Name and email are standard Calendly
+  parameters and do not depend on this.
 - **Narrative drafting has no per-lead cap.** Each press is one Sonnet call
   (~700 tokens in, ~120 out, roughly a cent). The route is rate-limited to 12
   a minute per IP and nothing else. Fine for a homeowner; a script could spend
