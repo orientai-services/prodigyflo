@@ -45,6 +45,16 @@ code looks right and has never met the case it was written for.
 - **Yahoo and iCloud mail search** fall back to written instructions;
   `mailSearchUrl` returns null for both. Fine, but the instructions are not
   written yet.
+- **Grouping fixes a batch, not a lead's history.** A group is what is read
+  together; anything already read stays as it was. So a lead carrying two
+  genuinely different agreements — an old contract read before grouping, and a
+  new one uploaded after — still folds them, and the older reading wins a
+  confidence tie. Seen on production during the deploy check: a test lead
+  holding two readings of one contract and three files of another still showed
+  the older `ppa`. On a real homeowner's lead, which has one contract and no
+  history, this does not arise. Fixing it properly means treating a doc_type's
+  readings as superseded when a newer group covers it, which is a decision
+  about intent, not a bug.
 - **Two chunks of one group can still disagree.** A group larger than
   `EXTRACTION_MAX_PARTS` (8) is split across calls, and two chunks of one
   contract can contradict each other exactly as two files used to. It is the
