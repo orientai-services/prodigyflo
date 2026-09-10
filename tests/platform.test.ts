@@ -35,7 +35,13 @@ describe('pg-env', () => {
     const supabase =
       'postgresql://postgres.abc:pw@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require'
     expect(isLocalDatabaseUrl(supabase)).toBe(false)
-    expect(pgSsl(supabase)).toEqual({ rejectUnauthorized: true })
+    // Supabase's chain roots in its own private CA, so verification only
+    // succeeds when that root is supplied; asserting rejectUnauthorized alone
+    // passed the test while every real connection failed SELF_SIGNED_CERT_IN_CHAIN.
+    expect(pgSsl(supabase)).toEqual({
+      rejectUnauthorized: true,
+      ca: expect.stringContaining('BEGIN CERTIFICATE'),
+    })
     expect(pgSsl('postgresql://user:pw@db.example.ondigitalocean.com:25060/defaultdb')).toEqual({
       rejectUnauthorized: false,
     })

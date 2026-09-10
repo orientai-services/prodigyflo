@@ -1,3 +1,4 @@
+import { SUPABASE_ROOT_CA } from './supabase-ca'
 /**
  * Postgres connection knobs shared by the Prisma adapter and CLI scripts.
  */
@@ -23,11 +24,19 @@ export function databaseHostKind(url: string): string {
  * DO Managed Postgres presents a custom CA so we skip verification there only.
  * Supabase (and everyone else) uses a public CA — verify it.
  */
-export function pgSsl(connectionString: string): { rejectUnauthorized: boolean } | undefined {
+export function pgSsl(
+  connectionString: string,
+): { rejectUnauthorized: boolean; ca?: string } | undefined {
   if (isLocalDatabaseUrl(connectionString)) return undefined
   if (/[?&]sslmode=disable\b/i.test(connectionString)) return undefined
   if (connectionString.includes('ondigitalocean.com')) {
     return { rejectUnauthorized: false }
+  }
+  // Supabase signs db.<ref>.supabase.co with its own private CA, so a bare
+  // rejectUnauthorized:true fails with SELF_SIGNED_CERT_IN_CHAIN. Supply the
+  // pinned root instead of turning verification off.
+  if (/supabase\.(co|com|in)/i.test(connectionString)) {
+    return { rejectUnauthorized: true, ca: SUPABASE_ROOT_CA }
   }
   return { rejectUnauthorized: true }
 }
