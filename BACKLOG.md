@@ -25,7 +25,6 @@ here when the row is deleted and the closed line lands in STATUS.md.
 - [ ] B3 Resend, B4 Turnstile, B5 fake clients, B6 token rotation (STATUS.md §0).
 
 **Correctness, known and bounded**
-- [ ] Deleted-document join in `proposedFields` and `extractionProgress` (§3 *A deleted document's readings still count*). One production lead carries 22 dead rows today.
 - [ ] `first_payment_month` field, extracted and confirmed, so the payment count survives deferrals (§3 *The payment count assumes…*).
 - [ ] Per-lead cap on narrative drafts (§3 *Narrative drafting has no per-lead cap*).
 - [ ] Cap on batch upload size, with the count shown before it starts (§3 *No cap on batch size*).
@@ -123,14 +122,6 @@ code looks right and has never met the case it was written for.
   reasoned one, which is the right trade, but it is not the same as infallible;
   a real escalating payment needs the field to distinguish first payment from
   later ones.
-- **A deleted document's readings still count.** `proposedFields` selects on
-  `lead_id` and `status='succeeded'` and never joins `documents`, so a value
-  read from a file the homeowner removed keeps being proposed and confirmed.
-  `extractionProgress` has the mirror-image problem: it counts every extraction
-  row for the lead, including ones on deleted documents that the worker will
-  never pick up (it filters `deleted_at is null`), so `finished` can never
-  become true and the reading screen waits out its whole ceiling. Live on
-  production right now: one lead carries 22 such rows. Both are one join.
 - **Nothing checks that production's env matches what the code needs.** The
   extraction provider sat on `mock` in production from deploy until 2026-09-10
   because step 1 of a plan was applied locally and never to Vercel, and no
