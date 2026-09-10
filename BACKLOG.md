@@ -31,6 +31,7 @@ code looks right and has never met the case it was written for.
 | D1 | **Does `utility_bill` stay in the upload list?** The narrowing on 2026-09-10 named three documents to gather (agreement, loan document, PTO letter) and five to remove. Electricity bills were in neither list, so they were kept — the mirror's payment-vs-bill arithmetic and the 6-before/12-after window both depend on them. | Confirm the read, or drop it and remove the window logic with it. | Dakota |
 | D2 | **What ProdigyFlo becomes.** Closers, READY and Strawberry submitting to CYS/attorney were built to fulfil cancellations. Under referral, "Submit" is a handoff and "closer" is an advisor. | Staff train on the old vocabulary until this is settled. | Dakota |
 | D3 | **Shape of cross-document identity verification.** The requirement (`SCS - INTAKE - AI ANALYSIS DOCS - IMPORTANT .rtf` on `main`): first name, last name and home address verified against the intake form on every document; utility bill is the only *name* exception (may be a spouse's); **address must match across all documents**. `signer_name` and `address_line1` are now extracted with quotes, so the anchor exists. Open: what happens on a mismatch — flag to staff, ask the homeowner, or block? | Real fraud/eligibility logic. Deciding the failure behaviour is the hard part, not the comparison. | Dakota |
+| D10 | **An AI first draft of the homeowner's own account — is that acceptable to counsel?** What ships: the draft is built only from tiles the homeowner picked and facts they already gave, is filtered for characterising language, proposes no remedy, and becomes their statement only after they edit it and press Next. It is materially a suggestion in a text box. But the narrative field is delivered to ProdigyFlo as the homeowner's account, and a reviewer there cannot tell a typed sentence from an accepted draft. If counsel wants the distinction preserved, a `narrative_drafted` flag on the lead (the event already exists) is a one-column change. The prompt and the filter are in `src/server/narrative.ts` and `src/lib/plain-language.ts` for review. | Real-traffic gate, same category as D9. | Dakota + counsel |
 | D9 | **Is the balance floor acceptable under "never invent remaining principal"?** The handoff forbids inventing a remaining balance. What ships is a subtraction over the homeowner's own confirmed numbers — amount financed minus months × payment — shown only when the document states no balance, with its assumption in the sentence and framed as the lowest the balance could be. It is arithmetic, not a stated balance, and the guard enforces every part of that framing. But it is the closest the product has come to that line, and counsel should see the exact sentence before real traffic. If the answer is no, deleting one `items.push` in `mirror.ts` removes it and the payment count stays. | The sentence is quoted in STATUS.md. | Dakota + counsel |
 | D4 | **Compensation disclosure.** Providers pay per referral; current copy deliberately says "a provider that handles cases like yours" rather than "the best provider for you" — an introduction, not a ranking, which needs no disclosure to stay honest. If the copy ever strengthens to a recommendation, a disclosure has to appear with it. | Revenue model is not final. | Dakota + counsel |
 | D5 | **Provider registry.** Partners are unofficial and unsigned. Nothing names a provider anywhere yet, deliberately. | Blocks the introduction step at the end of the journey. | Dakota |
@@ -46,6 +47,16 @@ code looks right and has never met the case it was written for.
 - **Yahoo and iCloud mail search** fall back to written instructions;
   `mailSearchUrl` returns null for both. Fine, but the instructions are not
   written yet.
+- **Narrative drafting has no per-lead cap.** Each press is one Sonnet call
+  (~700 tokens in, ~120 out, roughly a cent). The route is rate-limited to 12
+  a minute per IP and nothing else. Fine for a homeowner; a script could spend
+  a dollar a minute. A cap of, say, five drafts per lead would close it.
+- **The narrative filter over-blocks a few honest words.** `refund`, `owed`
+  and `void` are banned as whole words so the model cannot write "I am owed a
+  refund"; the cost is that "they promised a refund" — a restatement of what
+  was said — also trips it and triggers a rewrite. Acceptable while the draft
+  is a suggestion; worth revisiting if rewrite rates in `narrative_drafted`
+  events run high.
 - **The payment count assumes payments began the month after signing.** Solar
   loans commonly defer the first payment 12–18 months (the fixture itself
   carries a "monthly payment after month 18" line). The sentence says "if a
