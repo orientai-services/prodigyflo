@@ -60,6 +60,12 @@ code looks right and has never met the case it was written for.
 - **`EXTRACTION_CONCURRENCY` is unset, so drains run 4 at a time.** At the
   observed ~20s per document that is about 60 documents inside the five-minute
   ceiling. Raise it if batches routinely run larger; it takes no deploy.
+- **The reading animation is blue on a cream page.** The supplied asset is a
+  `#126dff` ramp; the brand is navy, bronze and cream. The `#dceaff` plate it
+  was drawn on is dropped by `scripts/build-animation.mts` — that part was
+  plainly wrong — but the folder itself is still off-palette. Remapping the
+  ramp onto navy/bronze is a few lines in that script, and a brand call rather
+  than a code one.
 - **No cap on batch size.** A homeowner can select 50 photos in one go; that is
   50 sequential presign→PUT→record round trips and 50 model calls at roughly
   $0.03 each. Nothing warns them or us. Worth a soft limit with a count shown
