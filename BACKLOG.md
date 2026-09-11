@@ -27,6 +27,19 @@ here when the row is deleted and the closed line lands in STATUS.md.
 - [ ] B3 Resend, B4 Turnstile, B5 fake clients, B6 token rotation (STATUS.md §0).
 
 **Correctness, known and bounded**
+- [ ] **Malformed model JSON kills a readable contract.** 2026-09-10, local walk: the 22-page Titan
+      agreement (text layer, read cleanly for 11 fields an hour earlier) failed attempts 1 and 2 with
+      `extraction returned invalid JSON: Expected ',' or ']' after array element` at positions 6892
+      and 5607 — an unescaped character inside an array of strings, almost certainly a `handwriting`
+      transcription of a contract full of `"` and `___` marks. Three strikes → `dead`, and a digital
+      contract yields nothing. Options, cheapest first: (a) log the 200 chars around the parse
+      position so the next one is diagnosable; (b) a repair pass before giving up (strip control
+      chars, escape a lone `"` inside a string, close an open array) — repair, then validate with the
+      same zod schema, never trust the repair; (c) ask for `handwriting` as a separate call when the
+      main parse fails. Measure the rate first: `select count(*) from extractions where last_error
+      like 'extraction returned invalid JSON%'`. Related: the reading screen no longer counts a
+      `failed` (retry pending) row as done — that was letting attempt 1's bad reply tell the
+      homeowner nothing could be read while attempt 2 succeeded behind them.
 - [ ] `first_payment_month` field, extracted and confirmed, so the payment count survives deferrals (§3 *The payment count assumes…*).
 - [ ] Per-lead cap on narrative drafts (§3 *Narrative drafting has no per-lead cap*).
 - [ ] Cap on batch upload size, with the count shown before it starts (§3 *No cap on batch size*). Soft cap, decided 09-10: show the count, warn above ~24 files, never block — a 20-page contract photographed page by page must still fit one module. Lands with the modular upload flow below.
