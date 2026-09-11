@@ -1,5 +1,11 @@
 import { randomBytes } from 'node:crypto'
-import type { S3Client } from '@aws-sdk/client-s3'
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import type { FileStorage, PutMeta } from './types'
 import { signFileToken } from './sign'
 import { objectStorageEnv, s3ForcePathStyle, s3PutExtra } from './s3-config'
@@ -14,8 +20,9 @@ const NAMED_KEY_RE = /^avatars\/[a-z0-9]{10,40}\.(jpg|png|webp)$/
 
 export class S3FileStorage implements FileStorage {
   readonly name = 's3'
-  // Type-only import: erased at compile time, so the SDK is still loaded lazily
-  // by the dynamic import in s3() and never enters the bundle statically.
+  // Keep the SDK statically linked in the server bundle. Vercel's production
+  // Turbopack output can leave a lazily imported AWS module in a temporal-dead-
+  // zone on its first request, which makes otherwise valid private uploads fail.
   private client: S3Client | null = null
   private readonly bucket: string
   private readonly prefix: string
@@ -29,9 +36,8 @@ export class S3FileStorage implements FileStorage {
 
   private async s3(): Promise<S3Client> {
     if (this.client) return this.client
-    const mod = await import('@aws-sdk/client-s3')
     const env = objectStorageEnv()
-    const client = new mod.S3Client({
+    const client = new S3Client({
       region: env.region,
       endpoint: env.endpoint || undefined,
       forcePathStyle: s3ForcePathStyle(env.endpoint),
@@ -52,7 +58,6 @@ export class S3FileStorage implements FileStorage {
   async put(buf: Buffer, meta: PutMeta): Promise<{ key: string }> {
     void meta
     const key = `${randomBytes(16).toString('hex')}.bin`
-    const { PutObjectCommand } = await import('@aws-sdk/client-s3')
     await (await this.s3()).send(
       new PutObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key), Body: buf, ...s3PutExtra() }),
     )
@@ -61,14 +66,12 @@ export class S3FileStorage implements FileStorage {
 
   async putAt(key: string, buf: Buffer): Promise<void> {
     if (!NAMED_KEY_RE.test(key)) throw new Error('Invalid named storage key.')
-    const { PutObjectCommand } = await import('@aws-sdk/client-s3')
     await (await this.s3()).send(
       new PutObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key), Body: buf, ...s3PutExtra() }),
     )
   }
 
   async get(key: string): Promise<Buffer> {
-    const { GetObjectCommand } = await import('@aws-sdk/client-s3')
     const res = await (await this.s3()).send(
       new GetObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key) }),
     )
@@ -78,7 +81,6 @@ export class S3FileStorage implements FileStorage {
 
   async stat(key: string): Promise<{ mtimeMs: number; size: number } | null> {
     try {
-      const { HeadObjectCommand } = await import('@aws-sdk/client-s3')
       const res = await (await this.s3()).send(
         new HeadObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key) }),
       )
@@ -97,7 +99,6 @@ export class S3FileStorage implements FileStorage {
   }
 
   async delete(key: string): Promise<void> {
-    const { DeleteObjectCommand } = await import('@aws-sdk/client-s3')
     await (await this.s3()).send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key) }),
     )
