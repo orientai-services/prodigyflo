@@ -72,6 +72,7 @@ async function fail(id: string, error: unknown) {
 }
 
 async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'> {
+  let stage = 'claiming the import row'
   const claim = await db.externalDocumentImport.updateMany({
     where: { id, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
     data: { status: 'IMPORTING', attempts: { increment: 1 }, lastError: null },
@@ -79,9 +80,11 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
   if (claim.count !== 1) return 'skipped'
 
   try {
+    stage = 'loading the import row'
     const row = await db.externalDocumentImport.findUnique({ where: { id } })
     if (!row) return 'skipped'
 
+    stage = 'fetching the authenticated SCS export'
     const response = await fetch(exportUrl(row.sourceDocumentId), {
       headers: { 'X-SCS-Export-Token': exportToken() },
       cache: 'no-store',
@@ -93,6 +96,7 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     }
     const contentLength = Number(response.headers.get('content-length') ?? 0)
     if (contentLength > MAX_IMPORT_MB * 1024 * 1024) throw new Error(`SCS document exceeds ${MAX_IMPORT_MB} MB import limit.`)
+    stage = 'reading and validating the exported bytes'
     const bytes = Buffer.from(await response.arrayBuffer())
     const declaredMime = response.headers.get('content-type') ?? row.sourceMimeType ?? ''
     const validation = validateUpload({
@@ -106,12 +110,14 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     const checksum = sha256(bytes)
     const sourceChecksum = response.headers.get('x-scs-sha256')
     if (sourceChecksum && sourceChecksum !== checksum) throw new Error('SCS document checksum mismatch.')
+    stage = 'copying the file into private storage'
     const { key } = await getFileStorage().put(bytes, {
       fileName: row.sourceFileName ?? 'scs-document',
       mimeType: validation.mimeType,
       clientId: row.clientId,
     })
     const now = new Date()
+    stage = 'persisting the imported document'
     const doc = await db.$transaction(async (tx): Promise<{ id: string }> => {
       const imported = await tx.clientDocument.create({
         data: {
@@ -153,7 +159,8 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     await runExtraction(doc.id).catch(() => undefined)
     return 'imported'
   } catch (error) {
-    await fail(id, error)
+    const detail = error instanceof Error ? error.message : 'Unknown SCS document import error.'
+    await fail(id, new Error(`SCS import failed while ${stage}: ${detail}`))
     return 'failed'
   }
 }
