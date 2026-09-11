@@ -104,11 +104,11 @@ export default async function SubmissionDetailPage({
             Open client record
           </Link>
           <a
-            href={`/api/cys/${submission.client.id}/package`}
+            href={`/api/submissions/${submission.id}/package`}
             className="text-primary inline-flex items-center gap-1 text-xs underline underline-offset-4"
           >
             <Download className="size-3" />
-            Download package
+            Download case package
           </a>
         </div>
       </PageHeader>

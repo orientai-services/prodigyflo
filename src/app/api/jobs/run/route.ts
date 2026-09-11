@@ -10,6 +10,7 @@ import { sendWeeklyDigests } from '@/lib/digest'
 import { tickEngine } from '@/lib/engine/runner'
 import { scheduleInsightScan } from '@/lib/engine/insights'
 import { renewNumbers } from '@/lib/telephony/renewal'
+import { runPendingScsDocumentImports } from '@/lib/intake/scs-document-import'
 
 export const maxDuration = 300
 
@@ -128,7 +129,8 @@ async function run(request: NextRequest) {
   // month per line. A wallet that cannot cover it suspends the line (never
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
-  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine, telephony })
+  const scsDocumentImports = await runPendingScsDocumentImports()
+  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine, telephony, scsDocumentImports })
 }
 
 export const POST = run

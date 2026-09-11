@@ -375,6 +375,7 @@ export async function processInbound(
         await ingestScsPacket({
           organizationId: source.organizationId,
           clientId: outcome.clientId,
+          intakeSubmissionId: submission.id,
           rawPayload,
         })
       }
