@@ -19,7 +19,7 @@ here when the row is deleted and the closed line lands in STATUS.md.
 **Before real traffic**
 - [x] ~~B7 — the text-layer gate~~ — closed 09-10, STATUS.md §3. Scans reach vision now.
 - [x] ~~T3 — the vision path~~ — closed 09-10, STATUS.md §3. 54/57 read, 3 correctly empty, $1.60.
-- [ ] `check:env` guard — production env verified against what the code needs (§3 *Nothing checks that production's env…*). Cost a day of mock extraction already; `RESEND_API_KEY` and Turnstile are the next drift.
+- [x] ~~`check:env` guard~~ — shipped 09-11, STATUS.md §3. Run it against the pulled prod env before every deploy that touches env or migrations. **It currently fails prod on B6** (connector token is the seeded dev value) — that is the guard working.
 - [ ] D9 to counsel — the balance-floor sentence, verbatim from STATUS.md.
 - [ ] D10 to counsel — the AI-drafted account; decide whether ProdigyFlo needs a `narrative_drafted` flag.
 - [ ] Calendly event `cancel-your-solar-contract-review`: confirm the first custom question is the phone, or phone lands nowhere (§3 *Phone prefill lands in a1*).
@@ -46,6 +46,14 @@ here when the row is deleted and the closed line lands in STATUS.md.
 - [ ] **Modular upload flow** (decided 09-10: D-1a review-delta, D-2a soft cap, D-3a breakpoints first — done). One document type per module at `/upload/[docType]`; `/reading` scoped to that type; `/review` shows only proposals not yet in `field_reviews`; back to a hub (`/upload` pre-form, `/portal` post-form, one component) that renders the mirror over *confirmed* values, a "still to confirm" count, and each remaining gap as an "upload this next" card linking to its module. Reuses `DocumentUploader` rows, `ReadingProgress` (now page-weighted, 09-10 — per module it reads "16 pages of *this* upload"), `ReviewForm`, `Findings`, `GapActions`, `neededDocuments()`. New: hub state per type, `extractionProgress(lead, docType)` (the SQL already groups by type; scoping is a `where`), the review delta. The planned document-retrieval modules (§1) live on the module page.
 - [ ] Grouping vs a lead's history — supersede or fold (§3 *Grouping fixes a batch…*). Decision, not a bug.
 
+**From DOCUMENT-PROCESSING-REVIEW.md (09-11) — Slice A shipped; these are the rest, in the review's order**
+- [ ] **B7 · Shrink phone photos in the browser** before the PUT: `createImageBitmap` → canvas long edge ≤ 2000 px → JPEG 0.82. A 12 MP iPhone photo is 3–6 MB; the API sees 1568 px of it. Today three photos fill an 18 MB call and a 20-page contract becomes 3–7 calls that can disagree. No HEIC decoding (LGPL wasm; the accept-list trick already makes iOS transcode). Manual check: 20 photos → `groups: 1`.
+- [ ] **B8 · Sniff, hash, detect encryption at confirm** — the bytes are already fetched for the page count. `file-type` magic bytes (store the sniffed `mime`, log disagreement), `sha256` → `documents.sha256` (same lead + hash → return the existing row, no second read), `PasswordException` → `unreadable_reason='password'` + a homeowner message at upload rather than "the reader refused the file" after the drain. Guard fixtures: renamed PDF, encrypted PDF, duplicate.
+- [ ] **C10 · Eval harness** — `scripts/eval-extraction.mts` over a private bucket prefix of labelled cases (`expected.json` per document); scores per field by `doc_type × input_mode`, totals cost. Seed with the 57 T3 files + Titan/GoodLeap/Douglin. **Dakota labels ~10 cases (~1 h).** Before any further prompt or model change.
+- [ ] 11 · Structured outputs re-test (`output_config.format`; the wire schema has zero unions) or a Haiku repair step for malformed JSON. Prod rate 0/178; local 2 tonight. Measure with C10 first.
+- [ ] 12 · Identity comparator (D3) as code: `account_holder_name` field, `src/lib/identity.ts` normalisers, one T2 assertion per document, mismatch surfaced never blocked. Needs the hub for its card; the public-records owner of record is the third anchor.
+- [ ] 13 · Message Batches API (50% off) for the cron / prep-step path only. · 14 · Gemini Flash as a second `ExtractionProvider`, eval only. · 15 · Storage lifecycle (trash prefix + 30-day expiration; a retention decision for live documents).
+
 **Staged, awaiting ingest**
 - [ ] **Public records module** — `modules/public-records/`, staged 09-10, not imported anywhere,
       excluded from deploys by `.vercelignore`. Fires when the address is identified; gives
@@ -66,17 +74,11 @@ here when the row is deleted and the closed line lands in STATUS.md.
 
 ## 0.5 · Efficiency, measured and waiting
 
-- [ ] **Prompt caching on the extraction prefix.** ~98% of a one-document call's input tokens
-      are the fixed schema and system prompt (~7,800 of ~7,930), re-sent every call. The prefix
-      is byte-stable — `EXTRACTION_SYSTEM_PROMPT` is a module constant and the JSON Schema comes
-      from a module-level zod schema; everything volatile is in `messages`, which renders after
-      `system`. A `cache_control` breakpoint on the system block would have cut the 57-document
-      retest from $0.38 to roughly $0.10. **Re-measured after B7 (09-10):** on the vision run
-      the prefix is ~7,800 of an average 23,200 input tokens a call — a third, not 98% — because
-      the page images now dominate. Caching would have saved ~$0.15 of the $1.60 run. Worth
-      doing, no longer the headline; the bigger lever on vision cost is fewer, fuller chunks.
-      Assert `usage.cache_read_input_tokens > 0` or a silent invalidator turns it off with no
-      error.
+- [x] ~~Prompt caching on the extraction prefix~~ — shipped 09-11, STATUS.md §3: 7,487–7,718
+      tokens read from cache per call after the first, priced at 0.1×, on the event, with a
+      warning when a later call reads zero. The headline turned out to be **thinking**, not
+      caching or transcription: see the 09-11 row. The eval harness (C10) is what turns
+      `EXTRACTION_THINKING` into a measured curve instead of an n=2 choice.
 - [ ] **PDF-Extract-Kit — evaluated 2026-09-10, declined.** AGPL-3.0 (inherited from YOLO and
       PyMuPDF, so not casually relicensable), Python + GPU so it cannot run in a Vercel
       function, and it solves a harder problem than ours (formula and table recognition for
