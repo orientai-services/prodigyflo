@@ -307,32 +307,43 @@ export async function processInbound(
   const key = { sourceId_externalId: { sourceId: source.id, externalId } }
 
   const existing = await db.intakeSubmission.findUnique({ where: key })
-  if (existing) return { duplicate: true, submission: existing }
-
-  let submission: IntakeSubmission
-  try {
-    submission = await db.intakeSubmission.create({
-      data: {
-        organizationId: source.organizationId,
-        sourceId: source.id,
-        externalId,
-        status: IntakeStatus.RECEIVED,
-        rawPayload: rawPayload as Prisma.InputJsonValue,
-      },
-    })
-  } catch (error) {
-    // Two concurrent deliveries of the same payload: the loser of the unique
-    // race treats the row the winner created as the replay it is.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const raced = await db.intakeSubmission.findUnique({ where: key })
-      if (raced) return { duplicate: true, submission: raced }
-    }
-    throw error
+  // A failed SCS document copy must be resumeable. Treating it as a duplicate
+  // would leave an otherwise valid packet stranded behind an expired source URL.
+  // RECEIVED means a server was interrupted before it could record an outcome
+  // (for example, while copying a large SCS document). It must resume on the
+  // sender's retry, not be mistaken for a completed duplicate.
+  if (existing && existing.status !== IntakeStatus.FAILED && existing.status !== IntakeStatus.RECEIVED) {
+    return { duplicate: true, submission: existing }
   }
 
-  const outcome = await applyToCrm(source, rawPayload, { actor })
-  if (outcome.clientId) {
+  let submission: IntakeSubmission
+  if (existing) {
+    submission = existing
+  } else {
     try {
+      submission = await db.intakeSubmission.create({
+        data: {
+          organizationId: source.organizationId,
+          sourceId: source.id,
+          externalId,
+          status: IntakeStatus.RECEIVED,
+          rawPayload: rawPayload as Prisma.InputJsonValue,
+        },
+      })
+    } catch (error) {
+      // Two concurrent deliveries of the same payload: the loser of the unique
+      // race treats the row the winner created as the replay it is.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const raced = await db.intakeSubmission.findUnique({ where: key })
+        if (raced) return { duplicate: true, submission: raced }
+      }
+      throw error
+    }
+  }
+
+  try {
+    const outcome = await applyToCrm(source, rawPayload, { actor })
+    if (outcome.clientId) {
       const { ingestScsPacket, isSchema42Payload } = await import('@/lib/intake/scs-packet')
       if (isSchema42Payload(rawPayload)) {
         await ingestScsPacket({
@@ -341,23 +352,31 @@ export async function processInbound(
           rawPayload,
         })
       }
-    } catch (err) {
-      console.error('[intake] scs-packet ingest failed', err)
     }
+    submission = await db.intakeSubmission.update({
+      where: { id: submission.id },
+      data: {
+        status: outcome.status,
+        mappedPayload: outcome.mapped as Prisma.InputJsonValue,
+        unmappedKeys: outcome.unmappedKeys,
+        clientId: outcome.clientId,
+        createdClient: outcome.createdClient,
+        matchedOn: outcome.matchedOn,
+        error: outcome.error,
+        processedAt: new Date(),
+      },
+    })
+  } catch (error) {
+    await db.intakeSubmission.update({
+      where: { id: submission.id },
+      data: {
+        status: IntakeStatus.FAILED,
+        error: error instanceof Error ? error.message.slice(0, 500) : 'SCS packet ingest failed.',
+        processedAt: new Date(),
+      },
+    })
+    throw error
   }
-  submission = await db.intakeSubmission.update({
-    where: { id: submission.id },
-    data: {
-      status: outcome.status,
-      mappedPayload: outcome.mapped as Prisma.InputJsonValue,
-      unmappedKeys: outcome.unmappedKeys,
-      clientId: outcome.clientId,
-      createdClient: outcome.createdClient,
-      matchedOn: outcome.matchedOn,
-      error: outcome.error,
-      processedAt: new Date(),
-    },
-  })
   return { duplicate: false, submission }
 }
 
