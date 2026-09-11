@@ -9,6 +9,7 @@ import {
   type MappedLead,
 } from '@/lib/intake/mapping'
 import { getSheetsProvider } from '@/lib/intake/sheets'
+import { isSchema42Payload } from '@/lib/intake/scs-packet'
 import type { DuplicateMatch } from '@/lib/intake/dedupe-bridge'
 
 /** Who triggered the pipeline — null for the public webhook. */
@@ -294,9 +295,9 @@ export async function applyToCrm(
 export type InboundResult = { duplicate: boolean; submission: IntakeSubmission }
 
 /**
- * Idempotent entry point shared by the webhook and the sheet sync. A payload
- * whose (sourceId, externalId) was already recorded is returned as-is: no new
- * client, no new audit entry, no status change.
+ * Idempotent entry point shared by the webhook and the sheet sync. Ordinary
+ * replays are returned as-is; schema-42 SCS packets intentionally refresh the
+ * same submission as their homeowner data and documents evolve.
  */
 export async function processInbound(
   source: IntakeSource,
@@ -305,6 +306,10 @@ export async function processInbound(
   actor: IntakeActor = null,
 ): Promise<InboundResult> {
   const key = { sourceId_externalId: { sourceId: source.id, externalId } }
+  // SCS emits a new packet as a homeowner adds documents or confirms extracted
+  // values. Those packets share the lead ID, so they must refresh an existing
+  // submission instead of being discarded as an ordinary webhook replay.
+  const isScsPacket = isSchema42Payload(rawPayload)
 
   const existing = await db.intakeSubmission.findUnique({ where: key })
   // A failed SCS document copy must be resumeable. Treating it as a duplicate
@@ -312,13 +317,29 @@ export async function processInbound(
   // RECEIVED means a server was interrupted before it could record an outcome
   // (for example, while copying a large SCS document). It must resume on the
   // sender's retry, not be mistaken for a completed duplicate.
-  if (existing && existing.status !== IntakeStatus.FAILED && existing.status !== IntakeStatus.RECEIVED) {
+  if (
+    existing &&
+    !isScsPacket &&
+    existing.status !== IntakeStatus.FAILED &&
+    existing.status !== IntakeStatus.RECEIVED
+  ) {
     return { duplicate: true, submission: existing }
   }
 
   let submission: IntakeSubmission
   if (existing) {
-    submission = existing
+    // Preserve the newest complete SCS packet as the durable intake record.
+    // Its document URLs are short lived, but the packet's answers and document
+    // provenance are retained while ingestScsPacket copies the actual bytes.
+    submission = await db.intakeSubmission.update({
+      where: { id: existing.id },
+      data: {
+        status: IntakeStatus.RECEIVED,
+        rawPayload: rawPayload as Prisma.InputJsonValue,
+        error: null,
+        attemptCount: { increment: 1 },
+      },
+    })
   } else {
     try {
       submission = await db.intakeSubmission.create({
@@ -344,8 +365,8 @@ export async function processInbound(
   try {
     const outcome = await applyToCrm(source, rawPayload, { actor })
     if (outcome.clientId) {
-      const { ingestScsPacket, isSchema42Payload } = await import('@/lib/intake/scs-packet')
-      if (isSchema42Payload(rawPayload)) {
+      const { ingestScsPacket } = await import('@/lib/intake/scs-packet')
+      if (isScsPacket) {
         await ingestScsPacket({
           organizationId: source.organizationId,
           clientId: outcome.clientId,
