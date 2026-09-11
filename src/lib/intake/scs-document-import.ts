@@ -1,4 +1,5 @@
 import 'server-only'
+import { randomUUID } from 'node:crypto'
 import { db } from '@/lib/db'
 import { getFileStorage } from '@/lib/storage'
 import { runExtraction } from '@/lib/extraction/run'
@@ -118,9 +119,11 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     })
     const now = new Date()
     stage = 'persisting the imported document'
-    const doc = await db.$transaction(async (tx): Promise<{ id: string }> => {
-      const imported = await tx.clientDocument.create({
+    const documentId = randomUUID()
+    await db.$transaction([
+      db.clientDocument.create({
         data: {
+          id: documentId,
           clientId: row.clientId,
           status: 'RECEIVED',
           fileName: (row.sourceFileName ?? 'scs-document').slice(0, 255),
@@ -133,30 +136,29 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
           receivedAt: now,
           internalComment: `Imported from SCS document ${row.sourceDocumentId}${row.sourceLeadId ? ` for lead ${row.sourceLeadId}` : ''}.`,
         },
-      })
-      await tx.externalDocumentImport.update({
+      }),
+      db.externalDocumentImport.update({
         where: { id: row.id },
         data: {
-          status: 'IMPORTED', clientDocumentId: doc.id, sourceChecksum,
+          status: 'IMPORTED', clientDocumentId: documentId, sourceChecksum,
           importedChecksum: checksum, importedAt: now, lastError: null,
         },
-      })
-      await tx.auditEvent.create({
+      }),
+      db.auditEvent.create({
         data: {
           organizationId: row.organizationId,
           actorLabel: 'SCS document importer',
           action: 'scs.document_imported',
           entityType: 'ClientDocument',
-          entityId: doc.id,
+          entityId: documentId,
           summary: `Imported SCS document ${row.sourceDocumentType ?? row.sourceFileName ?? row.sourceDocumentId}.`,
           after: { sourceDocumentId: row.sourceDocumentId, sourceLeadId: row.sourceLeadId, checksum, sizeBytes: bytes.length },
         },
-      })
-      return doc
-    })
+      }),
+    ])
     // Extraction failure is retained on its own immutable run and never throws
     // away a successfully copied source file.
-    await runExtraction(doc.id).catch(() => undefined)
+    await runExtraction(documentId).catch(() => undefined)
     return 'imported'
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Unknown SCS document import error.'
