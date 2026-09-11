@@ -244,6 +244,16 @@ enum SubmissionStatus {
   REJECTED
 }
 
+/// Lifecycle of a document copied from an authenticated external intake.
+/// PENDING/FAILED rows are deliberately durable so the job runner can retry
+/// without asking the homeowner to upload again.
+enum ExternalDocumentImportStatus {
+  PENDING
+  IMPORTING
+  IMPORTED
+  FAILED
+}
+
 enum DealStatus {
   OPEN
   WON
@@ -350,6 +360,7 @@ model Organization {
 
   intakeSources        IntakeSource[]
   intakeSubmissions    IntakeSubmission[]
+  externalDocumentImports ExternalDocumentImport[]
   invites              Invite[]
   sequences            Sequence[]
   scheduledMessages    ScheduledMessage[]
@@ -733,6 +744,7 @@ model Client {
   submissions           Submission[]
   aiRecommendations     AIRecommendation[]
   intakeSubmissions     IntakeSubmission[]
+  externalDocumentImports ExternalDocumentImport[]
   cysReadiness          CysReadiness?
   cysFieldValues        CysFieldValue[]
   sequenceEnrollments   SequenceEnrollment[]
@@ -1153,6 +1165,7 @@ model ClientDocument {
   reviews     DocumentReview[]
   extractions DocumentExtraction[]
   cysValues   CysFieldValue[]      @relation("CysSourceDocument")
+  externalImport ExternalDocumentImport?
 
   @@index([clientId])
   @@index([collectorId])
@@ -1646,8 +1659,42 @@ model IntakeSubmission {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   source       IntakeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   client       Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  externalDocumentImports ExternalDocumentImport[]
 
   @@unique([sourceId, externalId])
+  @@index([organizationId, status])
+  @@index([clientId])
+}
+
+/// Durable provenance and retry ledger for files copied from SCS. The SCS
+/// storage path and its temporary URLs never live in this table.
+model ExternalDocumentImport {
+  id                  String                       @id @default(cuid())
+  organizationId      String
+  intakeSubmissionId String
+  clientId            String
+  sourceDocumentId    String
+  sourceLeadId        String?
+  sourceFileName      String?
+  sourceDocumentType  String?
+  sourceMimeType      String?
+  sourceSizeBytes     Int?
+  status              ExternalDocumentImportStatus @default(PENDING)
+  attempts            Int                          @default(0)
+  lastError           String?
+  sourceChecksum      String?
+  importedChecksum    String?
+  clientDocumentId    String?                      @unique
+  importedAt          DateTime?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  intakeSubmission IntakeSubmission @relation(fields: [intakeSubmissionId], references: [id], onDelete: Cascade)
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientDocument ClientDocument? @relation(fields: [clientDocumentId], references: [id], onDelete: SetNull)
+
+  @@unique([intakeSubmissionId, sourceDocumentId])
   @@index([organizationId, status])
   @@index([clientId])
 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
 import { refreshCysMirror } from '@/lib/cys/data'
 import { SCHEMA_VERSION, asRecord, str, type DocumentRef } from '@/lib/packet/schema'
+import { queueScsDocumentImports } from './scs-document-import'
 
 export function isSchema42Payload(raw: unknown): boolean {
   const top = asRecord(raw)
@@ -33,6 +34,7 @@ function documentsFrom(raw: Record<string, unknown>): DocumentRef[] {
 export async function ingestScsPacket(opts: {
   organizationId: string
   clientId: string
+  intakeSubmissionId: string
   rawPayload: unknown
 }): Promise<void> {
   const raw = asRecord(opts.rawPayload)
@@ -95,31 +97,13 @@ export async function ingestScsPacket(opts: {
   }
 
   const files = documentsFrom(raw)
-  for (const f of files) {
-    const fileName = str(f.original_filename) || str(f.id) || 'scs-document'
-    const existing = await db.clientDocument.findFirst({
-      where: { clientId: opts.clientId, fileName, label: str(f.doc_type) || undefined },
-    })
-    if (existing) continue
-    await db.clientDocument.create({
-      data: {
-        clientId: opts.clientId,
-        status: 'RECEIVED',
-        fileName,
-        mimeType: str(f.mime) || null,
-        sizeBytes: typeof f.size_bytes === 'number' ? f.size_bytes : null,
-        label: str(f.doc_type) || null,
-        receivedAt: new Date(),
-        internalComment: [
-          f.storage_path ? `scs_path=${f.storage_path}` : '',
-          f.signed_get_url ? `signed_get=${f.signed_get_url}` : '',
-          f.id ? `scs_id=${f.id}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n'),
-      },
-    })
-  }
+  await queueScsDocumentImports({
+    organizationId: opts.organizationId,
+    clientId: opts.clientId,
+    intakeSubmissionId: opts.intakeSubmissionId,
+    sourceLeadId: str(raw.lead_id) || null,
+    documents: files,
+  })
 
   try {
     await refreshCysMirror(opts.organizationId, opts.clientId)
