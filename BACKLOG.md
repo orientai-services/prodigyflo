@@ -7,7 +7,7 @@ still owed before some of it can be.
 Update in the same commit as the work. When an item ships, move a one-line entry
 into the STATUS.md closed table and delete it here.
 
-**Last updated:** 2026-09-10 (fourth checkpoint — B7 closed, T3 is the proof owed)
+**Last updated:** 2026-09-10 (fourth checkpoint — B7 and T3 closed; the reader reads scans)
 
 ---
 
@@ -18,10 +18,7 @@ here when the row is deleted and the closed line lands in STATUS.md.
 
 **Before real traffic**
 - [x] ~~B7 — the text-layer gate~~ — closed 09-10, STATUS.md §3. Scans reach vision now.
-- [ ] **T3 — the vision path**, proven against the 57 retest scans on lead `ecc46544` now that
-      B7 routes them to it. It has 2 calls of production history and has never been shown to
-      read a photographed contract. **Now the top item** — B7 opened the door; this is whether
-      anything is behind it. Requeue the lead's rows, drain, read `fields_found` per call.
+- [x] ~~T3 — the vision path~~ — closed 09-10, STATUS.md §3. 54/57 read, 3 correctly empty, $1.60.
 - [ ] `check:env` guard — production env verified against what the code needs (§3 *Nothing checks that production's env…*). Cost a day of mock extraction already; `RESEND_API_KEY` and Turnstile are the next drift.
 - [ ] D9 to counsel — the balance-floor sentence, verbatim from STATUS.md.
 - [ ] D10 to counsel — the AI-drafted account; decide whether ProdigyFlo needs a `narrative_drafted` flag.
@@ -39,7 +36,7 @@ here when the row is deleted and the closed line lands in STATUS.md.
 - [ ] D1 `utility_bill` stays? · D2 what ProdigyFlo becomes · D3 cross-document identity · D4 compensation disclosure · D5 provider registry · D6 money/experience steps.
 
 **Tests owed**
-- [ ] T1 handwriting on a real scan · T3 vision path · T5 sign into ProdigyFlo at all · T7 batch vs a real 20-page contract · T9 narrative rewrite rate · T6 identity verification once D3 is built.
+- [ ] T1 handwriting displacement (marks are found now; a handwritten value beating a printed one in `proposedFields` is not yet seen) · T5 sign into ProdigyFlo at all · T7 batch vs a real 20-page contract · T9 narrative rewrite rate · T6 identity verification once D3 is built.
 
 **Accounts**
 - [ ] Supabase: the live SCS project (`vspmjtdwlcqfclkgksel`) sits in an org the Claude connector cannot see, while an empty `scs-intake-prod` sits in the one it can. Consolidate before it bites in an incident.
@@ -51,10 +48,12 @@ here when the row is deleted and the closed line lands in STATUS.md.
       is byte-stable — `EXTRACTION_SYSTEM_PROMPT` is a module constant and the JSON Schema comes
       from a module-level zod schema; everything volatile is in `messages`, which renders after
       `system`. A `cache_control` breakpoint on the system block would have cut the 57-document
-      retest from $0.38 to roughly $0.10. **Do this after B7, not before** — there is no point
-      optimising the cost of calls that extract nothing, and the saving should be measured
-      against real readings. Assert `usage.cache_read_input_tokens > 0` or a silent invalidator
-      turns it off with no error.
+      retest from $0.38 to roughly $0.10. **Re-measured after B7 (09-10):** on the vision run
+      the prefix is ~7,800 of an average 23,200 input tokens a call — a third, not 98% — because
+      the page images now dominate. Caching would have saved ~$0.15 of the $1.60 run. Worth
+      doing, no longer the headline; the bigger lever on vision cost is fewer, fuller chunks.
+      Assert `usage.cache_read_input_tokens > 0` or a silent invalidator turns it off with no
+      error.
 - [ ] **PDF-Extract-Kit — evaluated 2026-09-10, declined.** AGPL-3.0 (inherited from YOLO and
       PyMuPDF, so not casually relicensable), Python + GPU so it cannot run in a Vercel
       function, and it solves a harder problem than ours (formula and table recognition for
@@ -71,8 +70,7 @@ code looks right and has never met the case it was written for.
 
 | # | Test | Why it matters | Blocked on |
 |---|---|---|---|
-| T1 | **Handwriting detection against a real document.** The schema, ranking, storage and UI all ship, but no document with actual handwriting has ever been run through it. | The whole feature is untested against its purpose. A scan with margin notes, a struck-through figure, or a number changed by hand would exercise: does the model find it, transcribe it verbatim, set `alters_printed` correctly, and does a handwritten value actually displace the printed one in `proposedFields`? | a real scan with handwriting on it |
-| T3 | **Vision path.** `input_mode: 'vision'` has never run — every test used a text-layer PDF. Phone photos of paperwork are the common case and take a different code path. | The most likely real-world input is the least tested one. | photos of a real agreement |
+| T1 | **Handwriting displacement.** Half-proven 09-10: the T3 run transcribed 70 handwritten marks across six vision calls, and `signer_name`, `signed_month`, `signed_year` were read from handwriting at high confidence. Not yet seen: a handwritten value and a printed value for the same field in one lead, so the `beats()` rule in `proposedFields` — handwriting outranks print — has still never fired on real data. | The ranking rule is the part that changes what a homeowner is shown, and it is the part untested. | a scan where a printed figure was changed by hand |
 | T5 | **The ProdigyFlo CRM, at all.** `/login` returns 200 and nobody has ever signed in. The SCHEMA_42 packet panel, closer-win brief and READY gating are unverified end to end. | Half the product has never been looked at. | nothing — just needs doing |
 | T8 | **The first real Calendly booking arrives prefilled and matched.** The iframe URL now carries `name`, `email`, `a1` and `utm_content=lead:<id>`; what was verified is the URL, not the filled-in boxes, which live in a cross-origin iframe behind a time-slot pick. The first genuine booking proves both halves: name/email already in the form, and the webhook matching it to the lead. | Every booking before 2026-09-10 was retyped and any fallback-link booking was unmatched. | a real booking |
 | T9 | **Narrative filter rewrite rate.** `narrative_drafted` events carry `attempts`; a run of 2s means the model keeps reaching for banned words and the prompt needs work, and a homeowner with an honest "they promised a refund" tile trips it too (the filter over-blocks `refund`/`owed`/`void` as whole words, deliberately). | The filter is the guarantee; its false-positive rate is unmeasured. | ~50 real drafts |
