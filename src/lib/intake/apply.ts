@@ -187,6 +187,11 @@ export async function applyToCrm(
         // Whatever produced the changes, never let inbound data clobber a value.
         changes = Object.fromEntries(
           Object.entries(changes).filter(([k, v]) => {
+            // A connector bridge may return fields that belong to a related
+            // record (for example city or addressLine1). Only columns on
+            // Client may be sent to this update; address data is handled by
+            // the dedicated ClientAddress path when a client is created.
+            if (!MERGEABLE_FIELDS.includes(k as (typeof MERGEABLE_FIELDS)[number])) return false
             const current = (existing as unknown as Record<string, unknown>)[k]
             return typeof v === 'string' && (current === null || current === undefined || current === '')
           }),
