@@ -9,6 +9,7 @@ import { NextResponse, type NextRequest } from 'next/server'
  */
 const PUBLIC_PREFIXES = [
   '/login',
+  '/signup',
   // Self-service auth: request + complete a password reset. Magic-link
   // completion lives under /login/magic, already covered by '/login'.
   '/forgot-password',

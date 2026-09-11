@@ -142,7 +142,7 @@ function MagicLinkForm() {
   )
 }
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({ next, signupEnabled = false }: { next?: string; signupEnabled?: boolean }) {
   const [mode, setMode] = useState<Mode>('password')
 
   return (
@@ -182,6 +182,12 @@ export function LoginForm({ next }: { next?: string }) {
       >
         {mode === 'password' ? <PasswordForm next={next} /> : <MagicLinkForm />}
       </div>
+
+      {signupEnabled && (
+        <p className="text-muted-foreground text-center text-sm">
+          New organization? <Link href="/signup" className="text-brand font-medium hover:underline">Create an admin account</Link>
+        </p>
+      )}
     </div>
   )
 }

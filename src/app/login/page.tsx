@@ -19,6 +19,8 @@ export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
   const params = await searchParams
   const next = typeof params.next === 'string' ? params.next : undefined
   const justReset = params.reset === '1'
+  const justCreated = params.created === '1'
+  const signupEnabled = process.env.ALLOW_SELF_SIGNUP === 'true'
 
   return (
     <main className="relative grid min-h-dvh lg:grid-cols-2">
@@ -46,7 +48,17 @@ export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
             </div>
           )}
 
-          <LoginForm next={next} />
+          {justCreated && (
+            <div
+              role="status"
+              className="border-success/40 bg-success/10 mt-6 flex items-start gap-2 rounded-md border p-3 text-sm motion-safe:animate-in motion-safe:fade-in"
+            >
+              <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
+              <span>Your admin account is ready. Sign in to continue.</span>
+            </div>
+          )}
+
+          <LoginForm next={next} signupEnabled={signupEnabled} />
         </div>
       </div>
 
