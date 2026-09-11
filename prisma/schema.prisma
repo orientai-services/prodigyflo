@@ -413,6 +413,7 @@ model Team {
   manager      User?        @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
   members      User[]       @relation("TeamMembers")
   clients      Client[]
+  defaultIntakeSources IntakeSource[] @relation("IntakeDefaultTeam")
 
   @@index([organizationId])
   @@index([regionId])
@@ -1615,6 +1616,9 @@ model IntakeSource {
   /// Which CRM fields identify an existing person. Order matters: first hit wins.
   dedupeKeys          String[]         @default(["email", "phone"])
   defaultOwnerId      String?
+  /// Shared queue for newly-created leads. The application verifies this team
+  /// belongs to organizationId before it is stamped on a Client.
+  defaultTeamId       String?
   defaultLeadSourceId String?
   isEnabled           Boolean          @default(true)
   /// GOOGLE_SHEET only.
@@ -1630,10 +1634,12 @@ model IntakeSource {
 
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   defaultOwner User?              @relation("IntakeDefaultOwner", fields: [defaultOwnerId], references: [id], onDelete: SetNull)
+  defaultTeam  Team?              @relation("IntakeDefaultTeam", fields: [defaultTeamId], references: [id], onDelete: SetNull)
   submissions  IntakeSubmission[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
+  @@index([defaultTeamId])
 }
 
 /// One inbound payload. (sourceId, externalId) is unique, which is what makes

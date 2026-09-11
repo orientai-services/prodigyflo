@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { IntakeSource, Organization, Pipeline, PipelineStage } from '@prisma/client'
+import type { IntakeSource, Organization, Pipeline, PipelineStage, Team } from '@prisma/client'
 import { db } from '@/lib/db'
 import { hashIntakeSecret, signRawBody, verifySignature } from '@/lib/intake/hmac'
 import { deriveExternalId } from '@/lib/intake/external-id'
@@ -124,6 +124,7 @@ describe('intake apply pipeline (db)', () => {
   let org: Organization
   let pipeline: Pipeline
   let stage: PipelineStage
+  let inboundTeam: Team
   let webSource: IntakeSource
   let sheetSource: IntakeSource
 
@@ -137,6 +138,9 @@ describe('intake apply pipeline (db)', () => {
     stage = await db.pipelineStage.create({
       data: { pipelineId: pipeline.id, key: 'NEW_LEAD', name: 'New lead', category: 'INTAKE', position: 0 },
     })
+    inboundTeam = await db.team.create({
+      data: { organizationId: org.id, name: 'SCS Inbound' },
+    })
     webSource = await db.intakeSource.create({
       data: {
         organizationId: org.id,
@@ -146,6 +150,7 @@ describe('intake apply pipeline (db)', () => {
         secretHash: hashIntakeSecret('ik_test'),
         fieldMapping: { firstName: 'first_name', lastName: 'last_name', email: 'email', phone: 'phone' },
         dedupeKeys: ['email', 'phone'],
+        defaultTeamId: inboundTeam.id,
       },
     })
     sheetSource = await db.intakeSource.create({
@@ -206,8 +211,39 @@ describe('intake apply pipeline (db)', () => {
     // A created lead lands on the first stage with a stage-history row.
     const client = await db.client.findUniqueOrThrow({ where: { id: first.submission.clientId! } })
     expect(client.currentStageId).toBe(stage.id)
+    expect(client.teamId).toBe(inboundTeam.id)
     const history = await db.stageHistory.count({ where: { clientId: client.id, toKey: 'NEW_LEAD' } })
     expect(history).toBe(1)
+  })
+
+  it('never stamps a team from another organization', async () => {
+    const foreignOrg = await db.organization.create({
+      data: { name: `Foreign Team Org ${suffix}`, slug: `foreign-team-${suffix}` },
+    })
+    try {
+      const foreignTeam = await db.team.create({
+        data: { organizationId: foreignOrg.id, name: 'Foreign queue' },
+      })
+      const source = await db.intakeSource.create({
+        data: {
+          organizationId: org.id,
+          kind: 'WEB_FORM',
+          name: 'Unsafe configured source',
+          slug: `unsafe-team-${suffix}`,
+          fieldMapping: { firstName: 'first_name', lastName: 'last_name', email: 'email' },
+          defaultTeamId: foreignTeam.id,
+        },
+      })
+      const { submission } = await processInbound(source, `evt-foreign-team-${suffix}`, {
+        first_name: 'Rae',
+        last_name: 'Safe',
+        email: `rae.safe.${suffix}@example.test`,
+      })
+      const client = await db.client.findUniqueOrThrow({ where: { id: submission.clientId! } })
+      expect(client.teamId).toBeNull()
+    } finally {
+      await db.organization.delete({ where: { id: foreignOrg.id } })
+    }
   })
 
   it('matches an existing client instead of creating a second one, filling only blanks', async () => {

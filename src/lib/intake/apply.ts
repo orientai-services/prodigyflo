@@ -211,6 +211,16 @@ export async function applyToCrm(
       }
     }
 
+    // Intake sources are tenant-scoped, but a relational foreign key alone
+    // cannot prove a configured team belongs to the same tenant. Treat a
+    // stale or cross-tenant ID as unassigned rather than leaking queue access.
+    const defaultTeam = source.defaultTeamId
+      ? await db.team.findFirst({
+          where: { id: source.defaultTeamId, organizationId: source.organizationId, deletedAt: null },
+          select: { id: true },
+        })
+      : null
+
     const pipeline =
       (await db.pipeline.findFirst({
         where: { organizationId: source.organizationId, isDefault: true },
@@ -236,6 +246,7 @@ export async function applyToCrm(
         phone: mapped.phone ?? '',
         preferredLanguage: mapped.preferredLanguage?.toLowerCase().slice(0, 2) || 'en',
         ownerId: source.defaultOwnerId,
+        teamId: defaultTeam?.id ?? null,
         leadSourceId: source.defaultLeadSourceId,
         utmSource: mapped.utmSource ?? null,
         utmMedium: mapped.utmMedium ?? null,
