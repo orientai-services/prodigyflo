@@ -5,6 +5,9 @@ import { homeFor } from '@/lib/permissions'
 import { SignupForm } from './signup-form'
 
 export const metadata = { title: 'Create admin account' }
+// The Vercel production flag is intentionally evaluated per request, not at
+// build time, so administrators can disable public signup without a code change.
+export const dynamic = 'force-dynamic'
 
 export default async function SignupPage() {
   if (process.env.ALLOW_SELF_SIGNUP !== 'true') redirect('/login')

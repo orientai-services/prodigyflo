@@ -7,6 +7,9 @@ import { LoginForm } from './login-form'
 import { DemoAccounts } from './demo-accounts'
 
 export const metadata = { title: 'Sign in' }
+// This page shares the public-signup flag with /signup. Rendering at request
+// time keeps the invitation link consistent with the currently active policy.
+export const dynamic = 'force-dynamic'
 
 export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
   // The panel prints real sign-in credentials, so it never renders on a public
