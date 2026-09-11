@@ -33,8 +33,17 @@ here when the row is deleted and the closed line lands in STATUS.md.
 - [ ] **Modular upload flow** (decided 09-10: D-1a review-delta, D-2a soft cap, D-3a breakpoints first — done). One document type per module at `/upload/[docType]`; `/reading` scoped to that type; `/review` shows only proposals not yet in `field_reviews`; back to a hub (`/upload` pre-form, `/portal` post-form, one component) that renders the mirror over *confirmed* values, a "still to confirm" count, and each remaining gap as an "upload this next" card linking to its module. Reuses `DocumentUploader` rows, `ReadingProgress` (now page-weighted, 09-10 — per module it reads "16 pages of *this* upload"), `ReviewForm`, `Findings`, `GapActions`, `neededDocuments()`. New: hub state per type, `extractionProgress(lead, docType)` (the SQL already groups by type; scoping is a `where`), the review delta. The planned document-retrieval modules (§1) live on the module page.
 - [ ] Grouping vs a lead's history — supersede or fold (§3 *Grouping fixes a batch…*). Decision, not a bug.
 
+**Staged, awaiting ingest**
+- [ ] **Public records module** — `modules/public-records/`, staged 09-10, not imported anywhere,
+      excluded from deploys by `.vercelignore`. Fires when the address is identified; gives
+      county / APN / owner of record / recorder + assessor + permit deep links (free fetches in
+      Clark NV, Maricopa AZ, FL SOS). **Owner of record is the anchor D3 has been missing.**
+      Port the ~350-line resolver to TS, keep the registry JSON as data, land results as tier-2
+      assertions, fetched documents as ordinary `documents` rows queued for extraction. Spec and
+      checklist: `modules/public-records/PLUG-IN.md`. Smoke-tested the day it was staged.
+
 **Decisions still owed**
-- [ ] D1 `utility_bill` stays? · D2 what ProdigyFlo becomes · D3 cross-document identity · D4 compensation disclosure · D5 provider registry · D6 money/experience steps.
+- [ ] D1 `utility_bill` stays? · D2 what ProdigyFlo becomes · D3 cross-document identity (see the staged public-records module — the assessor's owner of record is the name to compare `signer_name` against) · D4 compensation disclosure · D5 provider registry · D6 money/experience steps.
 
 **Tests owed**
 - [ ] T1 handwriting displacement (marks are found now; a handwritten value beating a printed one in `proposedFields` is not yet seen) · T5 sign into ProdigyFlo at all · T7 batch vs a real 20-page contract · T9 narrative rewrite rate · T6 identity verification once D3 is built.

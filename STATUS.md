@@ -36,7 +36,14 @@ softened, so there is nothing left on that screen awaiting sign-off.
 - **Document-retrieval modules.** Every mirror gap already carries a `DocumentNeed`; nothing
   consumes it yet. Planned: Gmail deep-link search, generic webmail instructions (Outlook,
   Yahoo, iCloud), a lender/servicer portal registry (TradeBloc, Sunlight, GoodLeap, Mosaic,
-  Dividend), and utility-bill guidance. **Utility rule: 6 months before installation and 12
+  Dividend), and utility-bill guidance. **The county half is staged, not wired** —
+  `modules/public-records/` (09-10): a stdlib-Python resolver + a 265 KB registry of 25
+  counties / 7 state UCC registries that turns an address into county, APN, owner of record
+  and deep links (or free fetches) for the deed, liens, UCC-1 fixture filing, permit file and
+  assessor record. Trigger is "address identified" (contact step or `/review` promote), queued
+  never inline; results are tier-2 assertions `source='public_records'`, never typed columns.
+  It is Python; the app is Node on Vercel — the resolver gets ported, the headless-Chrome
+  fetchers do not run here. `modules/public-records/PLUG-IN.md` is the spec. **Utility rule: 6 months before installation and 12
   months after — unless it has been under a year, then everything since.**
 - **Provider registry and the introduction step.** Partners are unofficial and unsigned.
   Copy deliberately says "a provider that handles cases like yours", not "the best provider
