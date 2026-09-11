@@ -29,7 +29,8 @@ here when the row is deleted and the closed line lands in STATUS.md.
 **Correctness, known and bounded**
 - [ ] `first_payment_month` field, extracted and confirmed, so the payment count survives deferrals (§3 *The payment count assumes…*).
 - [ ] Per-lead cap on narrative drafts (§3 *Narrative drafting has no per-lead cap*).
-- [ ] Cap on batch upload size, with the count shown before it starts (§3 *No cap on batch size*).
+- [ ] Cap on batch upload size, with the count shown before it starts (§3 *No cap on batch size*). Soft cap, decided 09-10: show the count, warn above ~24 files, never block — a 20-page contract photographed page by page must still fit one module. Lands with the modular upload flow below.
+- [ ] **Modular upload flow** (decided 09-10: D-1a review-delta, D-2a soft cap, D-3a breakpoints first — done). One document type per module at `/upload/[docType]`; `/reading` scoped to that type; `/review` shows only proposals not yet in `field_reviews`; back to a hub (`/upload` pre-form, `/portal` post-form, one component) that renders the mirror over *confirmed* values, a "still to confirm" count, and each remaining gap as an "upload this next" card linking to its module. Reuses `DocumentUploader` rows, `ReadingProgress`, `ReviewForm`, `Findings`, `GapActions`, `neededDocuments()`. New: hub state per type, `extractionProgress(lead, docType)`, the review delta. The planned document-retrieval modules (§1) live on the module page.
 - [ ] Grouping vs a lead's history — supersede or fold (§3 *Grouping fixes a batch…*). Decision, not a bug.
 
 **Decisions still owed**
