@@ -7,6 +7,9 @@ import { recordInboundEvent } from '@/lib/inbound/record'
 import { defForIntakeKind } from '@/lib/connectors/catalog'
 
 const MAX_BODY_BYTES = 256 * 1024
+// A packet may carry several document references. The handler copies each one
+// into ProdigyFlo's private storage before acknowledging SCS.
+export const maxDuration = 300
 
 /**
  * Public webhook receiver. No session — authentication is the HMAC signature.

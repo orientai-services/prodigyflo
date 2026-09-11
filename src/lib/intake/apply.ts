@@ -9,6 +9,7 @@ import {
   type MappedLead,
 } from '@/lib/intake/mapping'
 import { getSheetsProvider } from '@/lib/intake/sheets'
+import { isSchema42Payload } from '@/lib/intake/scs-packet'
 import type { DuplicateMatch } from '@/lib/intake/dedupe-bridge'
 
 /** Who triggered the pipeline — null for the public webhook. */
@@ -186,6 +187,11 @@ export async function applyToCrm(
         // Whatever produced the changes, never let inbound data clobber a value.
         changes = Object.fromEntries(
           Object.entries(changes).filter(([k, v]) => {
+            // A connector bridge may return fields that belong to a related
+            // record (for example city or addressLine1). Only columns on
+            // Client may be sent to this update; address data is handled by
+            // the dedicated ClientAddress path when a client is created.
+            if (!MERGEABLE_FIELDS.includes(k as (typeof MERGEABLE_FIELDS)[number])) return false
             const current = (existing as unknown as Record<string, unknown>)[k]
             return typeof v === 'string' && (current === null || current === undefined || current === '')
           }),
@@ -294,9 +300,9 @@ export async function applyToCrm(
 export type InboundResult = { duplicate: boolean; submission: IntakeSubmission }
 
 /**
- * Idempotent entry point shared by the webhook and the sheet sync. A payload
- * whose (sourceId, externalId) was already recorded is returned as-is: no new
- * client, no new audit entry, no status change.
+ * Idempotent entry point shared by the webhook and the sheet sync. Ordinary
+ * replays are returned as-is; schema-42 SCS packets intentionally refresh the
+ * same submission as their homeowner data and documents evolve.
  */
 export async function processInbound(
   source: IntakeSource,
@@ -305,36 +311,67 @@ export async function processInbound(
   actor: IntakeActor = null,
 ): Promise<InboundResult> {
   const key = { sourceId_externalId: { sourceId: source.id, externalId } }
+  // SCS emits a new packet as a homeowner adds documents or confirms extracted
+  // values. Those packets share the lead ID, so they must refresh an existing
+  // submission instead of being discarded as an ordinary webhook replay.
+  const isScsPacket = isSchema42Payload(rawPayload)
 
   const existing = await db.intakeSubmission.findUnique({ where: key })
-  if (existing) return { duplicate: true, submission: existing }
-
-  let submission: IntakeSubmission
-  try {
-    submission = await db.intakeSubmission.create({
-      data: {
-        organizationId: source.organizationId,
-        sourceId: source.id,
-        externalId,
-        status: IntakeStatus.RECEIVED,
-        rawPayload: rawPayload as Prisma.InputJsonValue,
-      },
-    })
-  } catch (error) {
-    // Two concurrent deliveries of the same payload: the loser of the unique
-    // race treats the row the winner created as the replay it is.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const raced = await db.intakeSubmission.findUnique({ where: key })
-      if (raced) return { duplicate: true, submission: raced }
-    }
-    throw error
+  // A failed SCS document copy must be resumeable. Treating it as a duplicate
+  // would leave an otherwise valid packet stranded behind an expired source URL.
+  // RECEIVED means a server was interrupted before it could record an outcome
+  // (for example, while copying a large SCS document). It must resume on the
+  // sender's retry, not be mistaken for a completed duplicate.
+  if (
+    existing &&
+    !isScsPacket &&
+    existing.status !== IntakeStatus.FAILED &&
+    existing.status !== IntakeStatus.RECEIVED
+  ) {
+    return { duplicate: true, submission: existing }
   }
 
-  const outcome = await applyToCrm(source, rawPayload, { actor })
-  if (outcome.clientId) {
+  let submission: IntakeSubmission
+  if (existing) {
+    // Preserve the newest complete SCS packet as the durable intake record.
+    // Its document URLs are short lived, but the packet's answers and document
+    // provenance are retained while ingestScsPacket copies the actual bytes.
+    submission = await db.intakeSubmission.update({
+      where: { id: existing.id },
+      data: {
+        status: IntakeStatus.RECEIVED,
+        rawPayload: rawPayload as Prisma.InputJsonValue,
+        error: null,
+        attemptCount: { increment: 1 },
+      },
+    })
+  } else {
     try {
-      const { ingestScsPacket, isSchema42Payload } = await import('@/lib/intake/scs-packet')
-      if (isSchema42Payload(rawPayload)) {
+      submission = await db.intakeSubmission.create({
+        data: {
+          organizationId: source.organizationId,
+          sourceId: source.id,
+          externalId,
+          status: IntakeStatus.RECEIVED,
+          rawPayload: rawPayload as Prisma.InputJsonValue,
+        },
+      })
+    } catch (error) {
+      // Two concurrent deliveries of the same payload: the loser of the unique
+      // race treats the row the winner created as the replay it is.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const raced = await db.intakeSubmission.findUnique({ where: key })
+        if (raced) return { duplicate: true, submission: raced }
+      }
+      throw error
+    }
+  }
+
+  try {
+    const outcome = await applyToCrm(source, rawPayload, { actor })
+    if (outcome.clientId) {
+      const { ingestScsPacket } = await import('@/lib/intake/scs-packet')
+      if (isScsPacket) {
         await ingestScsPacket({
           organizationId: source.organizationId,
           clientId: outcome.clientId,
@@ -342,23 +379,31 @@ export async function processInbound(
           rawPayload,
         })
       }
-    } catch (err) {
-      console.error('[intake] scs-packet ingest failed', err)
     }
+    submission = await db.intakeSubmission.update({
+      where: { id: submission.id },
+      data: {
+        status: outcome.status,
+        mappedPayload: outcome.mapped as Prisma.InputJsonValue,
+        unmappedKeys: outcome.unmappedKeys,
+        clientId: outcome.clientId,
+        createdClient: outcome.createdClient,
+        matchedOn: outcome.matchedOn,
+        error: outcome.error,
+        processedAt: new Date(),
+      },
+    })
+  } catch (error) {
+    await db.intakeSubmission.update({
+      where: { id: submission.id },
+      data: {
+        status: IntakeStatus.FAILED,
+        error: error instanceof Error ? error.message.slice(0, 500) : 'SCS packet ingest failed.',
+        processedAt: new Date(),
+      },
+    })
+    throw error
   }
-  submission = await db.intakeSubmission.update({
-    where: { id: submission.id },
-    data: {
-      status: outcome.status,
-      mappedPayload: outcome.mapped as Prisma.InputJsonValue,
-      unmappedKeys: outcome.unmappedKeys,
-      clientId: outcome.clientId,
-      createdClient: outcome.createdClient,
-      matchedOn: outcome.matchedOn,
-      error: outcome.error,
-      processedAt: new Date(),
-    },
-  })
   return { duplicate: false, submission }
 }
 
