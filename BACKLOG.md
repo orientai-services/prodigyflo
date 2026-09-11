@@ -17,6 +17,7 @@ The open items, in the order to take them. Each points at its row below; tick
 here when the row is deleted and the closed line lands in STATUS.md.
 
 **Before real traffic**
+- [ ] [01a09105] Counsel-owned: set the retention/deletion schedule and external-recipient policy for ProdigyFlo case packages. The case-file import is live; this is policy, not a release blocker.
 - [x] ~~B7 — the text-layer gate~~ — closed 09-10, STATUS.md §3. Scans reach vision now.
 - [x] ~~T3 — the vision path~~ — closed 09-10, STATUS.md §3. 54/57 read, 3 correctly empty, $1.60.
 - [x] ~~`check:env` guard~~ — shipped 09-11, STATUS.md §3. Run it against the pulled prod env before every deploy that touches env or migrations. **It currently fails prod on B6** (connector token is the seeded dev value) — that is the guard working.
