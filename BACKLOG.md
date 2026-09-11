@@ -7,7 +7,7 @@ still owed before some of it can be.
 Update in the same commit as the work. When an item ships, move a one-line entry
 into the STATUS.md closed table and delete it here.
 
-**Last updated:** 2026-09-10 (second checkpoint)
+**Last updated:** 2026-09-10 (fourth checkpoint — B7 closed, T3 is the proof owed)
 
 ---
 
@@ -17,6 +17,11 @@ The open items, in the order to take them. Each points at its row below; tick
 here when the row is deleted and the closed line lands in STATUS.md.
 
 **Before real traffic**
+- [x] ~~B7 — the text-layer gate~~ — closed 09-10, STATUS.md §3. Scans reach vision now.
+- [ ] **T3 — the vision path**, proven against the 57 retest scans on lead `ecc46544` now that
+      B7 routes them to it. It has 2 calls of production history and has never been shown to
+      read a photographed contract. **Now the top item** — B7 opened the door; this is whether
+      anything is behind it. Requeue the lead's rows, drain, read `fields_found` per call.
 - [ ] `check:env` guard — production env verified against what the code needs (§3 *Nothing checks that production's env…*). Cost a day of mock extraction already; `RESEND_API_KEY` and Turnstile are the next drift.
 - [ ] D9 to counsel — the balance-floor sentence, verbatim from STATUS.md.
 - [ ] D10 to counsel — the AI-drafted account; decide whether ProdigyFlo needs a `narrative_drafted` flag.
@@ -38,6 +43,26 @@ here when the row is deleted and the closed line lands in STATUS.md.
 
 **Accounts**
 - [ ] Supabase: the live SCS project (`vspmjtdwlcqfclkgksel`) sits in an org the Claude connector cannot see, while an empty `scs-intake-prod` sits in the one it can. Consolidate before it bites in an incident.
+
+## 0.5 · Efficiency, measured and waiting
+
+- [ ] **Prompt caching on the extraction prefix.** ~98% of a one-document call's input tokens
+      are the fixed schema and system prompt (~7,800 of ~7,930), re-sent every call. The prefix
+      is byte-stable — `EXTRACTION_SYSTEM_PROMPT` is a module constant and the JSON Schema comes
+      from a module-level zod schema; everything volatile is in `messages`, which renders after
+      `system`. A `cache_control` breakpoint on the system block would have cut the 57-document
+      retest from $0.38 to roughly $0.10. **Do this after B7, not before** — there is no point
+      optimising the cost of calls that extract nothing, and the saving should be measured
+      against real readings. Assert `usage.cache_read_input_tokens > 0` or a silent invalidator
+      turns it off with no error.
+- [ ] **PDF-Extract-Kit — evaluated 2026-09-10, declined.** AGPL-3.0 (inherited from YOLO and
+      PyMuPDF, so not casually relicensable), Python + GPU so it cannot run in a Vercel
+      function, and it solves a harder problem than ours (formula and table recognition for
+      scientific PDFs). Worth borrowing conceptually, not as a dependency: decide *before* you
+      read (layout classification, not `length >= 120`) and work **per page** — `readPdfText`
+      uses `mergePages: true` and makes one verdict for a whole file. If local OCR is ever
+      genuinely wanted, evaluate **MinerU** instead and check its licence first rather than
+      assuming it differs.
 
 ## 1 · Tests owed
 
