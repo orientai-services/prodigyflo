@@ -21,11 +21,6 @@ export function SignupForm() {
     <form action={action} className="mt-8 space-y-4">
       {state.error && <p role="alert" className="border-destructive/40 bg-destructive/10 text-destructive rounded-md border p-3 text-sm">{state.error}</p>}
       <div className="space-y-2">
-        <Label htmlFor="organizationName">Organization name</Label>
-        <Input id="organizationName" name="organizationName" autoComplete="organization" required aria-invalid={Boolean(state.fieldErrors?.organizationName)} />
-        <FieldError message={state.fieldErrors?.organizationName} />
-      </div>
-      <div className="space-y-2">
         <Label htmlFor="name">Your full name</Label>
         <Input id="name" name="name" autoComplete="name" required aria-invalid={Boolean(state.fieldErrors?.name)} />
         <FieldError message={state.fieldErrors?.name} />
@@ -52,7 +47,7 @@ export function SignupForm() {
       </div>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending && <Loader2 className="size-4 animate-spin" />}
-        {pending ? 'Creating workspace…' : 'Create admin account'}
+        {pending ? 'Creating account…' : 'Create account'}
       </Button>
       <p className="text-muted-foreground text-center text-sm">
         Already have an account? <Link href="/login" className="text-brand font-medium hover:underline">Sign in</Link>

@@ -4,7 +4,7 @@ import { getSessionUser } from '@/lib/rbac'
 import { homeFor } from '@/lib/permissions'
 import { SignupForm } from './signup-form'
 
-export const metadata = { title: 'Create admin account' }
+export const metadata = { title: 'Create account' }
 // The Vercel production flag is intentionally evaluated per request, not at
 // build time, so administrators can disable public signup without a code change.
 export const dynamic = 'force-dynamic'
@@ -21,8 +21,8 @@ export default async function SignupPage() {
       <div className="relative flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-16">
         <div className="mx-auto w-full max-w-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-500">
           <BrandMark className="h-8" />
-          <h1 className="mt-8 text-2xl font-semibold tracking-tight">Create your admin account</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Set up a new ProdigyFlo workspace. You will be its owner and Super Admin.</p>
+          <h1 className="mt-8 text-2xl font-semibold tracking-tight">Create your account</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Join the ProdigyFlo workspace and start working with your team.</p>
           <SignupForm />
         </div>
       </div>
