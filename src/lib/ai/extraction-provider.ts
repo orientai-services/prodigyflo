@@ -41,6 +41,17 @@ export interface DocumentFieldExtractor {
   extractFields(input: FieldExtractionInput): Promise<FieldExtractionResult>
 }
 
+/** Bound the entire structured-response lifecycle, including parse time. */
+async function withinTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Document extraction exceeded ${Math.round(ms / 1000)} seconds.`)), ms)
+    work.then(
+      (value) => { clearTimeout(timer); resolve(value) },
+      (error) => { clearTimeout(timer); reject(error) },
+    )
+  })
+}
+
 class MockFieldExtractor implements DocumentFieldExtractor {
   readonly name = 'mock'
   readonly model = null
@@ -129,7 +140,7 @@ class AnthropicFieldExtractor implements DocumentFieldExtractor {
           ]
       : [{ type: 'text', text: requestText }]
 
-    const response = await client.messages.parse({
+    const response = await withinTimeout(client.messages.parse({
       model: this.model,
       // Field extraction needs a compact structured response, not extended
       // reasoning. Keeping this bounded prevents scanned-PDF jobs from
@@ -147,7 +158,7 @@ Hard rules:
         format: zodOutputFormat(schema),
       },
       messages: [{ role: 'user', content }],
-    }, { timeout: 90_000, maxRetries: 0 })
+    }, { timeout: 90_000, maxRetries: 0 }), 90_000)
 
     if (response.stop_reason === 'refusal') {
       throw new Error(`Model declined the request (${response.stop_details?.category ?? 'unspecified'}).`)
