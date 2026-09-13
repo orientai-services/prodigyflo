@@ -185,7 +185,7 @@ export function LoginForm({ next, signupEnabled = false }: { next?: string; sign
 
       {signupEnabled && (
         <p className="text-muted-foreground text-center text-sm">
-          New organization? <Link href="/signup" className="text-brand font-medium hover:underline">Create an admin account</Link>
+          New here? <Link href="/signup" className="text-brand font-medium hover:underline">Create an account</Link>
         </p>
       )}
     </div>
