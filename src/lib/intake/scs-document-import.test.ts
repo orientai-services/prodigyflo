@@ -116,6 +116,22 @@ describe('runPendingScsDocumentImports', () => {
     })
   })
 
+  it('suppresses a queued duplicate after the source document is already imported', async () => {
+    mocks.importFindFirst.mockResolvedValueOnce({ id: 'imported-first' })
+
+    await expect(runPendingScsDocumentImports()).resolves.toEqual({ attempted: 1, imported: 0, failed: 0, skipped: 1 })
+
+    expect(mocks.importUpdate).toHaveBeenCalledWith({
+      where: { id: row.id },
+      data: {
+        status: 'FAILED',
+        attempts: 8,
+        lastError: 'Duplicate SCS source document; already imported by ledger row imported-first.',
+      },
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('reprocesses only eligible imported SCS documents through the append-only extractor', async () => {
     mocks.importFindMany.mockResolvedValue([{ clientDocumentId: 'document_1' }, { clientDocumentId: 'document_2' }])
     mocks.runExtraction

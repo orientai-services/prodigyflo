@@ -95,6 +95,30 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     const row = await db.externalDocumentImport.findUnique({ where: { id } })
     if (!row) return 'skipped'
 
+    // Historical replay packets could create several ledger rows for one SCS
+    // source document. Once any one row has copied that durable source file,
+    // suppress later rows before they can create duplicate case-file cards.
+    const priorImport = await db.externalDocumentImport.findFirst({
+      where: {
+        organizationId: row.organizationId,
+        sourceDocumentId: row.sourceDocumentId,
+        status: 'IMPORTED',
+        id: { not: row.id },
+      },
+      select: { id: true },
+    })
+    if (priorImport) {
+      await db.externalDocumentImport.update({
+        where: { id: row.id },
+        data: {
+          status: 'FAILED',
+          attempts: MAX_ATTEMPTS,
+          lastError: `Duplicate SCS source document; already imported by ledger row ${priorImport.id}.`,
+        },
+      })
+      return 'skipped'
+    }
+
     stage = 'fetching the authenticated SCS export'
     const response = await fetch(exportUrl(row.sourceDocumentId), {
       headers: { 'X-SCS-Export-Token': exportToken() },
