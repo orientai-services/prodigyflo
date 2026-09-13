@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   storagePut: vi.fn(),
   runExtraction: vi.fn(),
+  scsRequirementId: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({
@@ -34,6 +35,7 @@ vi.mock('@/lib/storage', () => ({
   getFileStorage: () => ({ put: mocks.storagePut }),
 }))
 vi.mock('@/lib/extraction/run', () => ({ runExtraction: mocks.runExtraction }))
+vi.mock('./scs-document-requirements', () => ({ scsRequirementId: mocks.scsRequirementId }))
 
 import { queueScsDocumentImports, runPendingScsDocumentExtractions, runPendingScsDocumentImports } from './scs-document-import'
 
@@ -71,6 +73,7 @@ describe('runPendingScsDocumentImports', () => {
     mocks.transaction.mockResolvedValue([])
     mocks.storagePut.mockResolvedValue({ key: 'private/client_1/imported.pdf' })
     mocks.runExtraction.mockResolvedValue(undefined)
+    mocks.scsRequirementId.mockResolvedValue('requirement_1')
     mocks.extractionUpdateMany.mockResolvedValue({ count: 0 })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(bytes, {
       headers: {
@@ -98,6 +101,7 @@ describe('runPendingScsDocumentImports', () => {
     expect(operations[1].args.data).toMatchObject({
       status: 'IMPORTED', clientDocumentId: documentId, sourceChecksum: checksum, importedChecksum: checksum,
     })
+    expect(operations[0].args.data.requirementId).toBe('requirement_1')
     expect(operations[2].args.data.entityId).toBe(documentId)
     expect(mocks.runExtraction).not.toHaveBeenCalled()
   })

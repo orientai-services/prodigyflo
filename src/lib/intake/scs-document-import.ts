@@ -5,6 +5,7 @@ import { getFileStorage } from '@/lib/storage'
 import { runExtraction } from '@/lib/extraction/run'
 import { sha256, validateUpload } from '@/lib/extraction/sniff'
 import type { DocumentRef } from '@/lib/packet/schema'
+import { scsRequirementId } from './scs-document-requirements'
 
 const MAX_IMPORT_MB = 25
 const MAX_ATTEMPTS = 8
@@ -145,6 +146,8 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     const checksum = sha256(bytes)
     const sourceChecksum = response.headers.get('x-scs-sha256')
     if (sourceChecksum && sourceChecksum !== checksum) throw new Error('SCS document checksum mismatch.')
+    stage = 'resolving the SCS upload area'
+    const requirementId = await scsRequirementId(row.organizationId, row.sourceDocumentType)
     stage = 'copying the file into private storage'
     const { key } = await getFileStorage().put(bytes, {
       fileName: row.sourceFileName ?? 'scs-document',
@@ -159,6 +162,7 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
         data: {
           id: documentId,
           clientId: row.clientId,
+          requirementId,
           status: 'RECEIVED',
           fileName: (row.sourceFileName ?? 'scs-document').slice(0, 255),
           storageKey: key,
