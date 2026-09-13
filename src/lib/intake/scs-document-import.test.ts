@@ -99,7 +99,7 @@ describe('runPendingScsDocumentImports', () => {
       status: 'IMPORTED', clientDocumentId: documentId, sourceChecksum: checksum, importedChecksum: checksum,
     })
     expect(operations[2].args.data.entityId).toBe(documentId)
-    expect(mocks.runExtraction).toHaveBeenCalledWith(documentId)
+    expect(mocks.runExtraction).not.toHaveBeenCalled()
   })
 
   it('retains a persistence-stage error on the retryable import row', async () => {

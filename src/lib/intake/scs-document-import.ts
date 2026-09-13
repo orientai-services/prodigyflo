@@ -190,9 +190,11 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
         },
       }),
     ])
-    // Extraction failure is retained on its own immutable run and never throws
-    // away a successfully copied source file.
-    await runExtraction(documentId).catch(() => undefined)
+    // The copy is now durable and visible in the client's Documents tab. Do
+    // not hold the import worker hostage to an AI extraction request: the
+    // separately bounded extraction worker below picks this IMPORTED row up.
+    // That keeps a slow model call from starving the rest of the case-file
+    // backlog or making a copied document look absent.
     return 'imported'
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Unknown SCS document import error.'
