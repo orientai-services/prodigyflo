@@ -100,7 +100,9 @@ class AnthropicFieldExtractor implements DocumentFieldExtractor {
       ),
     })
 
-    const client = new Anthropic()
+    // A document run must never hold a client file in PROCESSING indefinitely.
+    // The bounded worker retries a recorded failure on a later cycle.
+    const client = new Anthropic({ timeout: 90_000, maxRetries: 1 })
     const numbered = pages.map((p, i) => `--- page ${i + 1} ---\n${p}`).join('\n\n').slice(0, 60_000)
     const requestText = `Document type: ${docType.label}\nRequested fields:\n${docType.fields
       .map((f) => `- ${f.key}: ${f.label} (${f.kind})`)

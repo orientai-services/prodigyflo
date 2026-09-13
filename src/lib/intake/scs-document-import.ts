@@ -195,6 +195,22 @@ export async function runPendingScsDocumentImports(limit = 5) {
  * the original mock result for audit.
  */
 export async function runPendingScsDocumentExtractions(limit = 5) {
+  const staleBefore = new Date(Date.now() - 5 * 60_000)
+  // A serverless invocation can end after the model call was started. Release
+  // that durable claim so the document is not stranded in RUNNING forever.
+  await db.documentExtraction.updateMany({
+    where: {
+      provider: 'anthropic',
+      status: 'RUNNING',
+      startedAt: { lt: staleBefore },
+    },
+    data: {
+      status: 'FAILED',
+      error: 'Anthropic document extraction exceeded the bounded worker timeout; retry scheduled.',
+      completedAt: new Date(),
+    },
+  })
+
   const rows = await db.externalDocumentImport.findMany({
     where: {
       status: 'IMPORTED',
@@ -202,7 +218,8 @@ export async function runPendingScsDocumentExtractions(limit = 5) {
       clientDocument: {
         status: { notIn: ['APPROVED', 'REJECTED'] },
         AND: [
-          { extractions: { none: { provider: 'anthropic' } } },
+          // A failed run is retryable; a completed Anthropic run is final.
+          { extractions: { none: { provider: 'anthropic', status: 'COMPLETED' } } },
           {
             OR: [
               { extractions: { none: {} } },

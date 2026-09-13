@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   importFindUnique: vi.fn(),
   importUpdate: vi.fn(),
   importUpdateMany: vi.fn(),
+  extractionUpdateMany: vi.fn(),
   auditEventCreate: vi.fn(),
   transaction: vi.fn(),
   storagePut: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('@/lib/db', () => ({
       update: mocks.importUpdate,
       updateMany: mocks.importUpdateMany,
     },
+    documentExtraction: { updateMany: mocks.extractionUpdateMany },
     auditEvent: { create: mocks.auditEventCreate },
     $transaction: mocks.transaction,
   },
@@ -66,6 +68,7 @@ describe('runPendingScsDocumentImports', () => {
     mocks.transaction.mockResolvedValue([])
     mocks.storagePut.mockResolvedValue({ key: 'private/client_1/imported.pdf' })
     mocks.runExtraction.mockResolvedValue(undefined)
+    mocks.extractionUpdateMany.mockResolvedValue({ count: 0 })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(bytes, {
       headers: {
         'content-type': 'application/pdf',
@@ -125,6 +128,10 @@ describe('runPendingScsDocumentImports', () => {
       }),
       orderBy: { createdAt: 'desc' },
       take: 5,
+    }))
+    expect(mocks.extractionUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ provider: 'anthropic', status: 'RUNNING' }),
+      data: expect.objectContaining({ status: 'FAILED' }),
     }))
     expect(mocks.runExtraction).toHaveBeenNthCalledWith(1, 'document_1')
     expect(mocks.runExtraction).toHaveBeenNthCalledWith(2, 'document_2')
