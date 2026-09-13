@@ -91,6 +91,11 @@ export async function DocumentsTab({ clientId }: { clientId: string }) {
   const OPEN: DocumentStatus[] = ['REQUESTED', 'RECEIVED', 'PROCESSING', 'UNDER_REVIEW', 'MISSING_INFORMATION']
   const requiredReqs = requirements.filter((r) => r.isRequired)
   const approvedRequired = requiredReqs.filter((r) => (byRequirement.get(r.id) ?? []).some((d) => d.status === 'APPROVED')).length
+  // A case manager opens this tab to see what the client has already sent.
+  // Keep those files ahead of empty collection requests without changing the
+  // configured package or any readiness requirement.
+  const populatedRequirements = requirements.filter((requirement) => (byRequirement.get(requirement.id) ?? []).length > 0)
+  const emptyRequirements = requirements.filter((requirement) => (byRequirement.get(requirement.id) ?? []).length === 0)
 
   const fileUrls = new Map<string, string>()
   for (const doc of documents) {
@@ -191,6 +196,39 @@ export async function DocumentsTab({ clientId }: { clientId: string }) {
     )
   }
 
+  const renderRequirement = (req: (typeof requirements)[number]) => {
+    const docs = byRequirement.get(req.id) ?? []
+    const latest = docs[0]
+    return (
+      <Card key={req.id}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm">
+            {req.name}
+            {req.isRequired && <span className="text-destructive"> *</span>}
+            <span className="text-muted-foreground ml-2 text-xs font-normal">{req.category.toLowerCase().replace(/_/g, ' ')}</span>
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {canUpload && (
+              <UploadButton
+                clientId={clientId}
+                requirementId={req.id}
+                label={req.name}
+                buttonLabel={latest?.storageKey ? 'Upload new version' : 'Upload'}
+              />
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {docs.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Not requested yet.</p>
+          ) : (
+            docs.map((doc, i) => renderDoc(doc, i === 0))
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -236,46 +274,27 @@ export async function DocumentsTab({ clientId }: { clientId: string }) {
         />
       ) : (
         <>
-          {requirements.map((req) => {
-            const docs = byRequirement.get(req.id) ?? []
-            const latest = docs[0]
-            return (
-              <Card key={req.id}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-sm">
-                    {req.name}
-                    {req.isRequired && <span className="text-destructive"> *</span>}
-                    <span className="text-muted-foreground ml-2 text-xs font-normal">{req.category.toLowerCase().replace(/_/g, ' ')}</span>
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    {canUpload && (
-                      <UploadButton
-                        clientId={clientId}
-                        requirementId={req.id}
-                        label={req.name}
-                        buttonLabel={latest?.storageKey ? 'Upload new version' : 'Upload'}
-                      />
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="grid gap-3">
-                  {docs.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">Not requested yet.</p>
-                  ) : (
-                    docs.map((doc, i) => renderDoc(doc, i === 0))
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
+          {populatedRequirements.length > 0 && (
+            <section className="grid gap-3" aria-labelledby="uploaded-documents-heading">
+              <h2 id="uploaded-documents-heading" className="text-sm font-semibold">Uploaded documents</h2>
+              {populatedRequirements.map(renderRequirement)}
+            </section>
+          )}
 
           {adHoc.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Other documents</CardTitle>
+                <CardTitle className="text-sm">Other uploaded documents</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3">{adHoc.map((doc, i) => renderDoc(doc, i === 0))}</CardContent>
             </Card>
+          )}
+
+          {emptyRequirements.length > 0 && (
+            <section className="grid gap-3" aria-labelledby="additional-documents-heading">
+              <h2 id="additional-documents-heading" className="text-muted-foreground text-sm font-semibold">Additional document uploads</h2>
+              {emptyRequirements.map(renderRequirement)}
+            </section>
           )}
         </>
       )}
