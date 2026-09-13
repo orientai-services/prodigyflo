@@ -10,7 +10,7 @@ import { sendWeeklyDigests } from '@/lib/digest'
 import { tickEngine } from '@/lib/engine/runner'
 import { scheduleInsightScan } from '@/lib/engine/insights'
 import { renewNumbers } from '@/lib/telephony/renewal'
-import { runPendingScsDocumentImports } from '@/lib/intake/scs-document-import'
+import { runPendingScsDocumentExtractions, runPendingScsDocumentImports } from '@/lib/intake/scs-document-import'
 
 export const maxDuration = 300
 
@@ -130,7 +130,8 @@ async function run(request: NextRequest) {
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
   const scsDocumentImports = await runPendingScsDocumentImports()
-  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine, telephony, scsDocumentImports })
+  const scsDocumentExtractions = await runPendingScsDocumentExtractions()
+  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine, telephony, scsDocumentImports, scsDocumentExtractions })
 }
 
 export const POST = run

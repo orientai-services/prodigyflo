@@ -31,7 +31,7 @@ vi.mock('@/lib/storage', () => ({
 }))
 vi.mock('@/lib/extraction/run', () => ({ runExtraction: mocks.runExtraction }))
 
-import { runPendingScsDocumentImports } from './scs-document-import'
+import { runPendingScsDocumentExtractions, runPendingScsDocumentImports } from './scs-document-import'
 
 const bytes = Buffer.from('%PDF-1.4\nQA document\n')
 const checksum = sha256(bytes)
@@ -108,5 +108,25 @@ describe('runPendingScsDocumentImports', () => {
         lastError: 'SCS import failed while persisting the imported document: database transaction failed',
       },
     })
+  })
+
+  it('reprocesses only eligible imported SCS documents through the append-only extractor', async () => {
+    mocks.importFindMany.mockResolvedValue([{ clientDocumentId: 'document_1' }, { clientDocumentId: 'document_2' }])
+    mocks.runExtraction
+      .mockResolvedValueOnce({ status: 'COMPLETED' })
+      .mockResolvedValueOnce({ status: 'FAILED' })
+
+    await expect(runPendingScsDocumentExtractions()).resolves.toEqual({ attempted: 2, completed: 1, failed: 1, skipped: 0 })
+
+    expect(mocks.importFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: 'IMPORTED',
+        clientDocument: expect.objectContaining({ status: { notIn: ['APPROVED', 'REJECTED'] } }),
+      }),
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }))
+    expect(mocks.runExtraction).toHaveBeenNthCalledWith(1, 'document_1')
+    expect(mocks.runExtraction).toHaveBeenNthCalledWith(2, 'document_2')
   })
 })

@@ -186,3 +186,51 @@ export async function runPendingScsDocumentImports(limit = 5) {
   }
   return result
 }
+
+/**
+ * Backfill documents imported while extraction was running in labelled mock
+ * mode. This is deliberately narrow: only SCS imports whose document has no
+ * Anthropic result are eligible, and finalized review decisions are never
+ * changed. Each call to runExtraction creates a new immutable run, preserving
+ * the original mock result for audit.
+ */
+export async function runPendingScsDocumentExtractions(limit = 5) {
+  const rows = await db.externalDocumentImport.findMany({
+    where: {
+      status: 'IMPORTED',
+      clientDocumentId: { not: null },
+      clientDocument: {
+        status: { notIn: ['APPROVED', 'REJECTED'] },
+        AND: [
+          { extractions: { none: { provider: 'anthropic' } } },
+          {
+            OR: [
+              { extractions: { none: {} } },
+              { extractions: { some: { provider: 'mock' } } },
+            ],
+          },
+        ],
+      },
+    },
+    // A fresh upload should never wait behind an old mock-only backlog.
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: { clientDocumentId: true },
+  })
+
+  const result = { attempted: rows.length, completed: 0, failed: 0, skipped: 0 }
+  for (const row of rows) {
+    if (!row.clientDocumentId) {
+      result.skipped++
+      continue
+    }
+    try {
+      const extraction = await runExtraction(row.clientDocumentId)
+      if (extraction.status === 'COMPLETED') result.completed++
+      else result.failed++
+    } catch {
+      result.failed++
+    }
+  }
+  return result
+}
