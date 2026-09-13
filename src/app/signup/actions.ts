@@ -26,11 +26,11 @@ function uniqueViolation(error: unknown): boolean {
 // A deployment may override this only when it intentionally has a different
 // shared workspace. Do not accept a workspace identifier from the browser.
 const DEFAULT_PUBLIC_SIGNUP_WORKSPACE_SLUG = 'prodigyflo'
-const PUBLIC_SIGNUP_ROLE = RoleKey.CLOSER
+const PUBLIC_SIGNUP_ROLE = RoleKey.ADMIN
 
 /**
- * Public signup joins a new staff member to the configured shared workspace.
- * Elevated roles and cross-workspace access remain invite/admin-only actions.
+ * Public signup joins a new Admin to the configured shared workspace. The
+ * account is never an owner and cannot create a separate tenant from this flow.
  */
 export async function signupAction(_prev: SignupState, formData: FormData): Promise<SignupState> {
   if (process.env.ALLOW_SELF_SIGNUP !== 'true') {
