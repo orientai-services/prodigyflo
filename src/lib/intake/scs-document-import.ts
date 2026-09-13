@@ -218,8 +218,9 @@ export async function runPendingScsDocumentExtractions(limit = 5) {
       clientDocument: {
         status: { notIn: ['APPROVED', 'REJECTED'] },
         AND: [
-          // A failed run is retryable; a completed Anthropic run is final.
-          { extractions: { none: { provider: 'anthropic', status: 'COMPLETED' } } },
+          // A failed run is retryable; completed and currently-running runs
+          // are not. The stale-run sweep above releases abandoned claims.
+          { extractions: { none: { provider: 'anthropic', status: { in: ['COMPLETED', 'RUNNING'] } } } },
           {
             OR: [
               { extractions: { none: {} } },

@@ -124,7 +124,12 @@ describe('runPendingScsDocumentImports', () => {
     expect(mocks.importFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         status: 'IMPORTED',
-        clientDocument: expect.objectContaining({ status: { notIn: ['APPROVED', 'REJECTED'] } }),
+        clientDocument: expect.objectContaining({
+          status: { notIn: ['APPROVED', 'REJECTED'] },
+          AND: expect.arrayContaining([
+            expect.objectContaining({ extractions: { none: { provider: 'anthropic', status: { in: ['COMPLETED', 'RUNNING'] } } } }),
+          ]),
+        }),
       }),
       orderBy: { createdAt: 'desc' },
       take: 5,
