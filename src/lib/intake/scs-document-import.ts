@@ -171,10 +171,9 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
 export async function runPendingScsDocumentImports(limit = 5) {
   const rows = await db.externalDocumentImport.findMany({
     where: { status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
-    // A handful of old, retrying failures must not starve brand-new uploads.
-    // First attempts are the highest-value work; failed rows remain retryable
-    // and are picked up after the fresh queue has drained.
-    orderBy: [{ attempts: 'asc' }, { createdAt: 'asc' }],
+    // New customer uploads are time-sensitive. Prioritize fresh documents and
+    // newest first-attempt work; failed rows remain retryable behind it.
+    orderBy: [{ attempts: 'asc' }, { createdAt: 'desc' }],
     take: limit,
     select: { id: true },
   })
