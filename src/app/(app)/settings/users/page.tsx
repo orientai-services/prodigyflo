@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/page-header'
 import { Badge } from '@/components/ui/badge'
 import { InviteDialog } from './invite-dialog'
 import { InviteRowActions, UserRowControls } from './row-controls'
+import { AccountRecoveryDialog } from './account-recovery-dialog'
 
 export const metadata = { title: 'Users & access' }
 
@@ -36,7 +37,12 @@ export default async function UsersPage() {
       <PageHeader
         title="Users & access"
         description="Staff accounts, roles, and invitations. You can only grant roles below your own."
-        actions={canManage ? <InviteDialog roles={grantable} teams={teams} /> : undefined}
+        actions={canManage ? (
+          <div className="flex items-center gap-2">
+            {user.isOwner && <AccountRecoveryDialog />}
+            <InviteDialog roles={grantable} teams={teams} />
+          </div>
+        ) : undefined}
       />
 
       <div className="space-y-8 p-4 sm:p-6">

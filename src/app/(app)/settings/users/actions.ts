@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import type { RoleKey } from '@prisma/client'
+import { RoleKey } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requirePermission } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
@@ -77,6 +77,82 @@ export async function revokeInviteAction(formData: FormData): Promise<void> {
 }
 
 export type UserActionState = { error?: string }
+
+export type AccountRecoveryState = {
+  error?: string
+  recoveredEmail?: string
+  sourceOrganization?: string
+}
+
+const recoverySchema = z.object({
+  email: z.email('Enter a valid email address.').transform((value) => value.trim().toLowerCase()),
+})
+
+/**
+ * Moves a dormant, non-owner account from a legacy workspace into the owner's
+ * current workspace. This is deliberately owner-only: it crosses a tenant
+ * boundary and must never become a public-signup escape hatch.
+ */
+export async function recoverExistingAccountAction(
+  _prev: AccountRecoveryState,
+  formData: FormData,
+): Promise<AccountRecoveryState> {
+  const actor = await requirePermission('users:manage')
+  if (!actor.isOwner) return { error: 'Only the workspace owner can recover an account from another workspace.' }
+
+  const parsed = recoverySchema.safeParse({ email: formData.get('email') })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  const target = await db.user.findFirst({
+    where: { email: parsed.data.email, deletedAt: null },
+    include: { role: true, organization: { select: { id: true, name: true } } },
+  })
+  if (!target) return { error: 'No active account exists for that email.' }
+  if (target.organizationId === actor.organizationId) {
+    return { error: 'That account is already in this workspace. Refresh the staff list.' }
+  }
+  if (target.isOwner) {
+    return {
+      error: `This account owns the ${target.organization.name} workspace. It was not moved, because that could orphan workspace data.`,
+    }
+  }
+  if (target.role.key === RoleKey.SUPER_ADMIN) {
+    try {
+      await assertNotLastSuperAdmin(target.organizationId, target.id)
+    } catch (e) {
+      return { error: e instanceof InviteError ? e.message : 'This account cannot be moved safely.' }
+    }
+  }
+
+  const adminRole = await db.role.findFirst({
+    where: { organizationId: actor.organizationId, key: RoleKey.ADMIN },
+    select: { id: true },
+  })
+  if (!adminRole) return { error: 'The Admin role is not configured in this workspace.' }
+
+  await db.user.update({
+    where: { id: target.id },
+    data: {
+      organizationId: actor.organizationId,
+      roleId: adminRole.id,
+      regionId: null,
+      teamId: null,
+      managerId: null,
+      isActive: true,
+      isOwner: false,
+    },
+  })
+  await recordAudit(actor, {
+    action: 'user.recovered_to_workspace',
+    entityType: 'User',
+    entityId: target.id,
+    summary: `Recovered ${target.email} from ${target.organization.name} as Admin / Operations.`,
+    before: { organizationId: target.organizationId, role: target.role.key },
+    after: { organizationId: actor.organizationId, role: RoleKey.ADMIN },
+  })
+  revalidatePath('/settings/users')
+  return { recoveredEmail: target.email, sourceOrganization: target.organization.name }
+}
 
 export async function setUserActiveAction(_prev: UserActionState, formData: FormData): Promise<UserActionState> {
   const actor = await requirePermission('users:manage')
