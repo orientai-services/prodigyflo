@@ -27,6 +27,7 @@ export function visionMediaType(mime: string | null | undefined): VisionMediaTyp
 }
 
 export type VisionImageInput = { mediaType: VisionMediaType; base64: string }
+export type VisionPdfInput = { mediaType: 'application/pdf'; base64: string }
 
 /**
  * Build the image payload for an uploaded document, or explain why not.
@@ -54,4 +55,11 @@ export function visionImageFor(
     }
   }
   return { image: { mediaType, base64: buf.toString('base64') }, reason: null }
+}
+
+/** SCS limits imports to 25 MB, within the provider's PDF document limit. */
+export function visionPdfFor(buf: Buffer, mime: string | null | undefined): VisionPdfInput | null {
+  return mime && normalizeMime(mime) === 'application/pdf'
+    ? { mediaType: 'application/pdf', base64: buf.toString('base64') }
+    : null
 }

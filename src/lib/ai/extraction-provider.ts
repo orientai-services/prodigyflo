@@ -1,7 +1,7 @@
 import 'server-only'
 import { isAIConfigured } from './provider'
 import type { DocTypeSpec } from '@/lib/extraction/spec'
-import type { VisionImageInput } from '@/lib/extraction/vision'
+import type { VisionImageInput, VisionPdfInput } from '@/lib/extraction/vision'
 import { extractFieldsFromText, type ParsedField } from '@/lib/extraction/parse'
 
 /**
@@ -22,6 +22,8 @@ export type FieldExtractionInput = {
   fileName: string | null
   /** Present when the document is a model-readable image (see extraction/vision.ts). */
   image?: VisionImageInput | null
+  /** Present for an image-only PDF that needs the model's document vision. */
+  pdf?: VisionPdfInput | null
 }
 
 export type FieldExtractionResult = {
@@ -43,14 +45,14 @@ class MockFieldExtractor implements DocumentFieldExtractor {
   readonly name = 'mock'
   readonly model = null
 
-  async extractFields({ docType, pages, image }: FieldExtractionInput): Promise<FieldExtractionResult> {
+  async extractFields({ docType, pages, image, pdf }: FieldExtractionInput): Promise<FieldExtractionResult> {
     // The mock has no OCR and refuses to pretend otherwise: an image yields
     // one empty field per spec key, and the summary says why.
-    if (image) {
+    if (image || pdf) {
       return {
         fields: extractFieldsFromText(docType, []),
         summary:
-          'This document is an image and OCR is not available in mock mode — nothing was read. A reviewer must enter the field values using the Correct action.',
+          'This document needs vision OCR, which is not available in mock mode — nothing was read. A reviewer must enter the field values using the Correct action.',
         provider: this.name,
         model: this.model,
       }
@@ -75,8 +77,8 @@ class AnthropicFieldExtractor implements DocumentFieldExtractor {
   readonly model = process.env.AI_MODEL || 'claude-opus-5'
 
   async extractFields(input: FieldExtractionInput): Promise<FieldExtractionResult> {
-    const { docType, pages, image } = input
-    if (docType.fields.length === 0 || (pages.length === 0 && !image)) {
+    const { docType, pages, image, pdf } = input
+    if (pages.length === 0 && !image && !pdf) {
       return new MockFieldExtractor().extractFields(input)
     }
 
@@ -103,8 +105,8 @@ class AnthropicFieldExtractor implements DocumentFieldExtractor {
     const requestText = `Document type: ${docType.label}\nRequested fields:\n${docType.fields
       .map((f) => `- ${f.key}: ${f.label} (${f.kind})`)
       .join('\n')}\n\n${
-      image
-        ? 'The document is the attached image. Read only text that is literally visible in it; sourcePage is 1 and sourceSnippet is the exact visible text the value came from.'
+      image || pdf
+        ? 'The document is attached. Read only text that is literally visible in it; sourcePage is the page containing the value and sourceSnippet is the exact visible text the value came from.'
         : `Document text:\n${numbered}`
     }`
     // For images the document itself travels as a base64 content block ahead
@@ -112,11 +114,17 @@ class AnthropicFieldExtractor implements DocumentFieldExtractor {
     const content: Array<
       | { type: 'text'; text: string }
       | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } }
+      | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
     > = image
       ? [
           { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
           { type: 'text', text: requestText },
         ]
+      : pdf
+        ? [
+            { type: 'document', source: { type: 'base64', media_type: pdf.mediaType, data: pdf.base64 } },
+            { type: 'text', text: requestText },
+          ]
       : [{ type: 'text', text: requestText }]
 
     const response = await client.messages.parse({

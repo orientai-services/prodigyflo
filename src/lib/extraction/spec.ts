@@ -59,7 +59,7 @@ export const DOC_TYPE_SPECS: DocTypeSpec[] = [
   {
     key: 'solar_contract',
     label: 'Solar contract',
-    requirementKeys: ['solar_contract', 'contract', 'ppa', 'lease_agreement'],
+    requirementKeys: ['solar_contract', 'contract', 'agreement', 'ppa', 'lease_agreement'],
     keywords: ['solar', 'photovoltaic', 'power purchase agreement', 'installer', 'system size', 'escalator', 'lease agreement'],
     fields: [
       { key: 'installer_name', label: 'Installer', required: true, kind: 'text' },
@@ -120,15 +120,76 @@ export const DOC_TYPE_SPECS: DocTypeSpec[] = [
       { key: 'account_number', label: 'Account #', required: false, kind: 'text' },
     ],
   },
+  {
+    key: 'pto_letter',
+    label: 'Permission to operate letter',
+    requirementKeys: ['pto_letter', 'pto', 'permission_to_operate'],
+    keywords: ['permission to operate', 'authorization to operate', 'pto date'],
+    fields: [
+      { key: 'utility_name', label: 'Utility', required: false, kind: 'text' },
+      { key: 'pto_date', label: 'Permission-to-operate date', required: false, kind: 'date' },
+      { key: 'reference_number', label: 'Reference number', required: false, kind: 'text' },
+    ],
+  },
+  {
+    key: 'permit',
+    label: 'Permit',
+    requirementKeys: ['permit', 'permits'],
+    keywords: ['permit number', 'building permit', 'electrical permit', 'issued by'],
+    fields: [
+      { key: 'permit_number', label: 'Permit number', required: false, kind: 'text' },
+      { key: 'issued_date', label: 'Issued date', required: false, kind: 'date' },
+      { key: 'jurisdiction', label: 'Jurisdiction', required: false, kind: 'text' },
+      { key: 'system_size_kw', label: 'System size (kW)', required: false, kind: 'number' },
+    ],
+  },
+  {
+    key: 'lien_filing',
+    label: 'Lien filing',
+    requirementKeys: ['lien_filing', 'lien'],
+    keywords: ['mechanics lien', 'notice of lien', 'recording number', 'lien claimant'],
+    fields: [
+      { key: 'recording_number', label: 'Recording number', required: false, kind: 'text' },
+      { key: 'recording_date', label: 'Recording date', required: false, kind: 'date' },
+      { key: 'lienholder', label: 'Lienholder', required: false, kind: 'text' },
+      { key: 'lien_amount', label: 'Lien amount', required: false, kind: 'money' },
+    ],
+  },
+  {
+    key: 'ownership',
+    label: 'Ownership record',
+    requirementKeys: ['ownership', 'deed', 'property_record'],
+    keywords: ['grant deed', 'property owner', 'recorded on', 'parcel number'],
+    fields: [
+      { key: 'owner_name', label: 'Owner name', required: false, kind: 'text' },
+      { key: 'property_address', label: 'Property address', required: false, kind: 'text' },
+      { key: 'recording_number', label: 'Recording number', required: false, kind: 'text' },
+    ],
+  },
+  {
+    key: 'production_report',
+    label: 'Production report',
+    requirementKeys: ['production', 'production_report'],
+    keywords: ['energy production', 'kwh produced', 'production report', 'system performance'],
+    fields: [
+      { key: 'reporting_period', label: 'Reporting period', required: false, kind: 'text' },
+      { key: 'production_kwh', label: 'Production (kWh)', required: false, kind: 'number' },
+      { key: 'system_size_kw', label: 'System size (kW)', required: false, kind: 'number' },
+    ],
+  },
 ]
 
-/** Fallback when nothing matches — no fields, so nothing can be "missing". */
+/** Fallback for documents whose source did not label a known document type. */
 export const GENERIC_TYPE: DocTypeSpec = {
   key: 'other',
   label: 'Other document',
   requirementKeys: [],
   keywords: [],
-  fields: [],
+  fields: [
+    { key: 'document_date', label: 'Document date', required: false, kind: 'date' },
+    { key: 'issuer_name', label: 'Issuer', required: false, kind: 'text' },
+    { key: 'reference_number', label: 'Reference number', required: false, kind: 'text' },
+  ],
 }
 
 export function specForType(key: string | null | undefined): DocTypeSpec {

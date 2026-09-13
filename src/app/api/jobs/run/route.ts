@@ -129,8 +129,8 @@ async function run(request: NextRequest) {
   // month per line. A wallet that cannot cover it suspends the line (never
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
-  const scsDocumentImports = await runPendingScsDocumentImports()
   const scsDocumentExtractions = await runPendingScsDocumentExtractions()
+  const scsDocumentImports = await runPendingScsDocumentImports()
   return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine, telephony, scsDocumentImports, scsDocumentExtractions })
 }
 

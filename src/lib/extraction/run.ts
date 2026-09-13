@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { getFileStorage } from '@/lib/storage'
 import { getFieldExtractor } from '@/lib/ai/extraction-provider'
 import { getTextExtractor } from './text'
-import { visionImageFor } from './vision'
+import { visionImageFor, visionPdfFor } from './vision'
 import {
   computeConflictNotes,
   computeMissingFieldKeys,
@@ -78,12 +78,15 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
     // base64 content block (the mock still refuses to read it). Unsupported or
     // oversized images keep the honest no-OCR behavior with a reason attached.
     const vision = visionImageFor(buf, doc.mimeType)
-    const visionUsed = vision.image !== null && provider.name !== 'mock'
+    // Text-layer PDFs are cheaper and more precise as text. Only scans travel
+    // to the model as a PDF vision document.
+    const pdf = text.pages.length === 0 ? visionPdfFor(buf, doc.mimeType) : null
+    const visionUsed = (vision.image !== null || pdf !== null) && provider.name !== 'mock'
 
     const detection = detectDocumentType({
       text: joined,
       fileName: doc.fileName,
-      requirementKey: doc.requirement?.key ?? null,
+      requirementKey: doc.requirement?.key ?? doc.label ?? null,
     })
     const spec = detection.spec
 
@@ -92,6 +95,7 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
       pages: text.pages,
       fileName: doc.fileName,
       image: vision.image,
+      pdf,
     })
 
     const primary = doc.client.addresses[0]
@@ -112,11 +116,11 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
       ? text.warnings.filter((w) => !w.includes('OCR is not available'))
       : [...text.warnings]
     if (visionUsed) {
-      warnings.push('Field values were read from the image by the vision model — verify each value against the file.')
+      warnings.push('Field values were read by the vision model — verify each value against the file.')
     }
     if (vision.reason && provider.name !== 'mock') warnings.push(vision.reason)
     if (spec.key === 'other') {
-      warnings.push('Document type could not be determined; no field specification was applied.')
+      warnings.push('Document type could not be determined; generic metadata fields were requested for review.')
     }
     for (const [key, note] of Object.entries(conflicts)) {
       const label = spec.fields.find((f) => f.key === key)?.label ?? key
@@ -140,6 +144,11 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
         where: { id: extraction.id },
         data: {
           status: 'COMPLETED',
+          // The selected adapter may honestly fall back to mock behavior when
+          // it has no readable source. Record what actually processed the
+          // document, not merely the adapter chosen at the start of the run.
+          provider: result.provider,
+          model: result.model,
           detectedTypeKey: spec.key,
           detectedTypeLabel: spec.label,
           typeConfidence: detection.confidence,
