@@ -16,6 +16,15 @@ export function isSchema42Payload(raw: unknown): boolean {
   )
 }
 
+/**
+ * SCS owns a durable case UUID. Delivery attempt IDs change every time the
+ * outbound queue republishes the packet, so they must never identify the
+ * ProdigyFlo intake submission for a schema-42 packet.
+ */
+export function scsLeadId(raw: unknown): string | null {
+  return str(asRecord(raw).lead_id) || null
+}
+
 function stage1From(raw: Record<string, unknown>) {
   const data = asRecord(raw.data)
   const answers = asRecord(raw.stage1_answers)

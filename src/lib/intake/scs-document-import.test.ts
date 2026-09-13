@@ -4,6 +4,7 @@ import { sha256 } from '@/lib/extraction/sniff'
 const mocks = vi.hoisted(() => ({
   clientDocumentCreate: vi.fn(),
   importFindMany: vi.fn(),
+  importFindFirst: vi.fn(),
   importFindUnique: vi.fn(),
   importUpdate: vi.fn(),
   importUpdateMany: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/lib/db', () => ({
     clientDocument: { create: mocks.clientDocumentCreate },
     externalDocumentImport: {
       findMany: mocks.importFindMany,
+      findFirst: mocks.importFindFirst,
       findUnique: mocks.importFindUnique,
       update: mocks.importUpdate,
       updateMany: mocks.importUpdateMany,
@@ -33,7 +35,7 @@ vi.mock('@/lib/storage', () => ({
 }))
 vi.mock('@/lib/extraction/run', () => ({ runExtraction: mocks.runExtraction }))
 
-import { runPendingScsDocumentExtractions, runPendingScsDocumentImports } from './scs-document-import'
+import { queueScsDocumentImports, runPendingScsDocumentExtractions, runPendingScsDocumentImports } from './scs-document-import'
 
 const bytes = Buffer.from('%PDF-1.4\nQA document\n')
 const checksum = sha256(bytes)
@@ -58,6 +60,7 @@ describe('runPendingScsDocumentImports', () => {
     process.env.SCS_DOCUMENT_EXPORT_BASE_URL = 'https://scs.example.test'
     process.env.SCS_DOCUMENT_EXPORT_TOKEN = 'test-token'
     mocks.importFindMany.mockResolvedValue([{ id: row.id }])
+    mocks.importFindFirst.mockResolvedValue(null)
     mocks.importUpdateMany
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValue({ count: 0 })
@@ -140,5 +143,19 @@ describe('runPendingScsDocumentImports', () => {
     }))
     expect(mocks.runExtraction).toHaveBeenNthCalledWith(1, 'document_1')
     expect(mocks.runExtraction).toHaveBeenNthCalledWith(2, 'document_2')
+  })
+
+  it('does not queue the same durable SCS source document twice', async () => {
+    mocks.importFindFirst.mockResolvedValueOnce({ id: 'already-queued' })
+
+    await queueScsDocumentImports({
+      organizationId: 'org_1',
+      clientId: 'client_1',
+      intakeSubmissionId: 'submission_2',
+      sourceLeadId: 'lead_1',
+      documents: [{ id: row.sourceDocumentId }],
+    })
+
+    expect(mocks.importUpdate).not.toHaveBeenCalled()
   })
 })

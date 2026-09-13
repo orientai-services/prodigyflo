@@ -5,6 +5,7 @@ import { deriveExternalId } from '@/lib/intake/external-id'
 import { processInbound } from '@/lib/intake/apply'
 import { recordInboundEvent } from '@/lib/inbound/record'
 import { defForIntakeKind } from '@/lib/connectors/catalog'
+import { isSchema42Payload, scsLeadId } from '@/lib/intake/scs-packet'
 
 const MAX_BODY_BYTES = 256 * 1024
 // A packet may carry several document references. The handler copies each one
@@ -68,7 +69,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const preferredKey = defForIntakeKind(source.kind, source.connectorDefId)?.externalIdKey ?? null
-  const externalId = deriveExternalId(payload, preferredKey)
+  // SCS republishes the same case as documents and extraction results arrive.
+  // Its top-level `id` is a delivery-attempt key, not a case key; using it here
+  // created a new intake submission (and a duplicate document import row) on
+  // every refresh. Schema-42 packets carry the stable source case id instead.
+  const stableScsLeadId = source.slug === 'scs-website' && isSchema42Payload(payload)
+    ? scsLeadId(payload)
+    : null
+  const externalId = stableScsLeadId ? `scs:${stableScsLeadId}` : deriveExternalId(payload, preferredKey)
   const { duplicate, submission } = await processInbound(source, externalId, payload)
 
   // Non-destructive recording layer: file this delivery as an InboundEvent (and

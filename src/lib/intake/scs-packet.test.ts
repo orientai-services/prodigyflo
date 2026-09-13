@@ -14,7 +14,7 @@ vi.mock('@/lib/db', () => ({
 vi.mock('@/lib/cys/data', () => ({ refreshCysMirror: mocks.refresh }))
 vi.mock('./scs-document-import', () => ({ queueScsDocumentImports: mocks.queue }))
 
-import { ingestScsPacket } from './scs-packet'
+import { ingestScsPacket, scsLeadId } from './scs-packet'
 
 const documentRef = {
   id: 'scs_doc_1',
@@ -60,5 +60,11 @@ describe('ingestScsPacket document import queue', () => {
       },
     })
     expect(mocks.queue).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the durable SCS case id, never a delivery-attempt id', () => {
+    expect(scsLeadId({ lead_id: '9be21a01-668b-4cdf-8634-a36bbd94d099', id: 'delivery-row:4' }))
+      .toBe('9be21a01-668b-4cdf-8634-a36bbd94d099')
+    expect(scsLeadId({ id: 'delivery-row:4' })).toBeNull()
   })
 })

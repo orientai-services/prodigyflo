@@ -36,6 +36,16 @@ export async function queueScsDocumentImports(args: {
   for (const doc of args.documents) {
     const sourceDocumentId = value(doc.id)
     if (!sourceDocumentId) continue
+
+    // SCS source document IDs are durable case-file provenance. A refresh may
+    // arrive with a different delivery/submission id, but it must not make a
+    // second client document for the same source file.
+    const known = await db.externalDocumentImport.findFirst({
+      where: { organizationId: args.organizationId, sourceDocumentId },
+      select: { id: true },
+    })
+    if (known) continue
+
     await db.externalDocumentImport.upsert({
       where: {
         intakeSubmissionId_sourceDocumentId: {
