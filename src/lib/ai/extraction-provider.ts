@@ -131,20 +131,23 @@ class AnthropicFieldExtractor implements DocumentFieldExtractor {
 
     const response = await client.messages.parse({
       model: this.model,
-      max_tokens: 8000,
+      // Field extraction needs a compact structured response, not extended
+      // reasoning. Keeping this bounded prevents scanned-PDF jobs from
+      // occupying the worker for minutes.
+      max_tokens: 1600,
       system: `You extract structured fields from a document for a regulated sales-operations team.
 Hard rules:
 1. A "value" must be text literally present in the document (or literally visible in the document image). Never infer, normalize into new facts, or guess. Absent means value: null with confidence 0.
 2. "sourceSnippet" is the exact line the value came from; "sourcePage" its page number (1 for a single image).
 3. Confidence reflects how unambiguous the reading is, 0-100.
 4. Return one entry per requested key, in order. You are producing a recommendation for a human reviewer, never final data.`,
-      thinking: { type: 'adaptive' },
+      thinking: { type: 'disabled' },
       output_config: {
         effort: 'medium',
         format: zodOutputFormat(schema),
       },
       messages: [{ role: 'user', content }],
-    })
+    }, { timeout: 90_000, maxRetries: 0 })
 
     if (response.stop_reason === 'refusal') {
       throw new Error(`Model declined the request (${response.stop_details?.category ?? 'unspecified'}).`)
