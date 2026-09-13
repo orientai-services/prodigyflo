@@ -82,6 +82,14 @@ export type AccountRecoveryState = {
   error?: string
   recoveredEmail?: string
   sourceOrganization?: string
+  preview?: {
+    userId: string
+    email: string
+    sourceOrganization: string
+    isOwner: boolean
+    otherUserCount: number
+    clientCount: number
+  }
 }
 
 const recoverySchema = z.object({
@@ -89,11 +97,11 @@ const recoverySchema = z.object({
 })
 
 /**
- * Moves a dormant, non-owner account from a legacy workspace into the owner's
- * current workspace. This is deliberately owner-only: it crosses a tenant
- * boundary and must never become a public-signup escape hatch.
+ * Looks up an account before a cross-workspace recovery. It has no side effect:
+ * the dialog must show the legacy workspace's actual user/client counts before
+ * a separate, explicit recovery action may move or delete anything.
  */
-export async function recoverExistingAccountAction(
+export async function inspectExistingAccountAction(
   _prev: AccountRecoveryState,
   formData: FormData,
 ): Promise<AccountRecoveryState> {
@@ -111,12 +119,55 @@ export async function recoverExistingAccountAction(
   if (target.organizationId === actor.organizationId) {
     return { error: 'That account is already in this workspace. Refresh the staff list.' }
   }
-  if (target.isOwner) {
+
+  const [otherUserCount, clientCount] = await Promise.all([
+    db.user.count({ where: { organizationId: target.organizationId, id: { not: target.id }, deletedAt: null } }),
+    db.client.count({ where: { organizationId: target.organizationId, deletedAt: null } }),
+  ])
+
+  return {
+    preview: {
+      userId: target.id,
+      email: target.email,
+      sourceOrganization: target.organization.name,
+      isOwner: target.isOwner,
+      otherUserCount,
+      clientCount,
+    },
+  }
+}
+
+/** Moves the inspected account, deleting only a proven-empty legacy workspace. */
+export async function completeAccountRecoveryAction(
+  _prev: AccountRecoveryState,
+  formData: FormData,
+): Promise<AccountRecoveryState> {
+  const actor = await requirePermission('users:manage')
+  if (!actor.isOwner) return { error: 'Only the workspace owner can recover an account from another workspace.' }
+  const userId = String(formData.get('userId') ?? '')
+  if (!userId) return { error: 'Account recovery details are missing. Inspect the account again.' }
+
+  const target = await db.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    include: { role: true, organization: { select: { id: true, name: true } } },
+  })
+  if (!target || target.organizationId === actor.organizationId) {
+    return { error: 'That account is no longer recoverable. Refresh and inspect it again.' }
+  }
+
+  const [otherUserCount, clientCount, adminRole] = await Promise.all([
+    db.user.count({ where: { organizationId: target.organizationId, id: { not: target.id }, deletedAt: null } }),
+    db.client.count({ where: { organizationId: target.organizationId, deletedAt: null } }),
+    db.role.findFirst({ where: { organizationId: actor.organizationId, key: RoleKey.ADMIN }, select: { id: true } }),
+  ])
+  if (!adminRole) return { error: 'The Admin role is not configured in this workspace.' }
+
+  if (target.isOwner && (otherUserCount > 0 || clientCount > 0)) {
     return {
-      error: `This account owns the ${target.organization.name} workspace. It was not moved, because that could orphan workspace data.`,
+      error: `The ${target.organization.name} workspace has ${otherUserCount} other staff member(s) and ${clientCount} client record(s). It was not deleted.`,
     }
   }
-  if (target.role.key === RoleKey.SUPER_ADMIN) {
+  if (!target.isOwner && target.role.key === RoleKey.SUPER_ADMIN) {
     try {
       await assertNotLastSuperAdmin(target.organizationId, target.id)
     } catch (e) {
@@ -124,29 +175,26 @@ export async function recoverExistingAccountAction(
     }
   }
 
-  const adminRole = await db.role.findFirst({
-    where: { organizationId: actor.organizationId, key: RoleKey.ADMIN },
-    select: { id: true },
-  })
-  if (!adminRole) return { error: 'The Admin role is not configured in this workspace.' }
-
-  await db.user.update({
-    where: { id: target.id },
-    data: {
-      organizationId: actor.organizationId,
-      roleId: adminRole.id,
-      regionId: null,
-      teamId: null,
-      managerId: null,
-      isActive: true,
-      isOwner: false,
-    },
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: target.id },
+      data: {
+        organizationId: actor.organizationId,
+        roleId: adminRole.id,
+        regionId: null,
+        teamId: null,
+        managerId: null,
+        isActive: true,
+        isOwner: false,
+      },
+    })
+    if (target.isOwner) await tx.organization.delete({ where: { id: target.organizationId } })
   })
   await recordAudit(actor, {
     action: 'user.recovered_to_workspace',
     entityType: 'User',
     entityId: target.id,
-    summary: `Recovered ${target.email} from ${target.organization.name} as Admin / Operations.`,
+    summary: `${target.isOwner ? `Deleted empty legacy workspace ${target.organization.name} and recovered` : 'Recovered'} ${target.email} as Admin / Operations.`,
     before: { organizationId: target.organizationId, role: target.role.key },
     after: { organizationId: actor.organizationId, role: RoleKey.ADMIN },
   })
