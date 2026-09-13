@@ -112,6 +112,12 @@ async function run(request: NextRequest) {
   }
 
   const startedAt = Date.now()
+  // Documents are client-visible and must not wait behind unrelated automation
+  // work (messages, scores, or billing renewal) in a shared cron invocation.
+  const scsDocumentExtractions = await runPendingScsDocumentExtractions()
+  if (new URL(request.url).searchParams.get('scope') === 'scs-document-extractions') {
+    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentExtractions })
+  }
   const counts = await runDueWork(new Date())
   const scores = await freshenScores()
   // Monday-morning manager digest — the settings.digest.lastSentWeek guard
@@ -129,7 +135,6 @@ async function run(request: NextRequest) {
   // month per line. A wallet that cannot cover it suspends the line (never
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
-  const scsDocumentExtractions = await runPendingScsDocumentExtractions()
   const scsDocumentImports = await runPendingScsDocumentImports()
   return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine, telephony, scsDocumentImports, scsDocumentExtractions })
 }
