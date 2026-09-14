@@ -8,8 +8,8 @@ import { defForIntakeKind } from '@/lib/connectors/catalog'
 import { isSchema42Payload, scsLeadId } from '@/lib/intake/scs-packet'
 
 const MAX_BODY_BYTES = 256 * 1024
-// A packet may carry several document references. The handler copies each one
-// into ProdigyFlo's private storage before acknowledging SCS.
+// Persist receipt, case binding and document references before acknowledgment.
+// Document bytes and AI are handled by background workers.
 export const maxDuration = 300
 
 /**
@@ -36,11 +36,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // credential that verifies also disambiguates the tenant behind the slug.
   const sigHeader = request.headers.get(SIGNATURE_HEADER)
   const tokenHeader = request.headers.get(TOKEN_HEADER)
-  const source = candidates.find((s) =>
+  const matches = candidates.filter((s) =>
     s.authMode === 'TOKEN'
       ? verifyToken(s.secretHash, tokenHeader)
       : verifySignature(s.secretHash, raw, sigHeader),
   )
+  if (matches.length > 1) {
+    return Response.json({ error: 'Ambiguous intake credential; reconcile receiver configuration.' }, { status: 409 })
+  }
+  const source = matches[0]
   if (!source) {
     // Log the rejection where staff can see it (against the first candidate's
     // org — with a bad credential the true tenant is unknowable by design).
@@ -93,5 +97,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     clientId: submission.clientId,
     submissionId: submission.id,
     ...(submission.error ? { error: submission.error } : {}),
-  })
+  }, { status: submission.status === 'FAILED' ? 503 : submission.status === 'NEEDS_MAPPING' ? 422 : 200 })
 }

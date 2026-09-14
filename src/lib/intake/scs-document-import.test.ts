@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   auditEventCreate: vi.fn(),
   transaction: vi.fn(),
   storagePut: vi.fn(),
+  storageDelete: vi.fn(),
+  queryRaw: vi.fn(),
   runExtraction: vi.fn(),
   scsRequirementId: vi.fn(),
 }))
@@ -29,14 +31,16 @@ vi.mock('@/lib/db', () => ({
     documentExtraction: { updateMany: mocks.extractionUpdateMany },
     auditEvent: { create: mocks.auditEventCreate },
     $transaction: mocks.transaction,
+    $queryRaw: mocks.queryRaw,
   },
 }))
 vi.mock('@/lib/storage', () => ({
-  getFileStorage: () => ({ put: mocks.storagePut }),
+  getFileStorage: () => ({ put: mocks.storagePut, delete: mocks.storageDelete }),
 }))
 vi.mock('@/lib/extraction/run', () => ({ runExtraction: mocks.runExtraction }))
 vi.mock('./scs-document-requirements', () => ({ scsRequirementId: mocks.scsRequirementId }))
 
+import { db } from '@/lib/db'
 import { queueScsDocumentImports, runPendingScsDocumentExtractions, runPendingScsDocumentImports } from './scs-document-import'
 
 const bytes = Buffer.from('%PDF-1.4\nQA document\n')
@@ -50,6 +54,7 @@ const row = {
   sourceFileName: 'qa-document.pdf',
   sourceDocumentType: 'agreement',
   sourceMimeType: 'application/pdf',
+  attempts: 1,
 }
 
 function transactionOperation(kind: string, args: unknown) {
@@ -63,14 +68,14 @@ describe('runPendingScsDocumentImports', () => {
     process.env.SCS_DOCUMENT_EXPORT_TOKEN = 'test-token'
     mocks.importFindMany.mockResolvedValue([{ id: row.id }])
     mocks.importFindFirst.mockResolvedValue(null)
-    mocks.importUpdateMany
-      .mockResolvedValueOnce({ count: 1 })
-      .mockResolvedValue({ count: 0 })
+    mocks.importUpdateMany.mockResolvedValue({ count: 1 })
     mocks.importFindUnique.mockResolvedValue(row)
     mocks.clientDocumentCreate.mockImplementation((args) => transactionOperation('document', args))
     mocks.importUpdate.mockImplementation((args) => transactionOperation('import', args))
     mocks.auditEventCreate.mockImplementation((args) => transactionOperation('audit', args))
-    mocks.transaction.mockResolvedValue([])
+    mocks.transaction.mockImplementation(async fn => fn(db))
+    mocks.queryRaw.mockResolvedValue([{ id: row.id }])
+    mocks.storageDelete.mockResolvedValue(undefined)
     mocks.storagePut.mockResolvedValue({ key: 'private/client_1/imported.pdf' })
     mocks.runExtraction.mockResolvedValue(undefined)
     mocks.scsRequirementId.mockResolvedValue('requirement_1')
@@ -80,6 +85,7 @@ describe('runPendingScsDocumentImports', () => {
         'content-type': 'application/pdf',
         'content-length': String(bytes.length),
         'x-scs-document-id': row.sourceDocumentId,
+        'x-scs-lead-id': row.sourceLeadId,
         'x-scs-sha256': checksum,
       },
     })))
@@ -94,8 +100,8 @@ describe('runPendingScsDocumentImports', () => {
   it('atomically persists a document, ledger update, and audit event with one generated ID', async () => {
     await expect(runPendingScsDocumentImports()).resolves.toEqual({ attempted: 1, imported: 1, failed: 0, skipped: 0 })
 
-    const operations = mocks.transaction.mock.calls[0][0]
-    expect(operations).toHaveLength(3)
+    expect(mocks.transaction).toHaveBeenCalledOnce()
+    const operations = [mocks.clientDocumentCreate, mocks.importUpdate, mocks.auditEventCreate].map(mock => ({ args: mock.mock.calls[0][0] }))
     const documentId = operations[0].args.data.id
     expect(documentId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
     expect(operations[1].args.data).toMatchObject({
@@ -111,8 +117,9 @@ describe('runPendingScsDocumentImports', () => {
 
     await expect(runPendingScsDocumentImports()).resolves.toEqual({ attempted: 1, imported: 0, failed: 1, skipped: 0 })
 
+    expect(mocks.storageDelete).toHaveBeenCalledWith('private/client_1/imported.pdf')
     expect(mocks.importUpdateMany).toHaveBeenLastCalledWith({
-      where: { id: row.id, status: 'IMPORTING' },
+      where: { id: row.id, status: 'IMPORTING', attempts: 1 },
       data: {
         status: 'FAILED',
         lastError: 'SCS import failed while persisting the imported document: database transaction failed',
@@ -166,7 +173,7 @@ describe('runPendingScsDocumentImports', () => {
   })
 
   it('does not queue the same durable SCS source document twice', async () => {
-    mocks.importFindFirst.mockResolvedValueOnce({ id: 'already-queued' })
+    mocks.importFindFirst.mockResolvedValueOnce({ id: 'already-queued', clientId: 'client_1', sourceLeadId: 'lead_1' })
 
     await queueScsDocumentImports({
       organizationId: 'org_1',

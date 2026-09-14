@@ -1,4 +1,5 @@
 import 'server-only'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
 import { refreshCysMirror } from '@/lib/cys/data'
@@ -45,17 +46,17 @@ export async function ingestScsPacket(opts: {
   clientId: string
   intakeSubmissionId: string
   rawPayload: unknown
-}): Promise<void> {
+}, store: Prisma.TransactionClient = db): Promise<void> {
   const raw = asRecord(opts.rawPayload)
   const answers = stage1From(raw)
   if (Object.keys(answers).length === 0 && documentsFrom(raw).length === 0) return
 
-  const survey = await db.survey.findFirst({
+  const survey = await store.survey.findFirst({
     where: { organizationId: opts.organizationId, name: INTAKE_SURVEY_NAME },
     select: { id: true },
   })
   if (survey && Object.keys(answers).length) {
-    const existing = await db.surveyResponse.findFirst({
+    const existing = await store.surveyResponse.findFirst({
       where: { clientId: opts.clientId, surveyId: survey.id },
       orderBy: { updatedAt: 'desc' },
     })
@@ -66,7 +67,7 @@ export async function ingestScsPacket(opts: {
       str(answers.email) &&
       str(answers.zip)
     if (existing) {
-      await db.surveyResponse.update({
+      await store.surveyResponse.update({
         where: { id: existing.id },
         data: {
           answers: answers as object,
@@ -75,7 +76,7 @@ export async function ingestScsPacket(opts: {
         },
       })
     } else {
-      await db.surveyResponse.create({
+      await store.surveyResponse.create({
         data: {
           surveyId: survey.id,
           clientId: opts.clientId,
@@ -90,9 +91,9 @@ export async function ingestScsPacket(opts: {
   const street = str(answers.property_street)
   const city = str(answers.city)
   if (street && city) {
-    const has = await db.clientAddress.findFirst({ where: { clientId: opts.clientId } })
+    const has = await store.clientAddress.findFirst({ where: { clientId: opts.clientId } })
     if (!has) {
-      await db.clientAddress.create({
+      await store.clientAddress.create({
         data: {
           clientId: opts.clientId,
           line1: street,
@@ -112,8 +113,9 @@ export async function ingestScsPacket(opts: {
     intakeSubmissionId: opts.intakeSubmissionId,
     sourceLeadId: str(raw.lead_id) || null,
     documents: files,
-  })
+  }, store)
 
+  if (store !== db) return
   try {
     await refreshCysMirror(opts.organizationId, opts.clientId)
   } catch (err) {

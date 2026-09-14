@@ -9,7 +9,7 @@ import {
   type MappedLead,
 } from '@/lib/intake/mapping'
 import { getSheetsProvider } from '@/lib/intake/sheets'
-import { isSchema42Payload } from '@/lib/intake/scs-packet'
+import { isSchema42Payload, scsLeadId } from '@/lib/intake/scs-packet'
 import type { DuplicateMatch } from '@/lib/intake/dedupe-bridge'
 
 /** Who triggered the pipeline — null for the public webhook. */
@@ -42,10 +42,11 @@ async function localFindDuplicates(
   organizationId: string,
   mapped: MappedLead,
   dedupeKeys: string[],
+  store: Prisma.TransactionClient = db,
 ): Promise<DuplicateMatch[]> {
   for (const key of dedupeKeys) {
     if (key === 'email' && mapped.email) {
-      const hit = await db.client.findFirst({
+      const hit = await store.client.findFirst({
         where: { organizationId, deletedAt: null, email: { equals: mapped.email, mode: 'insensitive' } },
         select: { id: true },
         orderBy: { createdAt: 'asc' },
@@ -55,7 +56,7 @@ async function localFindDuplicates(
     if (key === 'phone' && mapped.phone) {
       const digits = normalizePhone(mapped.phone)
       if (digits.length >= 7) {
-        const rows = await db.$queryRaw<{ id: string }[]>`
+        const rows = await store.$queryRaw<{ id: string }[]>`
           SELECT id FROM "Client"
           WHERE "organizationId" = ${organizationId}
             AND "deletedAt" IS NULL
@@ -66,7 +67,7 @@ async function localFindDuplicates(
       }
     }
     if (key === 'name' && mapped.firstName && mapped.lastName) {
-      const hit = await db.client.findFirst({
+      const hit = await store.client.findFirst({
         where: {
           organizationId,
           deletedAt: null,
@@ -114,8 +115,9 @@ async function writeAudit(
   source: IntakeSource,
   actor: IntakeActor,
   input: { action: string; entityType: string; entityId?: string | null; summary: string; after?: Record<string, unknown> },
+  store: Prisma.TransactionClient = db,
 ) {
-  await db.auditEvent.create({
+  await store.auditEvent.create({
     data: {
       organizationId,
       actorId: actor?.id ?? null,
@@ -131,13 +133,14 @@ async function writeAudit(
 
 /**
  * Map one raw payload and apply it to the CRM: update the matched client, or
- * create a new one on the default pipeline's first stage. Never throws — every
- * failure comes back as a FAILED/NEEDS_MAPPING outcome the submission row records.
+ * create a new one on the default pipeline's first stage. Transactional callers
+ * receive thrown failures so partial CRM changes cannot commit.
  */
 export async function applyToCrm(
   source: IntakeSource,
   rawPayload: unknown,
-  opts: { overrideMapping?: Record<string, string>; actor?: IntakeActor } = {},
+  opts: { overrideMapping?: Record<string, string>; actor?: IntakeActor; clientId?: string | null; strictScs?: boolean } = {},
+  store: Prisma.TransactionClient = db,
 ): Promise<ApplyOutcome> {
   const fieldMapping = {
     ...((source.fieldMapping ?? {}) as Record<string, string>),
@@ -172,12 +175,18 @@ export async function applyToCrm(
       })
     }
     if (matches === null) {
-      matches = await localFindDuplicates(source.organizationId, mapped, source.dedupeKeys)
+      matches = await localFindDuplicates(source.organizationId, mapped, source.dedupeKeys, store)
+    }
+
+    if (opts.clientId) {
+      matches = [{ clientId: opts.clientId, matchedOn: 'source case id' }]
+    } else if (opts.strictScs && matches.length) {
+      return { ...base, status: IntakeStatus.NEEDS_MAPPING, error: 'SCS case identity requires reconciliation; contact similarity alone cannot link a property case.' }
     }
 
     if (matches.length > 0) {
       const match = matches[0]
-      const existing = await db.client.findFirst({
+      const existing = await store.client.findFirst({
         where: { id: match.clientId, organizationId: source.organizationId, deletedAt: null },
       })
       if (existing) {
@@ -196,7 +205,7 @@ export async function applyToCrm(
             return typeof v === 'string' && (current === null || current === undefined || current === '')
           }),
         )
-        await db.client.update({
+        await store.client.update({
           where: { id: existing.id },
           data: { ...(changes as Prisma.ClientUpdateInput), lastActivityAt: new Date() },
         })
@@ -206,27 +215,29 @@ export async function applyToCrm(
           entityId: existing.id,
           summary: `Inbound lead from "${source.name}" matched existing client on ${match.matchedOn}${Object.keys(changes).length ? `; filled ${Object.keys(changes).join(', ')}` : ''}`,
           after: changes as Record<string, unknown>,
-        })
+        }, store)
         return { ...base, status: IntakeStatus.DUPLICATE, clientId: existing.id, matchedOn: match.matchedOn, error: null }
       }
     }
+
+    if (opts.clientId) throw new Error('Bound SCS client is unavailable; reconciliation required.')
 
     // Intake sources are tenant-scoped, but a relational foreign key alone
     // cannot prove a configured team belongs to the same tenant. Treat a
     // stale or cross-tenant ID as unassigned rather than leaking queue access.
     const defaultTeam = source.defaultTeamId
-      ? await db.team.findFirst({
+      ? await store.team.findFirst({
           where: { id: source.defaultTeamId, organizationId: source.organizationId, deletedAt: null },
           select: { id: true },
         })
       : null
 
     const pipeline =
-      (await db.pipeline.findFirst({
+      (await store.pipeline.findFirst({
         where: { organizationId: source.organizationId, isDefault: true },
         include: { stages: { orderBy: { position: 'asc' }, take: 1 } },
       })) ??
-      (await db.pipeline.findFirst({
+      (await store.pipeline.findFirst({
         where: { organizationId: source.organizationId },
         include: { stages: { orderBy: { position: 'asc' }, take: 1 } },
       }))
@@ -235,7 +246,7 @@ export async function applyToCrm(
       return { ...base, status: IntakeStatus.FAILED, error: 'No pipeline with stages exists for this organization.' }
     }
 
-    const client = await db.client.create({
+    const client = await store.client.create({
       data: {
         organizationId: source.organizationId,
         pipelineId: pipeline.id,
@@ -259,7 +270,7 @@ export async function applyToCrm(
       },
     })
 
-    await db.stageHistory.create({
+    await store.stageHistory.create({
       data: {
         clientId: client.id,
         stageId: firstStage.id,
@@ -272,7 +283,7 @@ export async function applyToCrm(
     })
 
     if (mapped.addressLine1 && mapped.city) {
-      await db.clientAddress.create({
+      await store.clientAddress.create({
         data: {
           clientId: client.id,
           line1: mapped.addressLine1,
@@ -285,7 +296,7 @@ export async function applyToCrm(
     }
 
     if (mapped.note) {
-      await db.note.create({
+      await store.note.create({
         data: { clientId: client.id, body: `From intake "${source.name}": ${mapped.note}`, isInternal: true },
       })
     }
@@ -296,10 +307,13 @@ export async function applyToCrm(
       entityId: client.id,
       summary: `Lead created from intake source "${source.name}"`,
       after: mapped as Record<string, unknown>,
-    })
+    }, store)
 
     return { ...base, status: IntakeStatus.APPLIED, clientId: client.id, createdClient: true, error: null }
   } catch (error) {
+    // A transaction must not commit a partially created client after a later
+    // write fails. The sender retains its delivery until this transaction wins.
+    if (store !== db) throw error
     return {
       ...base,
       status: IntakeStatus.FAILED,
@@ -315,19 +329,84 @@ export type InboundResult = { duplicate: boolean; submission: IntakeSubmission }
  * replays are returned as-is; schema-42 SCS packets intentionally refresh the
  * same submission as their homeowner data and documents evolve.
  */
+function sourceTime(packet: Record<string, unknown>): number | null {
+  const data = packet.data as Record<string, unknown> | undefined
+  const value = data?.last_activity_at
+  if (typeof value !== 'string') return null
+  const time = Date.parse(value)
+  return Number.isFinite(time) ? time : null
+}
+
 export async function processInbound(
+  source: IntakeSource, externalId: string, rawPayload: unknown, actor: IntakeActor = null,
+): Promise<InboundResult> {
+  const result = source.slug === 'scs-website'
+    ? await db.$transaction(
+      store => processInboundLocked(source, externalId, rawPayload, actor, store),
+      { timeout: 20_000, maxWait: 20_000 },
+    )
+    : await processInboundLocked(source, externalId, rawPayload, actor, db)
+  if (!result.duplicate && result.submission.clientId && source.slug === 'scs-website') {
+    const { refreshCysMirror } = await import('@/lib/cys/data')
+    try { await refreshCysMirror(source.organizationId, result.submission.clientId) } catch { /* derived view; receipt is durable */ }
+  }
+  return result
+}
+
+async function processInboundLocked(
   source: IntakeSource,
   externalId: string,
   rawPayload: unknown,
-  actor: IntakeActor = null,
+  actor: IntakeActor,
+  store: Prisma.TransactionClient,
 ): Promise<InboundResult> {
+  // Transaction-scoped lock serializes this source's updates across processes.
+  // No network, document copy or AI runs while the lock is held.
+  if (store !== db) await store.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${source.id}, 0))::text`
   const key = { sourceId_externalId: { sourceId: source.id, externalId } }
   // SCS emits a new packet as a homeowner adds documents or confirms extracted
   // values. Those packets share the lead ID, so they must refresh an existing
   // submission instead of being discarded as an ordinary webhook replay.
-  const isScsPacket = isSchema42Payload(rawPayload)
+  const isScsPacket = source.slug === 'scs-website' && isSchema42Payload(rawPayload)
 
-  const existing = await db.intakeSubmission.findUnique({ where: key })
+  let existing = await store.intakeSubmission.findUnique({ where: key })
+  const packet = rawPayload as Record<string, unknown>
+  let boundClientId = existing?.clientId ?? null
+  if (isScsPacket && scsLeadId(rawPayload) && !existing) {
+    // Upgrade only an exact prior delivery or exact authenticated portal link.
+    // Never infer a property identity from email/phone or merge conflicting cases.
+    const candidates = await store.intakeSubmission.findMany({
+      where: { sourceId: source.id, OR: [
+        ...(typeof packet.id === 'string' ? [{ externalId: packet.id }] : []),
+        ...(typeof packet.portal_url === 'string' && packet.portal_url ? [{ rawPayload: { path: ['portal_url'], equals: packet.portal_url } }] : []),
+      ] },
+      orderBy: { createdAt: 'asc' },
+    })
+    const ids = new Set(candidates.map(row => row.clientId).filter(Boolean))
+    if (ids.size > 1) throw new Error('Conflicting historical SCS bindings; reconcile before retry.')
+    const incomingTime = sourceTime(packet)
+    if (candidates.some(row => {
+      const knownTime = sourceTime(row.rawPayload as Record<string, unknown>)
+      return knownTime !== null && (incomingTime === null || knownTime > incomingTime)
+    })) throw new Error('Stale historical SCS packet; reconcile the newest receipt before retry.')
+    boundClientId = candidates.find(row => row.clientId)?.clientId ?? null
+    // Reuse the earliest receipt, retaining first receipt time and document FKs.
+    if (candidates.length) {
+      existing = await store.intakeSubmission.update({ where: { id: candidates[0].id }, data: { externalId, clientId: boundClientId } })
+    }
+  }
+  if (existing && isScsPacket) {
+    const old = existing.rawPayload as Record<string, unknown>
+    const oldTime = sourceTime(old)
+    const newTime = sourceTime(packet)
+    const completed = !['FAILED', 'RECEIVED', 'NEEDS_MAPPING'].includes(existing.status)
+    if (oldTime !== null && (newTime === null || newTime < oldTime)) {
+      return { duplicate: true, submission: existing }
+    }
+    if (completed && newTime === oldTime && typeof packet.id === 'string' && packet.id === old.id) {
+      return { duplicate: true, submission: existing }
+    }
+  }
   // A failed SCS document copy must be resumeable. Treating it as a duplicate
   // would leave an otherwise valid packet stranded behind an expired source URL.
   // RECEIVED means a server was interrupted before it could record an outcome
@@ -347,7 +426,7 @@ export async function processInbound(
     // Preserve the newest complete SCS packet as the durable intake record.
     // Its document URLs are short lived, but the packet's answers and document
     // provenance are retained while ingestScsPacket copies the actual bytes.
-    submission = await db.intakeSubmission.update({
+    submission = await store.intakeSubmission.update({
       where: { id: existing.id },
       data: {
         status: IntakeStatus.RECEIVED,
@@ -358,7 +437,7 @@ export async function processInbound(
     })
   } else {
     try {
-      submission = await db.intakeSubmission.create({
+      submission = await store.intakeSubmission.create({
         data: {
           organizationId: source.organizationId,
           sourceId: source.id,
@@ -371,7 +450,7 @@ export async function processInbound(
       // Two concurrent deliveries of the same payload: the loser of the unique
       // race treats the row the winner created as the replay it is.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const raced = await db.intakeSubmission.findUnique({ where: key })
+        const raced = await store.intakeSubmission.findUnique({ where: key })
         if (raced) return { duplicate: true, submission: raced }
       }
       throw error
@@ -379,19 +458,15 @@ export async function processInbound(
   }
 
   try {
-    const outcome = await applyToCrm(source, rawPayload, { actor })
-    if (outcome.clientId) {
+    const outcome = await applyToCrm(source, rawPayload, {
+      actor, clientId: boundClientId, strictScs: isScsPacket && Boolean(scsLeadId(rawPayload)),
+    }, store)
+    if (outcome.clientId && isScsPacket) {
       const { ingestScsPacket } = await import('@/lib/intake/scs-packet')
-      if (isScsPacket) {
-        await ingestScsPacket({
-          organizationId: source.organizationId,
-          clientId: outcome.clientId,
-          intakeSubmissionId: submission.id,
-          rawPayload,
-        })
-      }
+      await ingestScsPacket({ organizationId: source.organizationId, clientId: outcome.clientId,
+        intakeSubmissionId: submission.id, rawPayload }, store)
     }
-    submission = await db.intakeSubmission.update({
+    submission = await store.intakeSubmission.update({
       where: { id: submission.id },
       data: {
         status: outcome.status,
@@ -405,7 +480,7 @@ export async function processInbound(
       },
     })
   } catch (error) {
-    await db.intakeSubmission.update({
+    await store.intakeSubmission.update({
       where: { id: submission.id },
       data: {
         status: IntakeStatus.FAILED,
@@ -427,6 +502,12 @@ export async function reapplySubmission(
   source: IntakeSource,
   opts: { overrideMapping?: Record<string, string>; actor?: IntakeActor } = {},
 ): Promise<IntakeSubmission> {
+  if (source.slug === 'scs-website' && isSchema42Payload(submission.rawPayload)) {
+    const configured = { ...source, fieldMapping: {
+      ...((source.fieldMapping ?? {}) as Record<string, string>), ...opts.overrideMapping,
+    } }
+    return (await processInbound(configured, submission.externalId, submission.rawPayload, opts.actor ?? null)).submission
+  }
   const outcome = await applyToCrm(source, submission.rawPayload, opts)
   return db.intakeSubmission.update({
     where: { id: submission.id },

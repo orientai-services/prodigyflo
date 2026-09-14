@@ -44,7 +44,7 @@ describe('ingestScsPacket document import queue', () => {
     expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({
       organizationId: 'org_1', clientId: 'client_1', intakeSubmissionId: 'submission_1',
       documents: [documentRef],
-    }))
+    }), expect.anything())
   })
 
   it('accepts metadata without a signed URL because the worker obtains fresh authenticated bytes', async () => {

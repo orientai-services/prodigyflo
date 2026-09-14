@@ -1,5 +1,6 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getFileStorage } from '@/lib/storage'
 import { runExtraction } from '@/lib/extraction/run'
@@ -33,7 +34,7 @@ export async function queueScsDocumentImports(args: {
   intakeSubmissionId: string
   sourceLeadId: string | null
   documents: DocumentRef[]
-}): Promise<void> {
+}, store: Prisma.TransactionClient = db): Promise<void> {
   for (const doc of args.documents) {
     const sourceDocumentId = value(doc.id)
     if (!sourceDocumentId) continue
@@ -41,13 +42,21 @@ export async function queueScsDocumentImports(args: {
     // SCS source document IDs are durable case-file provenance. A refresh may
     // arrive with a different delivery/submission id, but it must not make a
     // second client document for the same source file.
-    const known = await db.externalDocumentImport.findFirst({
+    const known = await store.externalDocumentImport.findFirst({
       where: { organizationId: args.organizationId, sourceDocumentId },
-      select: { id: true },
+      select: { id: true, clientId: true, sourceLeadId: true },
     })
-    if (known) continue
+    if (known) {
+      if (known.clientId !== args.clientId || (known.sourceLeadId && args.sourceLeadId && known.sourceLeadId !== args.sourceLeadId)) {
+        throw new Error('Source document is already linked to another case; manual reconciliation required.')
+      }
+      if (!known.sourceLeadId && args.sourceLeadId) {
+        await store.externalDocumentImport.update({ where: { id: known.id }, data: { sourceLeadId: args.sourceLeadId } })
+      }
+      continue
+    }
 
-    await db.externalDocumentImport.upsert({
+    await store.externalDocumentImport.upsert({
       where: {
         intakeSubmissionId_sourceDocumentId: {
           intakeSubmissionId: args.intakeSubmissionId,
@@ -75,16 +84,18 @@ export async function queueScsDocumentImports(args: {
   }
 }
 
-async function fail(id: string, error: unknown) {
+async function fail(id: string, error: unknown, attempts?: number) {
   const message = error instanceof Error ? error.message : 'Unknown SCS document import error.'
   await db.externalDocumentImport.updateMany({
-    where: { id, status: 'IMPORTING' },
+    where: { id, status: 'IMPORTING', ...(attempts === undefined ? {} : { attempts }) },
     data: { status: 'FAILED', lastError: message.slice(0, 1000) },
   })
 }
 
 async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'> {
   let stage = 'claiming the import row'
+  let claimedAttempts: number | undefined
+  let storedKey: string | undefined
   const claim = await db.externalDocumentImport.updateMany({
     where: { id, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
     data: { status: 'IMPORTING', attempts: { increment: 1 }, lastError: null },
@@ -95,6 +106,7 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     stage = 'loading the import row'
     const row = await db.externalDocumentImport.findUnique({ where: { id } })
     if (!row) return 'skipped'
+    claimedAttempts = row.attempts
 
     // Historical replay packets could create several ledger rows for one SCS
     // source document. Once any one row has copied that durable source file,
@@ -130,6 +142,9 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     if (response.headers.get('x-scs-document-id') !== row.sourceDocumentId) {
       throw new Error('SCS export document identity did not match the requested import.')
     }
+    if (row.sourceLeadId && response.headers.get('x-scs-lead-id') !== row.sourceLeadId) {
+      throw new Error('SCS export case identity did not match the requested import.')
+    }
     const contentLength = Number(response.headers.get('content-length') ?? 0)
     if (contentLength > MAX_IMPORT_MB * 1024 * 1024) throw new Error(`SCS document exceeds ${MAX_IMPORT_MB} MB import limit.`)
     stage = 'reading and validating the exported bytes'
@@ -154,11 +169,19 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
       mimeType: validation.mimeType,
       clientId: row.clientId,
     })
+    storedKey = key
     const now = new Date()
     stage = 'persisting the imported document'
     const documentId = randomUUID()
-    await db.$transaction([
-      db.clientDocument.create({
+    await db.$transaction(async (store) => {
+      await store.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${row.organizationId + ':' + row.sourceDocumentId}, 0))::text`
+      const claim = await store.$queryRaw<{ id: string }[]>`SELECT id FROM "ExternalDocumentImport" WHERE id=${id} AND status='IMPORTING' AND attempts=${claimedAttempts} FOR UPDATE`
+      if (!claim.length) throw new Error('Import lease was superseded.')
+      const duplicate = await store.externalDocumentImport.findFirst({ where: {
+        organizationId: row.organizationId, sourceDocumentId: row.sourceDocumentId, status: 'IMPORTED', id: { not: id },
+      } })
+      if (duplicate) throw new Error('Source document already imported; reconcile duplicate ledger.')
+      await store.clientDocument.create({
         data: {
           id: documentId,
           clientId: row.clientId,
@@ -174,15 +197,15 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
           receivedAt: now,
           internalComment: `Imported from SCS document ${row.sourceDocumentId}${row.sourceLeadId ? ` for lead ${row.sourceLeadId}` : ''}.`,
         },
-      }),
-      db.externalDocumentImport.update({
+      })
+      await store.externalDocumentImport.update({
         where: { id: row.id },
         data: {
           status: 'IMPORTED', clientDocumentId: documentId, sourceChecksum,
           importedChecksum: checksum, importedAt: now, lastError: null,
         },
-      }),
-      db.auditEvent.create({
+      })
+      await store.auditEvent.create({
         data: {
           organizationId: row.organizationId,
           actorLabel: 'SCS document importer',
@@ -192,8 +215,9 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
           summary: `Imported SCS document ${row.sourceDocumentType ?? row.sourceFileName ?? row.sourceDocumentId}.`,
           after: { sourceDocumentId: row.sourceDocumentId, sourceLeadId: row.sourceLeadId, checksum, sizeBytes: bytes.length },
         },
-      }),
-    ])
+      })
+    })
+    storedKey = undefined
     // The copy is now durable and visible in the client's Documents tab. Do
     // not hold the import worker hostage to an AI extraction request: the
     // separately bounded extraction worker below picks this IMPORTED row up.
@@ -202,13 +226,24 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
     return 'imported'
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Unknown SCS document import error.'
-    await fail(id, new Error(`SCS import failed while ${stage}: ${detail}`))
+    if (storedKey) {
+      try { await getFileStorage().delete(storedKey) } catch { /* isolated orphan: retain for storage reconciliation */ }
+    }
+    await fail(id, new Error(`SCS import failed while ${stage}: ${detail}`), claimedAttempts)
     return 'failed'
   }
 }
 
 /** Bounded worker used by the existing Vercel five-minute job runner. */
 export async function runPendingScsDocumentImports(limit = 5) {
+  // Receipt and document metadata queueing remain enabled during repair.
+  if (process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true') return { attempted: 0, imported: 0, failed: 0, skipped: 0 }
+  // Older than the maximum serverless invocation: reclaim only abandoned
+  // claims. Exhausted work remains FAILED and requires an explicit decision.
+  await db.externalDocumentImport.updateMany({
+    where: { status: 'IMPORTING', updatedAt: { lt: new Date(Date.now() - 10 * 60_000) } },
+    data: { status: 'FAILED', lastError: 'Import worker interrupted; bounded retry pending.' },
+  })
   const rows = await db.externalDocumentImport.findMany({
     where: { status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
     // New customer uploads are time-sensitive. Prioritize fresh documents and
