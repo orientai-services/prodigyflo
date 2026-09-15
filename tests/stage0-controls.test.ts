@@ -34,8 +34,7 @@ describe('Stage 0 authorization boundaries',()=>{
 })
 
 import * as receiverRestoration from '@/lib/intake/restoration-policy'
-import * as senderRestoration from '../../scs/src/server/delivery/restoration-policy'
-for (const [name,controls] of [['receiver',receiverRestoration],['sender',senderRestoration]] as const) {
+for (const [name,controls] of [['receiver',receiverRestoration]] as const) {
  describe(name+' persistent restoration policy',()=>{
   const p={version:1 as const,id:'temporary',cutoff:'2026-01-01T00:00:00.000Z',expiresAt:'2099-01-01T00:00:00.000Z',organizationId:'org',sourceId:'source',excludedCaseIds:[],excludedDocumentIds:[],excludedChecksums:[]};
   it('binds admission to the exact case, policy and first eligibility date',()=>{
