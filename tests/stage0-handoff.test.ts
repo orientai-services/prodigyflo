@@ -9,6 +9,7 @@ import { hashIntakeSecret } from '@/lib/intake/hmac'
 import { runPendingScsDocumentImports } from '@/lib/intake/scs-document-import'
 import { getFileStorage } from '@/lib/storage'
 import { sharedFindDuplicates } from '@/lib/intake/dedupe-bridge'
+import { policyKey } from '@/lib/intake/restoration-policy'
 
 const enabled = process.env.STAGE0_TESTS === '01a09fc2'
 describe.skipIf(!enabled)('Stage 0 real SCS → ProdigyFlo handoff, isolated Postgres and files', () => {
@@ -334,13 +335,14 @@ describe.skipIf(!enabled)('Stage 0 real SCS → ProdigyFlo handoff, isolated Pos
       expect((await runPendingScsDocumentImports()).attempted).toBe(0);
       expect(await db.clientDocument.findMany({where:{clientId:receipt.clientId!}})).toHaveLength(2);
       expect((await db.clientDocument.findUniqueOrThrow({where:{id:original.id}})).checksum).toBe(original.checksum);
-      // A genuinely new qualification of an old draft is recorded once.
+      // A genuinely new qualification is recorded once, but does not decide
+      // restoration admission; the immutable SCS intake time does.
       const draft=(await rpc('/fixture')).body;
-      await rpc('/source-edit',{leadId:draft.leadId,createdAt:beforeCutoff,status:'in_progress',dirty:true});
+      await rpc('/source-edit',{leadId:draft.leadId,status:'in_progress',dirty:true});
       await rpc('/eligible',{leadId:draft.leadId});
-      const eligibleAt=(await rpc('/source-state',{leadId:draft.leadId})).body.source.handoff_first_eligible_at;
+      const qualifiedAt=(await rpc('/source-state',{leadId:draft.leadId})).body.source.handoff_first_qualified_at;
       await rpc('/eligible',{leadId:draft.leadId});
-      expect((await rpc('/source-state',{leadId:draft.leadId})).body.source.handoff_first_eligible_at).toBe(eligibleAt);
+      expect((await rpc('/source-state',{leadId:draft.leadId})).body.source.handoff_first_qualified_at).toBe(qualifiedAt);
       expect((await rpc('/dispatch')).body.sent).toBe(1);
       // Disputed content is held without a file copy or fabricated retry reset.
       await setPolicy({...policy,excludedChecksums:[original.checksum]});
@@ -378,6 +380,75 @@ describe.skipIf(!enabled)('Stage 0 real SCS → ProdigyFlo handoff, isolated Pos
     } finally {
       await setPolicy(null,false);delete process.env.SCS_RESTORATION_REQUIRED;
       delete process.env.SCS_DOCUMENT_IMPORTS_PAUSED;delete process.env.SCS_IMPORT_REQUIRE_COHORT;
+      await rpc('/cohort',{cohort:null,require:false});await rpc('/pause',{paused:false});
+    }
+  },30000)
+
+  it('uses immutable SCS intake time for admission and holds legacy pre-cutoff retries',async()=>{
+    const cutoff=new Date().toISOString(),beforeCutoff='2001-01-01T00:00:00.000Z';
+    const historical=(await rpc('/fixture')).body,excluded=(await rpc('/fixture')).body,admitted=(await rpc('/fixture')).body;
+    const policy={version:1 as const,id:'intake-time-restoration-test',cutoff,expiresAt:new Date(Date.now()+3600000).toISOString(),organizationId:orgId,sourceId,excludedCaseIds:[excluded.leadId],excludedDocumentIds:[],excludedChecksums:[]};
+    const setPolicy=async(p:any,required=true)=>{await rpc('/restoration',{policy:p,required});if(p===null)delete process.env.SCS_RESTORATION_POLICY;else process.env.SCS_RESTORATION_POLICY=JSON.stringify(p);process.env.SCS_RESTORATION_REQUIRED=String(required);};
+    await rpc('/cohort',{cohort:null,require:true});await rpc('/pause',{paused:true});process.env.SCS_DOCUMENT_IMPORTS_PAUSED='true';process.env.SCS_IMPORT_REQUIRE_COHORT='true';
+    try {
+      await setPolicy(policy);
+      let cohort={mode:'resume',expiresAt:new Date(Date.now()+3600000).toISOString(),organizationId:orgId,sourceId,cases:[
+        {leadId:historical.leadId,documentIds:[historical.documentId]},
+        {leadId:excluded.leadId,documentIds:[excluded.documentId]},
+      ]};
+      await rpc('/cohort',{cohort,require:true});process.env.SCS_IMPORT_EXECUTION_COHORT=JSON.stringify(cohort);
+      // This has the same shape as the existing QA case: an older intake that
+      // qualified later and already has a legacy admission/pending retry.
+      const legacy={policy:policyKey(policy),caseId:historical.leadId,eligibleAt:new Date().toISOString()};
+      await rpc('/source-edit',{leadId:historical.leadId,createdAt:beforeCutoff,status:'in_progress',dirty:true});
+      await rpc('/eligible',{leadId:historical.leadId});
+      await rpc('/source-edit',{leadId:historical.leadId,legacyAdmission:legacy});
+      await rpc('/enqueue',{leadId:historical.leadId});await rpc('/due',{leadId:historical.leadId});
+      await rpc('/source-edit',{leadId:excluded.leadId,dirty:true});await rpc('/enqueue',{leadId:excluded.leadId});
+      const clientCount=await db.client.count({where:{organizationId:orgId}});
+      await rpc('/pause',{paused:false});
+      await rpc('/dispatch');
+      expect((await rpc('/delivery',{leadId:historical.leadId})).body).toMatchObject([{status:'pending',remote_id:null}]);
+      expect(await db.intakeSubmission.count({where:{sourceId,externalId:'scs:'+historical.leadId}})).toBe(0);
+      expect(await db.intakeSubmission.count({where:{sourceId,externalId:'scs:'+excluded.leadId}})).toBe(0);
+      expect(await db.client.count({where:{organizationId:orgId}})).toBe(clientCount);
+      // A receiver-side retry of the old packet is also denied before receipt,
+      // client creation, or document-import scheduling.
+      const retry=await send({...payload,lead_id:historical.leadId,restoration_admission:legacy},randomUUID());
+      expect(retry.status).toBe(500);
+      expect(await db.intakeSubmission.count({where:{sourceId,externalId:'scs:'+historical.leadId}})).toBe(0);
+      expect(await db.client.count({where:{organizationId:orgId}})).toBe(clientCount);
+      expect(await db.externalDocumentImport.count({where:{sourceLeadId:historical.leadId}})).toBe(0);
+
+      // A new intake is admitted; a later upload follows that same admission
+      // to the same receipt and canonical ProdigyFlo client.
+      cohort={...cohort,cases:[...cohort.cases,{leadId:admitted.leadId,documentIds:[admitted.documentId]}]};
+      await rpc('/cohort',{cohort,require:true});process.env.SCS_IMPORT_EXECUTION_COHORT=JSON.stringify(cohort);
+      await rpc('/source-edit',{leadId:admitted.leadId,dirty:true});
+      await rpc('/dispatch');
+      const receipt=await db.intakeSubmission.findUniqueOrThrow({where:{sourceId_externalId:{sourceId,externalId:'scs:'+admitted.leadId}}});
+      const state=(await rpc('/source-state',{leadId:admitted.leadId})).body.source;
+      expect(state.handoff_admission).toMatchObject({caseId:admitted.leadId,intakeAt:expect.any(String)});
+      expect(new Date(state.handoff_admission.intakeAt).getTime()).toBeGreaterThanOrEqual(new Date(cutoff).getTime());
+      expect(receipt.clientId).toBeTruthy();
+      // A legitimately admitted post-cutoff receipt from the preceding field
+      // name migrates only when the old value equals immutable intake time.
+      await db.intakeSubmission.update({where:{id:receipt.id},data:{rawPayload:{...(receipt.rawPayload as Record<string,unknown>),restoration_admission:{policy:policyKey(policy),caseId:admitted.leadId,eligibleAt:state.handoff_admission.intakeAt}}}});
+      process.env.SCS_DOCUMENT_IMPORTS_PAUSED='false';
+      expect((await runPendingScsDocumentImports()).imported).toBe(1);
+      const later=(await rpc('/add-document',{leadId:admitted.leadId})).body;
+      cohort={...cohort,cases:cohort.cases.map(item=>item.leadId===admitted.leadId?{...item,documentIds:[...item.documentIds,later.documentId]}:item)};
+      await rpc('/cohort',{cohort,require:true});process.env.SCS_IMPORT_EXECUTION_COHORT=JSON.stringify(cohort);
+      await rpc('/dispatch');
+      expect((await runPendingScsDocumentImports()).imported).toBe(1);
+      expect(await db.externalDocumentImport.count({where:{sourceLeadId:admitted.leadId,status:'IMPORTED'}})).toBe(2);
+      expect(await db.clientDocument.count({where:{clientId:receipt.clientId!}})).toBe(2);
+      expect(await db.externalDocumentImport.count({where:{sourceLeadId:historical.leadId}})).toBe(0);
+      expect(await db.externalDocumentImport.count({where:{sourceLeadId:excluded.leadId}})).toBe(0);
+      expect(later.documentId).toBeTruthy();
+    } finally {
+      await setPolicy(null,false);delete process.env.SCS_RESTORATION_REQUIRED;
+      delete process.env.SCS_DOCUMENT_IMPORTS_PAUSED;delete process.env.SCS_IMPORT_REQUIRE_COHORT;delete process.env.SCS_IMPORT_EXECUTION_COHORT;
       await rpc('/cohort',{cohort:null,require:false});await rpc('/pause',{paused:false});
     }
   },30000)

@@ -1,4 +1,4 @@
-import { readRestorationPolicy, validAdmission } from '@/lib/intake/restoration-policy'
+import { readRestorationPolicy, validAdmission, validLegacyIntakeTransition } from '@/lib/intake/restoration-policy'
 import { readCohort } from '@/lib/intake/cohort'
 import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
@@ -92,7 +92,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (p && stableScsLeadId) {
         const prior = await db.intakeSubmission.findUnique({where:{sourceId_externalId:{sourceId:source.id,externalId:'scs:'+stableScsLeadId}},select:{rawPayload:true}})
         const admission = (prior?.rawPayload as Record<string,unknown> | undefined)?.restoration_admission
-        if (admission && !validAdmission(p,admission,stableScsLeadId)) return Response.json({error:'Restoration hold: existing admission differs.'},{status:409})
+        const intakeAt = ((payload as Record<string,unknown>).restoration_admission as Record<string,unknown> | undefined)?.intakeAt
+        if (admission && !validAdmission(p,admission,stableScsLeadId) && !validLegacyIntakeTransition(p,admission,stableScsLeadId,intakeAt)) return Response.json({error:'Restoration hold: existing admission differs.'},{status:409})
       }
     } catch { return Response.json({error:'Restoration policy unavailable; source must retain work.'},{status:503}) }
   }

@@ -41,10 +41,13 @@ const senderRestoration=await import(`${senderRoot}/src/server/delivery/restorat
 for (const [name,controls] of [['receiver',receiverRestoration],['sender',senderRestoration]] as const) {
  describe(name+' persistent restoration policy',()=>{
   const p={version:1 as const,id:'temporary',cutoff:'2026-01-01T00:00:00.000Z',expiresAt:'2099-01-01T00:00:00.000Z',organizationId:'org',sourceId:'source',excludedCaseIds:[],excludedDocumentIds:[],excludedChecksums:[]};
-  it('binds admission to the exact case, policy and first eligibility date',()=>{
-   const a={policy:controls.policyKey(p),caseId:leadId,eligibleAt:'2026-02-01T00:00:00.000Z'};
+  it('binds admission to the exact case, policy and original SCS intake date',()=>{
+   const a={policy:controls.policyKey(p),caseId:leadId,intakeAt:'2026-02-01T00:00:00.000Z'};
    expect(controls.validAdmission(p,a,leadId)).toBe(true);
-   for(const change of [{caseId:documentId},{policy:'forged'},{eligibleAt:'2000-01-01'},{eligibleAt:'2099-01-01'}]) expect(controls.validAdmission(p,{...a,...change},leadId)).toBe(false);
+   for(const change of [{caseId:documentId},{policy:'forged'},{intakeAt:'2000-01-01'},{intakeAt:'2099-01-01'}]) expect(controls.validAdmission(p,{...a,...change},leadId)).toBe(false);
+   expect(controls.validAdmission(p,{policy:a.policy,caseId:leadId},leadId)).toBe(false);
+   expect(controls.validLegacyIntakeTransition(p,{policy:a.policy,caseId:leadId,eligibleAt:a.intakeAt},leadId,a.intakeAt)).toBe(true);
+   expect(controls.validLegacyIntakeTransition(p,{policy:a.policy,caseId:leadId,eligibleAt:'2026-02-02T00:00:00.000Z'},leadId,a.intakeAt)).toBe(false);
    expect(controls.validAdmission({...p,excludedCaseIds:[leadId]},a,leadId)).toBe(false);
   });
   it('survives deadline renewal but never silently changes the cutoff or source',()=>{

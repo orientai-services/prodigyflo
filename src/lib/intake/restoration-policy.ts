@@ -6,7 +6,8 @@ export type RestorationPolicy = {
   organizationId: string; sourceId: string;
   excludedCaseIds: string[]; excludedDocumentIds: string[]; excludedChecksums: string[];
 };
-export type Admission = { policy: string; caseId: string; eligibleAt: string };
+/** The sender must bind this to the immutable SCS intake timestamp. */
+export type Admission = { policy: string; caseId: string; intakeAt: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function readRestorationPolicy(): RestorationPolicy | undefined {
   const raw = process.env.SCS_RESTORATION_POLICY;
@@ -32,6 +33,19 @@ export function policyKey(p: RestorationPolicy): string {
 export function validAdmission(p: RestorationPolicy, raw: unknown, caseId: string): raw is Admission {
   if (!raw || typeof raw !== 'object' || !uuid.test(caseId) || p.excludedCaseIds.includes(caseId)) return false;
   const a = raw as Admission;
-  const time = Date.parse(a.eligibleAt);
+  const time = Date.parse(a.intakeAt);
   return a.policy === policyKey(p) && a.caseId === caseId && Number.isFinite(time) && time >= Date.parse(p.cutoff) && time <= Date.now();
+}
+
+/**
+ * A post-cutoff receipt created by the preceding release used `eligibleAt`.
+ * Permit one compatible receipt update only when that value is exactly the
+ * newly supplied immutable intake time.  A later qualification cannot pass.
+ */
+export function validLegacyIntakeTransition(p: RestorationPolicy, raw: unknown, caseId: string, intakeAt: unknown): boolean {
+  if (!raw || typeof raw !== 'object' || typeof intakeAt !== 'string' || !uuid.test(caseId) || p.excludedCaseIds.includes(caseId)) return false;
+  const a = raw as { policy?: unknown; caseId?: unknown; eligibleAt?: unknown };
+  const legacyTime = typeof a.eligibleAt === 'string' ? Date.parse(a.eligibleAt) : NaN;
+  const intakeTime = Date.parse(intakeAt);
+  return a.policy === policyKey(p) && a.caseId === caseId && Number.isFinite(legacyTime) && legacyTime === intakeTime && intakeTime >= Date.parse(p.cutoff) && intakeTime <= Date.now();
 }
