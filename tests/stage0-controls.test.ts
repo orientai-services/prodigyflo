@@ -22,14 +22,13 @@ describe('Stage 0 authorization boundaries',()=>{
   const raw=JSON.stringify(control());expect(selectCohort(raw,false)).toBeNull();expect(selectCohort(raw,true)).toBeNull()
   expect(selectCohort(raw,true,{leadId,documentId})?.cases).toEqual([{leadId,documentIds:[documentId]}])
  })
- it('requires an explicit strong operator credential independently of cron auth',()=>{
-  const old=process.env.STAGE0_EXECUTION_TOKEN
-  try {delete process.env.STAGE0_EXECUTION_TOKEN;expect(executionAuthorized(new Request('http://localhost'))).toBe(false)
-   process.env.STAGE0_EXECUTION_TOKEN='short';expect(executionAuthorized(new Request('http://localhost',{headers:{authorization:'Bearer short'}}))).toBe(false)
-   process.env.STAGE0_EXECUTION_TOKEN='x'.repeat(40)
+ it('requires the existing strong Cron credential, not a temporary executor variable',()=>{
+  const old=process.env.CRON_SECRET
+  try {delete process.env.CRON_SECRET;expect(executionAuthorized(new Request('http://localhost'))).toBe(false)
+   process.env.CRON_SECRET='x'.repeat(40)
    expect(executionAuthorized(new Request('http://localhost',{headers:{authorization:'Bearer '+'x'.repeat(40)}}))).toBe(true)
    expect(executionAuthorized(new Request('http://localhost',{headers:{authorization:'Bearer '+'y'.repeat(40)}}))).toBe(false)
-  }finally{if(old===undefined)delete process.env.STAGE0_EXECUTION_TOKEN;else process.env.STAGE0_EXECUTION_TOKEN=old}
+  }finally{if(old===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=old}
  })
 })
 

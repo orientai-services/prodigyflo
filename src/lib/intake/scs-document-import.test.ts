@@ -42,6 +42,7 @@ vi.mock('./scs-document-requirements', () => ({ scsRequirementId: mocks.scsRequi
 
 import { db } from '@/lib/db'
 import { queueScsDocumentImports, runPendingScsDocumentExtractions, runPendingScsDocumentImports } from './scs-document-import'
+import { policyKey } from './restoration-policy'
 
 const bytes = Buffer.from('%PDF-1.4\nQA document\n')
 const checksum = sha256(bytes)
@@ -141,6 +142,49 @@ describe('runPendingScsDocumentImports', () => {
       },
     })
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('imports one admitted post-cutoff case while the normal worker remains paused', async () => {
+    const leadId = '11111111-1111-4111-8111-111111111111'
+    const documentId = '22222222-2222-4222-8222-222222222222'
+    const policy = {
+      version: 1 as const,
+      id: 'one-case-test',
+      cutoff: new Date(Date.now() - 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      organizationId: row.organizationId,
+      sourceId: 'scs_source_1',
+      excludedCaseIds: [],
+      excludedDocumentIds: [],
+      excludedChecksums: [],
+    }
+    process.env.SCS_DOCUMENT_IMPORTS_PAUSED = 'true'
+    process.env.SCS_RESTORATION_POLICY = JSON.stringify(policy)
+    mocks.importFindFirst
+      .mockResolvedValueOnce({
+        intakeSubmission: {
+          rawPayload: {
+            restoration_admission: {
+              policy: policyKey(policy), caseId: leadId, intakeAt: new Date().toISOString(),
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce(null)
+    mocks.importFindUnique.mockResolvedValue({ ...row, sourceLeadId: leadId, sourceDocumentId: documentId })
+    ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(bytes, {
+      headers: {
+        'content-type': 'application/pdf', 'content-length': String(bytes.length),
+        'x-scs-document-id': documentId, 'x-scs-lead-id': leadId, 'x-scs-sha256': checksum,
+      },
+    }))
+
+    await expect(runPendingScsDocumentImports()).resolves.toEqual({ attempted: 0, imported: 0, failed: 0, skipped: 0 })
+    await expect(runPendingScsDocumentImports(1, { leadId, documentId })).resolves.toEqual({ attempted: 1, imported: 1, failed: 0, skipped: 0 })
+    expect(mocks.importFindMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ organizationId: row.organizationId, sourceLeadId: leadId, sourceDocumentId: documentId }),
+      take: 1,
+    }))
   })
 
   it('reprocesses only eligible imported SCS documents through the append-only extractor', async () => {
