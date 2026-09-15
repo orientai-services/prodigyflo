@@ -47,6 +47,9 @@ const PUBLIC_PREFIXES = [
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Exact operator route has its own fail-closed bearer + cohort authorization.
+  if (pathname === '/api/internal/scs/execute') return NextResponse.next()
+
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next()
   }

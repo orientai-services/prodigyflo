@@ -1,4 +1,5 @@
 import 'server-only'
+import { isSyntheticClient } from '@/lib/intake/synthetic'
 import type { CommunicationChannel } from '@prisma/client'
 import { db } from '@/lib/db'
 import { can, findClientInScope, ForbiddenError, type SessionUser } from '@/lib/rbac'
@@ -84,6 +85,7 @@ export async function sendMessage(user: SessionUser, input: SendInput): Promise<
   })
   if (!client) throw new ForbiddenError('This client is not in your scope.')
 
+  if (await isSyntheticClient(client.id)) return {ok:false,code:'SYNTHETIC',error:'Synthetic case: messages blocked'}
   const decision = await getConsentDecision(client.id, input.channel)
   if (!decision.allowed) {
     return { ok: false, code: decision.code, error: decision.reason }

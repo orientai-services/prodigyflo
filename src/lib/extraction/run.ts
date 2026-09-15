@@ -1,4 +1,5 @@
 import 'server-only'
+import { isSyntheticClient } from '@/lib/intake/synthetic'
 import type { DocumentStatus } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getFileStorage } from '@/lib/storage'
@@ -52,6 +53,7 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
     },
   })
   if (!doc) throw new Error('Document not found.')
+  if (await isSyntheticClient(doc.clientId)) throw new Error('Synthetic case: paid extraction blocked')
   if (!doc.storageKey || !doc.mimeType) throw new Error('Document has no stored file to extract from.')
 
   const provider = getFieldExtractor()

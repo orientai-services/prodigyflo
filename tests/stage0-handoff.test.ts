@@ -220,4 +220,60 @@ describe.skipIf(!enabled)('Stage 0 real SCS → ProdigyFlo handoff, isolated Pos
     expect(await db.intakeSubmission.count({where:{sourceId,externalId:'scs:'+f.leadId}})).toBe(0)
   })
 
+  it('enforces exact case/document and resume cohorts without touching unrelated or stale work',async()=>{
+    const target=(await rpc('/fixture')).body,other=(await rpc('/fixture')).body;
+    for(const f of [other,target])await rpc('/enqueue',{leadId:f.leadId});
+    const unrelatedBefore=(await rpc('/delivery',{leadId:other.leadId})).body;
+    const approval={mode:'synthetic',expiresAt:new Date(Date.now()+60_000).toISOString(),organizationId:orgId,sourceId,cases:[{leadId:target.leadId,documentIds:[target.documentId]}]};
+    await rpc('/cohort',{cohort:approval});await rpc('/pause',{paused:true});
+    process.env.SCS_DOCUMENT_IMPORTS_PAUSED='true';process.env.SCS_IMPORT_EXECUTION_COHORT=JSON.stringify(approval);
+    try {
+      expect((await rpc('/dispatch')).body.sent).toBe(0);
+      expect((await rpc('/dispatch',{exact:{leadId:other.leadId}})).status).toBe(500);
+      expect((await rpc('/dispatch',{exact:{leadId:target.leadId}})).body.sent).toBe(1);
+      expect((await rpc('/delivery',{leadId:other.leadId})).body).toEqual(unrelatedBefore);
+      const receipt=await db.intakeSubmission.findUniqueOrThrow({where:{sourceId_externalId:{sourceId,externalId:'scs:'+target.leadId}}});
+      const before=await db.externalDocumentImport.findMany({where:{NOT:{sourceLeadId:target.leadId}},orderBy:{id:'asc'}});
+      expect((await runPendingScsDocumentImports()).attempted).toBe(0);
+      await expect(runPendingScsDocumentImports(1,{leadId:other.leadId,documentId:other.documentId})).rejects.toThrow('outside approved');
+      expect((await runPendingScsDocumentImports(1,{leadId:target.leadId,documentId:target.documentId})).imported).toBe(1);
+      const first=await db.clientDocument.findMany({where:{clientId:receipt.clientId!}});
+      expect(first).toHaveLength(1);
+      await rpc('/enqueue',{leadId:target.leadId});
+      expect((await rpc('/dispatch',{exact:{leadId:target.leadId}})).body.sent).toBe(1);
+      expect((await runPendingScsDocumentImports(1,{leadId:target.leadId,documentId:target.documentId})).attempted).toBe(0);
+      expect(await db.clientDocument.findMany({where:{clientId:receipt.clientId!}})).toEqual(first);
+      expect(await db.externalDocumentImport.findMany({where:{NOT:{sourceLeadId:target.leadId}},orderBy:{id:'asc'}})).toEqual(before);
+      const {isSyntheticClient}=await import('@/lib/intake/synthetic');expect(await isSyntheticClient(receipt.clientId!)).toBe(true);
+      const {runExtraction}=await import('@/lib/extraction/run');await expect(runExtraction(first[0].id)).rejects.toThrow('Synthetic case');
+      const {sendMessage}=await import('@/lib/messaging/send');
+      const operator={id:'synthetic-operator',organizationId:orgId,role:'ADMIN',isOwner:true,permissions:new Set(['communications:send','clients:read_all'])} as any;
+      expect(await sendMessage(operator,{clientId:receipt.clientId!,channel:'EMAIL',body:'Should never send'})).toMatchObject({ok:false,code:'SYNTHETIC'});
+      const {buildAssistContext}=await import('@/lib/ai/assists');expect(await buildAssistContext(operator,receipt.clientId!)).toBeNull();
+      for(const patch of [{organizationId:'wrong-org'},{sourceId:'wrong-source'}]){
+        process.env.SCS_IMPORT_EXECUTION_COHORT=JSON.stringify({...approval,...patch});
+        expect((await runPendingScsDocumentImports(1,{leadId:target.leadId,documentId:target.documentId})).attempted).toBe(0);
+      }
+      process.env.SCS_IMPORT_EXECUTION_COHORT=JSON.stringify(approval);
+
+      // Expiry denies execution even while an exact ID is provided.
+      const expired={...approval,expiresAt:'2000-01-01T00:00:00Z'};
+      await rpc('/cohort',{cohort:expired});process.env.SCS_IMPORT_EXECUTION_COHORT=JSON.stringify(expired);
+      expect((await rpc('/dispatch',{exact:{leadId:target.leadId}})).status).toBe(500);
+      await expect(runPendingScsDocumentImports(1,{leadId:target.leadId,documentId:target.documentId})).rejects.toThrow('expired');
+      // Resume is filtered before limits; old queued case remains untouched.
+      const resume={...approval,mode:'resume'};await rpc('/cohort',{cohort:resume});await rpc('/pause',{paused:false});
+      await rpc('/enqueue',{leadId:target.leadId});expect((await rpc('/dispatch')).body.sent).toBe(1);
+      expect((await rpc('/delivery',{leadId:other.leadId})).body).toEqual(unrelatedBefore);
+      process.env.SCS_IMPORT_EXECUTION_COHORT=JSON.stringify(resume);process.env.SCS_DOCUMENT_IMPORTS_PAUSED='false';
+      expect((await runPendingScsDocumentImports()).attempted).toBe(0);
+      expect(await db.externalDocumentImport.findMany({where:{NOT:{sourceLeadId:target.leadId}},orderBy:{id:'asc'}})).toEqual(before);
+      await rpc('/cohort',{cohort:null,require:true});
+      expect((await rpc('/dispatch')).status).toBe(500);
+      process.env.SCS_IMPORT_REQUIRE_COHORT='true';delete process.env.SCS_IMPORT_EXECUTION_COHORT;
+      await expect(runPendingScsDocumentImports()).rejects.toThrow('cohort required');
+      expect((await rpc('/delivery',{leadId:other.leadId})).body).toEqual(unrelatedBefore);
+    } finally {await rpc('/cohort',{cohort:null,require:false});await rpc('/pause',{paused:false});delete process.env.SCS_IMPORT_EXECUTION_COHORT;delete process.env.SCS_DOCUMENT_IMPORTS_PAUSED;delete process.env.SCS_IMPORT_REQUIRE_COHORT;}
+  })
+
 })

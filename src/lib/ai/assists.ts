@@ -1,4 +1,5 @@
 import 'server-only'
+import { isSyntheticClient } from '@/lib/intake/synthetic'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { recordAudit } from '@/lib/audit'
@@ -166,7 +167,7 @@ const num = (d: Prisma.Decimal | number | null | undefined): number | null =>
 /** Builds the shared read-only evidence bundle every assist runs against. */
 export async function buildAssistContext(user: SessionUser, clientId: string): Promise<AssistContext | null> {
   const inScope = await findClientInScope(user, clientId)
-  if (!inScope) return null
+  if (!inScope || await isSyntheticClient(clientId)) return null
 
   const client = await db.client.findUniqueOrThrow({
     where: { id: clientId },

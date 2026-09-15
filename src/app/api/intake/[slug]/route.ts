@@ -1,3 +1,4 @@
+import { readCohort } from '@/lib/intake/cohort'
 import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { SIGNATURE_HEADER, TOKEN_HEADER, verifySignature, verifyToken } from '@/lib/intake/hmac'
@@ -80,6 +81,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const stableScsLeadId = source.slug === 'scs-website' && isSchema42Payload(payload)
     ? scsLeadId(payload)
     : null
+  delete (payload as Record<string, unknown>).stage0_synthetic
+  let control: ReturnType<typeof readCohort>
+  try { control=readCohort(process.env.SCS_IMPORT_EXECUTION_COHORT) } catch { /* expired execution never blocks durable receipt */ }
+  if (control?.mode === 'synthetic' && control.organizationId === source.organizationId && control.sourceId === source.id && control.cases.some(x=>x.leadId===stableScsLeadId)) (payload as Record<string, unknown>).stage0_synthetic=true
   const externalId = stableScsLeadId ? `scs:${stableScsLeadId}` : deriveExternalId(payload, preferredKey)
   const { duplicate, submission } = await processInbound(source, externalId, payload)
 

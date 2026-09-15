@@ -397,6 +397,7 @@ async function processInboundLocked(
   }
   if (existing && isScsPacket) {
     const old = existing.rawPayload as Record<string, unknown>
+    if (old.stage0_synthetic === true) packet.stage0_synthetic = true
     const oldTime = sourceTime(old)
     const newTime = sourceTime(packet)
     const completed = !['FAILED', 'RECEIVED', 'NEEDS_MAPPING'].includes(existing.status)

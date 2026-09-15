@@ -1,3 +1,4 @@
+import { selectCohort } from './cohort'
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
@@ -92,12 +93,12 @@ async function fail(id: string, error: unknown, attempts?: number) {
   })
 }
 
-async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'> {
+async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereInput = {}): Promise<'imported' | 'failed' | 'skipped'> {
   let stage = 'claiming the import row'
   let claimedAttempts: number | undefined
   let storedKey: string | undefined
   const claim = await db.externalDocumentImport.updateMany({
-    where: { id, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
+    where: { ...scope, id, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
     data: { status: 'IMPORTING', attempts: { increment: 1 }, lastError: null },
   })
   if (claim.count !== 1) return 'skipped'
@@ -235,26 +236,31 @@ async function importOne(id: string): Promise<'imported' | 'failed' | 'skipped'>
 }
 
 /** Bounded worker used by the existing Vercel five-minute job runner. */
-export async function runPendingScsDocumentImports(limit = 5) {
+export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: string; documentId: string }) {
   // Receipt and document metadata queueing remain enabled during repair.
-  if (process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true') return { attempted: 0, imported: 0, failed: 0, skipped: 0 }
+  const cohort = selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true', exact)
+  if (process.env.SCS_IMPORT_REQUIRE_COHORT === 'true' && cohort === undefined) throw Error('Execution cohort required');
+  if (cohort === null) return { attempted: 0, imported: 0, failed: 0, skipped: 0 }
+  if (cohort && (!cohort.organizationId || !cohort.sourceId)) throw Error('Organization and source required')
+  const scope: Prisma.ExternalDocumentImportWhereInput = cohort ? { organizationId: cohort.organizationId, intakeSubmission: { sourceId: cohort.sourceId }, OR: cohort.cases.map(x => ({ sourceLeadId: x.leadId, sourceDocumentId: { in: x.documentIds } })) } : {}
   // Older than the maximum serverless invocation: reclaim only abandoned
   // claims. Exhausted work remains FAILED and requires an explicit decision.
   await db.externalDocumentImport.updateMany({
-    where: { status: 'IMPORTING', updatedAt: { lt: new Date(Date.now() - 10 * 60_000) } },
+    where: { ...scope, status: 'IMPORTING', updatedAt: { lt: new Date(Date.now() - 10 * 60_000) } },
     data: { status: 'FAILED', lastError: 'Import worker interrupted; bounded retry pending.' },
   })
   const rows = await db.externalDocumentImport.findMany({
-    where: { status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
+    where: { ...scope, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
     // New customer uploads are time-sensitive. Prioritize fresh documents and
     // newest first-attempt work; failed rows remain retryable behind it.
     orderBy: [{ attempts: 'asc' }, { createdAt: 'desc' }],
-    take: limit,
+    take: Math.min(Math.max(limit, 1), 5),
     select: { id: true },
   })
   const result = { attempted: rows.length, imported: 0, failed: 0, skipped: 0 }
   for (const row of rows) {
-    const outcome = await importOne(row.id)
+    if (selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true', exact) === null) break
+    const outcome = await importOne(row.id, scope)
     if (outcome === 'imported') result.imported++
     else if (outcome === 'failed') result.failed++
     else result.skipped++
