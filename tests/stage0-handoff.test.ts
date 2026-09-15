@@ -289,4 +289,97 @@ describe.skipIf(!enabled)('Stage 0 real SCS → ProdigyFlo handoff, isolated Pos
     } finally {await rpc('/cohort',{cohort:null,require:false});await rpc('/pause',{paused:false});delete process.env.SCS_IMPORT_EXECUTION_COHORT;delete process.env.SCS_DOCUMENT_IMPORTS_PAUSED;delete process.env.SCS_IMPORT_REQUIRE_COHORT;}
   })
 
+  it('restores future cases and later updates durably while historical work stays held',async()=>{
+    const cutoff=new Date().toISOString();
+    const old=(await rpc('/fixture')).body, unknown=(await rpc('/fixture')).body, future=(await rpc('/fixture')).body;
+    const beforeCutoff='2001-01-01T00:00:00.000Z';
+    for(const f of [old,unknown]){await rpc('/source-edit',{leadId:f.leadId,createdAt:beforeCutoff,dirty:true});await rpc('/enqueue',{leadId:f.leadId});}
+    const historical=await rpc('/delivery',{leadId:old.leadId}),oldSource=await rpc('/source-state',{leadId:old.leadId});
+    const policy={version:1,id:'temporary-restoration-test',cutoff,expiresAt:new Date(Date.now()+3600000).toISOString(),organizationId:orgId,sourceId,excludedCaseIds:[old.leadId],excludedDocumentIds:[],excludedChecksums:[]};
+    const setPolicy=async(p:any,required=true)=>{await rpc('/restoration',{policy:p,required});if(p===null)delete process.env.SCS_RESTORATION_POLICY;else process.env.SCS_RESTORATION_POLICY=JSON.stringify(p);process.env.SCS_RESTORATION_REQUIRED=String(required);};
+    await rpc('/cohort',{cohort:null,require:true});await rpc('/pause',{paused:true});process.env.SCS_DOCUMENT_IMPORTS_PAUSED='true';process.env.SCS_IMPORT_REQUIRE_COHORT='true';
+    try {
+      await setPolicy(policy);
+      await rpc('/source-edit',{leadId:future.leadId,dirty:true});
+      expect((await rpc('/dispatch')).body.sent).toBe(0);
+      expect(await db.intakeSubmission.count({where:{sourceId,externalId:'scs:'+future.leadId}})).toBe(0);
+      // Source committed, enqueue absent. The existing scheduled path repairs it.
+      await rpc('/pause',{paused:false});
+      const first=await rpc('/dispatch');expect(first.status).toBe(200);expect(first.body.sent).toBe(1);
+      const receipt=await db.intakeSubmission.findUniqueOrThrow({where:{sourceId_externalId:{sourceId,externalId:'scs:'+future.leadId}}});
+      expect(receipt.clientId).toBeTruthy();
+      const admission=(await rpc('/source-state',{leadId:future.leadId})).body.source.handoff_admission;
+      expect(admission.caseId).toBe(future.leadId);
+      expect((await rpc('/source-state',{leadId:future.leadId})).body.source.handoff_pending).toBeUndefined();
+      expect(await rpc('/delivery',{leadId:old.leadId})).toEqual(historical);
+      expect(await rpc('/source-state',{leadId:old.leadId})).toEqual(oldSource);
+      expect(await db.intakeSubmission.count({where:{sourceId,externalId:'scs:'+unknown.leadId}})).toBe(0);
+      expect((await runPendingScsDocumentImports()).attempted).toBe(0);
+      process.env.SCS_DOCUMENT_IMPORTS_PAUSED='false';
+      await setPolicy({...policy,excludedDocumentIds:[future.documentId]});
+      expect((await runPendingScsDocumentImports()).attempted).toBe(0);
+      await setPolicy(policy);
+      expect((await runPendingScsDocumentImports()).imported).toBe(1);
+      const original=await db.clientDocument.findFirstOrThrow({where:{clientId:receipt.clientId!}});
+      const later=(await rpc('/add-document',{leadId:future.leadId})).body;
+      expect((await rpc('/dispatch')).body.sent).toBe(1);
+      expect((await runPendingScsDocumentImports()).imported).toBe(1);
+      expect(await db.externalDocumentImport.count({where:{sourceLeadId:future.leadId,sourceDocumentId:later.documentId,status:'IMPORTED'}})).toBe(1);
+      // Policy reload, new save, missing signal: same admission/receipt/document.
+      await setPolicy({...policy,expiresAt:new Date(Date.now()+7200000).toISOString()});
+      await rpc('/source-edit',{leadId:future.leadId,dirty:true});await rpc('/lose-enqueue',{leadId:future.leadId});
+      expect((await rpc('/dispatch')).body.sent).toBe(1);
+      expect((await rpc('/source-state',{leadId:future.leadId})).body.source.handoff_admission).toEqual(admission);
+      expect((await db.intakeSubmission.findUniqueOrThrow({where:{id:receipt.id}})).clientId).toBe(receipt.clientId);
+      expect((await runPendingScsDocumentImports()).attempted).toBe(0);
+      expect(await db.clientDocument.findMany({where:{clientId:receipt.clientId!}})).toHaveLength(2);
+      expect((await db.clientDocument.findUniqueOrThrow({where:{id:original.id}})).checksum).toBe(original.checksum);
+      // A genuinely new qualification of an old draft is recorded once.
+      const draft=(await rpc('/fixture')).body;
+      await rpc('/source-edit',{leadId:draft.leadId,createdAt:beforeCutoff,status:'in_progress',dirty:true});
+      await rpc('/eligible',{leadId:draft.leadId});
+      const eligibleAt=(await rpc('/source-state',{leadId:draft.leadId})).body.source.handoff_first_eligible_at;
+      await rpc('/eligible',{leadId:draft.leadId});
+      expect((await rpc('/source-state',{leadId:draft.leadId})).body.source.handoff_first_eligible_at).toBe(eligibleAt);
+      expect((await rpc('/dispatch')).body.sent).toBe(1);
+      // Disputed content is held without a file copy or fabricated retry reset.
+      await setPolicy({...policy,excludedChecksums:[original.checksum]});
+      expect((await runPendingScsDocumentImports()).skipped).toBe(1);
+      const held=await db.externalDocumentImport.findFirstOrThrow({where:{sourceLeadId:draft.leadId}});
+      expect(held).toMatchObject({status:'FAILED',attempts:1,clientDocumentId:null});
+      expect(held.lastError).toContain('RESTORATION HOLD:');
+      expect((await runPendingScsDocumentImports()).attempted).toBe(0);
+      // Crash after a complete save but before normal eligibility evaluation.
+      const crash=(await rpc('/fixture')).body, exited=(await rpc('/fixture')).body;
+      await rpc('/source-edit',{leadId:crash.leadId,status:'in_progress',complete:true,dirty:true});
+      await rpc('/source-edit',{leadId:exited.leadId,status:'in_progress',complete:true,cash:true,dirty:true});
+      const recovered=await rpc('/dispatch');expect(recovered,JSON.stringify(recovered)).toMatchObject({status:200,body:{sent:1}});
+      expect((await rpc('/source-state',{leadId:crash.leadId})).body.source.handoff_admission.caseId).toBe(crash.leadId);
+      expect((await rpc('/source-state',{leadId:exited.leadId})).body.source.handoff_admission).toBeUndefined();
+      expect((await rpc('/dispatch')).body.sent).toBe(0);
+      await setPolicy({...policy,excludedDocumentIds:[old.documentId]});
+      const {queueScsDocumentImports}=await import('@/lib/intake/scs-document-import');
+      await queueScsDocumentImports({organizationId:orgId,clientId:receipt.clientId!,intakeSubmissionId:receipt.id,sourceLeadId:future.leadId,documents:[{id:old.documentId}]});
+      const historicalDocumentHold=await db.externalDocumentImport.findFirstOrThrow({where:{intakeSubmissionId:receipt.id,sourceDocumentId:old.documentId}});
+      expect(historicalDocumentHold).toMatchObject({status:'FAILED',attempts:0,clientDocumentId:null});
+      expect(historicalDocumentHold.lastError).toContain('historical document excluded');
+      // Invalid/removed policy fails closed; no historical cohort bypass.
+      await setPolicy(null);
+      expect((await rpc('/dispatch')).status).toBe(500);
+      await expect(runPendingScsDocumentImports()).rejects.toThrow('policy required');
+      await setPolicy({...policy,expiresAt:'2000-01-01T00:00:00.000Z'});
+      expect((await rpc('/dispatch')).status).toBe(500);
+      await expect(runPendingScsDocumentImports()).rejects.toThrow('expired');
+      await setPolicy(policy);
+      const observed=await rpc('/restoration-status');expect(observed.body.excluded).toBe(1);expect(observed.body.unadmitted_eligible).toBeGreaterThan(0);
+      // Even valid credentials cannot admit an excluded or unsigned case.
+      const denied=await send({...payload,lead_id:old.leadId,restoration_admission:{...admission,caseId:old.leadId}});expect(denied.status).toBe(500);
+      expect(await rpc('/delivery',{leadId:old.leadId})).toEqual(historical);
+    } finally {
+      await setPolicy(null,false);delete process.env.SCS_RESTORATION_REQUIRED;
+      delete process.env.SCS_DOCUMENT_IMPORTS_PAUSED;delete process.env.SCS_IMPORT_REQUIRE_COHORT;
+      await rpc('/cohort',{cohort:null,require:false});await rpc('/pause',{paused:false});
+    }
+  },30000)
+
 })

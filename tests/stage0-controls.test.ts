@@ -32,3 +32,28 @@ describe('Stage 0 authorization boundaries',()=>{
   }finally{if(old===undefined)delete process.env.STAGE0_EXECUTION_TOKEN;else process.env.STAGE0_EXECUTION_TOKEN=old}
  })
 })
+
+import * as receiverRestoration from '@/lib/intake/restoration-policy'
+import * as senderRestoration from '../../scs/src/server/delivery/restoration-policy'
+for (const [name,controls] of [['receiver',receiverRestoration],['sender',senderRestoration]] as const) {
+ describe(name+' persistent restoration policy',()=>{
+  const p={version:1 as const,id:'temporary',cutoff:'2026-01-01T00:00:00.000Z',expiresAt:'2099-01-01T00:00:00.000Z',organizationId:'org',sourceId:'source',excludedCaseIds:[],excludedDocumentIds:[],excludedChecksums:[]};
+  it('binds admission to the exact case, policy and first eligibility date',()=>{
+   const a={policy:controls.policyKey(p),caseId:leadId,eligibleAt:'2026-02-01T00:00:00.000Z'};
+   expect(controls.validAdmission(p,a,leadId)).toBe(true);
+   for(const change of [{caseId:documentId},{policy:'forged'},{eligibleAt:'2000-01-01'},{eligibleAt:'2099-01-01'}]) expect(controls.validAdmission(p,{...a,...change},leadId)).toBe(false);
+   expect(controls.validAdmission({...p,excludedCaseIds:[leadId]},a,leadId)).toBe(false);
+  });
+  it('survives deadline renewal but never silently changes the cutoff or source',()=>{
+   expect(controls.policyKey({...p,expiresAt:'2098-01-01T00:00:00.000Z'})).toBe(controls.policyKey(p));
+   for(const change of [{cutoff:'2026-02-01T00:00:00.000Z'},{sourceId:'other'},{organizationId:'other'},{id:'other'}]) expect(controls.policyKey({...p,...change})).not.toBe(controls.policyKey(p));
+  });
+  it('fails closed for missing, malformed, expired and invalid-exclusion settings',()=>{
+   const raw=process.env.SCS_RESTORATION_POLICY,required=process.env.SCS_RESTORATION_REQUIRED;
+   try {process.env.SCS_RESTORATION_REQUIRED='true';delete process.env.SCS_RESTORATION_POLICY;expect(()=>controls.readRestorationPolicy()).toThrow();
+    for(const bad of ['{}','{',JSON.stringify({...p,expiresAt:'2000-01-01'}),JSON.stringify({...p,excludedCaseIds:['anything']}),JSON.stringify({...p,excludedChecksums:['bad']}),JSON.stringify({...p,cutoff:'2026-01-01'})]){process.env.SCS_RESTORATION_POLICY=bad;expect(()=>controls.readRestorationPolicy()).toThrow();}
+    process.env.SCS_RESTORATION_POLICY=JSON.stringify(p);expect(controls.readRestorationPolicy()).toEqual(p);
+   }finally{if(raw===undefined)delete process.env.SCS_RESTORATION_POLICY;else process.env.SCS_RESTORATION_POLICY=raw;if(required===undefined)delete process.env.SCS_RESTORATION_REQUIRED;else process.env.SCS_RESTORATION_REQUIRED=required;}
+  });
+ });
+}
