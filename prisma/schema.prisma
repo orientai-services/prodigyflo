@@ -246,12 +246,14 @@ enum SubmissionStatus {
 
 /// Lifecycle of a document copied from an authenticated external intake.
 /// PENDING/FAILED rows are deliberately durable so the job runner can retry
-/// without asking the homeowner to upload again.
+/// without asking the homeowner to upload again. ARCHIVED retains historical
+/// provenance but is terminal and is never selected by the import worker.
 enum ExternalDocumentImportStatus {
   PENDING
   IMPORTING
   IMPORTED
   FAILED
+  ARCHIVED
 }
 
 enum DealStatus {
