@@ -34,7 +34,11 @@ describe('Stage 0 authorization boundaries',()=>{
 })
 
 import * as receiverRestoration from '@/lib/intake/restoration-policy'
-for (const [name,controls] of [['receiver',receiverRestoration]] as const) {
+// This paired integration assertion needs SCS locally, but production builds must
+// not resolve a sibling checkout that is absent from the ProdigyFlo archive.
+const senderRoot=process.env.SCS_STAGE0_WORKTREE ?? new URL('../../scs',import.meta.url).pathname
+const senderRestoration=await import(`${senderRoot}/src/server/delivery/restoration-policy`)
+for (const [name,controls] of [['receiver',receiverRestoration],['sender',senderRestoration]] as const) {
  describe(name+' persistent restoration policy',()=>{
   const p={version:1 as const,id:'temporary',cutoff:'2026-01-01T00:00:00.000Z',expiresAt:'2099-01-01T00:00:00.000Z',organizationId:'org',sourceId:'source',excludedCaseIds:[],excludedDocumentIds:[],excludedChecksums:[]};
   it('binds admission to the exact case, policy and first eligibility date',()=>{
