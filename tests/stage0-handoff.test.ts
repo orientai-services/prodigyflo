@@ -8,6 +8,7 @@ import { POST } from '@/app/api/intake/[slug]/route'
 import { hashIntakeSecret } from '@/lib/intake/hmac'
 import { runPendingScsDocumentImports } from '@/lib/intake/scs-document-import'
 import { getFileStorage } from '@/lib/storage'
+import { sharedFindDuplicates } from '@/lib/intake/dedupe-bridge'
 
 const enabled = process.env.STAGE0_TESTS === '01a09fc2'
 describe.skipIf(!enabled)('Stage 0 real SCS → ProdigyFlo handoff, isolated Postgres and files', () => {
@@ -73,6 +74,18 @@ describe.skipIf(!enabled)('Stage 0 real SCS → ProdigyFlo handoff, isolated Pos
     await db.intakeSource.update({where:{id:sourceId},data:{authMode:'HMAC'}})
     expect((await send()).status).toBe(200)
     await db.intakeSource.update({where:{id:sourceId},data:{authMode:'TOKEN'}})
+  })
+  it('duplicate lookup sees uncommitted changes through the transaction and rolls them back',async()=>{
+    const before=await db.client.findUniqueOrThrow({where:{id:clientId}})
+    const email=randomUUID()+'@example.invalid'
+    const rollback=new Error('synthetic rollback')
+    await expect(db.$transaction(async store=>{
+      await store.client.update({where:{id:clientId},data:{email}})
+      expect(await sharedFindDuplicates({organizationId:orgId,email,dedupeKeys:['email']},store))
+        .toEqual([{clientId,matchedOn:'email'}])
+      throw rollback
+    })).rejects.toBe(rollback)
+    expect((await db.client.findUniqueOrThrow({where:{id:clientId}})).email).toBe(before.email)
   })
   it('exports files with old and dedicated credentials, rejects unrelated credentials',async()=>{
     for(const [token,status] of [['stage0-connector',200],['stage0-export',200],['wrong',401]] as const){

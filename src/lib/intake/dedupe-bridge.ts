@@ -7,7 +7,7 @@
  *  - a throw makes the caller fall back to intake's own conservative matcher,
  *    so a webhook never 500s over a dedupe regression.
  */
-import { findDuplicates, mergeIncoming } from '@/lib/dedupe'
+import { findDuplicates, mergeIncoming, type DedupeDb } from '@/lib/dedupe'
 import { db } from '@/lib/db'
 
 export type DedupeInput = {
@@ -26,9 +26,11 @@ export type DuplicateMatch = { clientId: string; matchedOn: string }
 const MATCH_KIND: Record<string, string> = { email: 'email', phone: 'phone', name: 'name_postal' }
 
 /** Returns null when the shared implementation is unusable — caller falls back. */
-export async function sharedFindDuplicates(input: DedupeInput): Promise<DuplicateMatch[] | null> {
+export async function sharedFindDuplicates(input: DedupeInput, store: DedupeDb = db): Promise<DuplicateMatch[] | null> {
   try {
-    const result = await findDuplicates(db, input.organizationId, {
+    // Reuse the caller's transaction: borrowing from the global pool here
+    // stalls a one-connection pool until the owning transaction expires.
+    const result = await findDuplicates(store, input.organizationId, {
       email: input.email ?? null,
       phone: input.phone ?? null,
       firstName: input.firstName ?? null,

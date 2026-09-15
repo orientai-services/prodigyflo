@@ -172,7 +172,7 @@ export async function applyToCrm(
         lastName: mapped.lastName,
         postalCode: mapped.postalCode,
         dedupeKeys: source.dedupeKeys,
-      })
+      }, store)
     }
     if (matches === null) {
       matches = await localFindDuplicates(source.organizationId, mapped, source.dedupeKeys, store)
