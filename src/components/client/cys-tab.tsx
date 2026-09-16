@@ -1,11 +1,10 @@
 import Link from 'next/link'
-import { AlertTriangle, CheckCircle2, Circle, Download, FileWarning, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Circle, Download, FileWarning } from 'lucide-react'
 import { db } from '@/lib/db'
 import { can, canAny, findClientInScope, requireUser } from '@/lib/rbac'
 import { resolveForClient, type CysValueRow } from '@/lib/cys/data'
 import type { CysDefinitionInput } from '@/lib/cys/resolve'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/empty-state'
 import { dateTime, relativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -101,28 +100,25 @@ export async function CysTab({ clientId }: { clientId: string }) {
   const approved = readiness.approvedAt !== null
 
   return (
-    <div className="space-y-4 p-4 sm:p-6">
-      {/* Readiness summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex flex-wrap items-center gap-2">
-            CYS readiness
-            {approved ? (
-              <Badge className="bg-success/10 text-success border-transparent" variant="outline">
-                <ShieldCheck data-icon="inline-start" />
-                Approved {approver ? `by ${approver.name}` : ''} · {dateTime(readiness.approvedAt)}
-              </Badge>
-            ) : (
-              <Badge variant="secondary">Not yet approved</Badge>
-            )}
-          </CardTitle>
-          <CardDescription>
-            {completion.requiredVerified} of {completion.requiredTotal} required fields verified.
-            Handover to Cancel Your Solar is prepared here and delivered manually — there is no CYS
-            API connection.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="space-y-4">
+      <section className="desk-card desk-block">
+        <div className="desk-cal-head" style={{ padding: 0 }}>
+          <h2 className="font-heading" style={{ fontSize: 24 }}>
+            CYS workspace
+          </h2>
+          <span className={`desk-tag ${approved ? 'ok' : 'warn'}`}>
+            {approved ? 'CYS ready' : 'CYS not ready'}
+          </span>
+        </div>
+        <p className="desk-muted">
+          {completion.requiredVerified} of {completion.requiredTotal} required fields verified.
+          Packet READY is a separate gate on the case file. generateCysPackage writes a JSON draft only — no HTTP push.
+        </p>
+        {approved && (
+          <p className="desk-muted">
+            Approved {approver ? `by ${approver.name}` : ''} · {dateTime(readiness.approvedAt)}
+          </p>
+        )}
           <div className="flex items-center gap-3">
             <div className="bg-muted h-2 flex-1 overflow-hidden rounded-full">
               <div
@@ -191,108 +187,93 @@ export async function CysTab({ clientId }: { clientId: string }) {
           </div>
 
           {latestSubmission && (
-            <p className="text-muted-foreground text-xs">
+            <p className="desk-muted">
               Submission tracking:{' '}
-              <Link
-                href={`/submissions/${latestSubmission.id}`}
-                className="text-primary underline underline-offset-4"
-              >
+              <Link href={`/submissions/${latestSubmission.id}`}>
                 attempt {latestSubmission.attemptNumber} · {latestSubmission.status.replaceAll('_', ' ').toLowerCase()}
                 {latestSubmission.externalRef ? ` · ref ${latestSubmission.externalRef}` : ''}
               </Link>{' '}
               · updated {relativeTime(latestSubmission.updatedAt)}
             </p>
           )}
-        </CardContent>
-      </Card>
+      </section>
 
-      {/* Field groups */}
       {[...groups.entries()].map(([groupName, defs]) => (
-        <Card key={groupName}>
-          <CardHeader>
-            <CardTitle className="text-sm">{groupName}</CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[44rem] text-sm tabular-nums">
-                <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
-                  <tr className="border-y">
-                    <th className="px-4 py-2 text-left">Field</th>
-                    <th className="px-4 py-2 text-left">Value</th>
-                    <th className="px-4 py-2 text-left">Source</th>
-                    <th className="px-4 py-2 text-left">Status</th>
-                    {canPrepare && <th className="px-4 py-2 text-right">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {defs.map((def) => {
-                    const v: CysValueRow | undefined = valueByKey.get(def.key)
-                    const status = v?.status ?? 'MISSING'
-                    const attention = status === 'MISSING' || status === 'CONFLICT'
-                    return (
-                      <tr
-                        key={def.key}
-                        className={cn('border-b align-top', attention && def.isRequired && 'bg-destructive/5')}
-                      >
-                        <td className="px-4 py-2.5">
-                          <span className="font-medium">{def.label}</span>
-                          {def.isRequired && (
-                            <span className="text-destructive ml-1" title="Required">
-                              *
-                            </span>
-                          )}
-                          <span className="text-muted-foreground block text-xs">{def.key}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          {v?.value ? (
-                            <span className="break-all">{v.value}</span>
-                          ) : (
-                            <span className="text-destructive inline-flex items-center gap-1 text-xs font-medium">
-                              <FileWarning className="size-3.5" />
-                              Missing
-                            </span>
-                          )}
-                          {status === 'CONFLICT' && v?.conflictValue && (
-                            <span className="text-destructive block text-xs">
-                              Conflicts with: “{v.conflictValue}”
-                            </span>
-                          )}
-                          {v?.note && (
-                            <span className="text-muted-foreground block text-xs">{v.note}</span>
-                          )}
-                          {v?.verifiedAt && v.verifiedBy && (
-                            <span className="text-muted-foreground block text-xs">
-                              Verified by {v.verifiedBy.name} · {relativeTime(v.verifiedAt)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="text-muted-foreground px-4 py-2.5 text-xs">
-                          {v?.sourceLabel ?? '—'}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <StatusBadge status={status} confidence={v?.confidence ?? null} />
-                        </td>
-                        {canPrepare && (
-                          <td className="px-4 py-2.5 text-right">
-                            <FieldActions
-                              clientId={clientId}
-                              fieldKey={def.key}
-                              label={def.label}
-                              status={status}
-                              value={v?.value ?? null}
-                              conflictValue={v?.conflictValue ?? null}
-                              dataType={def.dataType}
-                            />
-                          </td>
+        <section key={groupName} className="desk-card desk-block">
+          <h3>{groupName}</h3>
+          <div className="scroll-x">
+            <table className="desk-table">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Value</th>
+                  <th>Source</th>
+                  <th>Status</th>
+                  {canPrepare && <th></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {defs.map((def) => {
+                  const v: CysValueRow | undefined = valueByKey.get(def.key)
+                  const status = v?.status ?? 'MISSING'
+                  const attention = status === 'MISSING' || status === 'CONFLICT'
+                  return (
+                    <tr key={def.key} className={cn(attention && def.isRequired && 'bg-destructive/5')}>
+                      <td>
+                        <span className="font-medium">{def.label}</span>
+                        {def.isRequired && (
+                          <span className="desk-v miss" title="Required">
+                            {' '}
+                            *
+                          </span>
                         )}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                        <div className="desk-muted" style={{ marginBottom: 0 }}>
+                          {def.key}
+                        </div>
+                      </td>
+                      <td>
+                        {v?.value ? (
+                          <span className="break-all">{v.value}</span>
+                        ) : (
+                          <span className="desk-v miss inline-flex items-center gap-1">
+                            <FileWarning className="size-3.5" />
+                            Missing
+                          </span>
+                        )}
+                        {status === 'CONFLICT' && v?.conflictValue && (
+                          <div className="desk-v miss">Conflicts with: “{v.conflictValue}”</div>
+                        )}
+                        {v?.note && <div className="desk-muted">{v.note}</div>}
+                        {v?.verifiedAt && v.verifiedBy && (
+                          <div className="desk-muted">
+                            Verified by {v.verifiedBy.name} · {relativeTime(v.verifiedAt)}
+                          </div>
+                        )}
+                      </td>
+                      <td>{v?.sourceLabel ?? '—'}</td>
+                      <td>
+                        <StatusBadge status={status} confidence={v?.confidence ?? null} />
+                      </td>
+                      {canPrepare && (
+                        <td>
+                          <FieldActions
+                            clientId={clientId}
+                            fieldKey={def.key}
+                            label={def.label}
+                            status={status}
+                            value={v?.value ?? null}
+                            conflictValue={v?.conflictValue ?? null}
+                            dataType={def.dataType}
+                          />
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ))}
     </div>
   )

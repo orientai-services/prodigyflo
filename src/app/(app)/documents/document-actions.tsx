@@ -112,7 +112,7 @@ export function DocumentActions({
       )}
 
       <Dialog open={dialog === 'reject'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent>
+        <DialogContent className="desk desk-dialog sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Reject this document</DialogTitle>
             <DialogDescription>A reason is required — the client and team will see it.</DialogDescription>
@@ -143,7 +143,7 @@ export function DocumentActions({
       </Dialog>
 
       <Dialog open={dialog === 'reupload'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent>
+        <DialogContent className="desk desk-dialog sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Request a re-upload</DialogTitle>
             <DialogDescription>

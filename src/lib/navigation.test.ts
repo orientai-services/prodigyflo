@@ -130,6 +130,36 @@ describe('navigationFor', () => {
     expect(src).not.toContain('currency(')
   })
 
+  it('Clients, Engine, Document lab, and CYS use Daily Desk chrome, not PageHeader', () => {
+    for (const rel of ['clients/page.tsx', 'engine/page.tsx', 'documents/page.tsx', 'submissions/page.tsx']) {
+      const src = readFileSync(path.join(APP_DIR, rel), 'utf8')
+      expect(src, rel).toMatch(/desk-page|DeskChrome|DocumentLabView/)
+      expect(src, rel).not.toContain('PageHeader')
+      expect(src, rel).not.toContain('bg-surface-sunk')
+      expect(src, rel).not.toContain('Call')
+    }
+  })
+
+  it('document lab Quick look uses the case-file viewer and never invents a preview', () => {
+    const ui = readFileSync(path.join(APP_DIR, 'documents', 'desk-documents.tsx'), 'utf8')
+    expect(ui).toContain('DeskQuickLook')
+    const look = readFileSync(path.resolve(__dirname, '../components/desk/desk-quick-look.tsx'), 'utf8')
+    expect(look).toContain('Not on file')
+    expect(look).toContain('No preview is invented')
+    expect(look).toContain('desk-lookbox')
+  })
+
+  it('CYS generateCysPackage stays JSON-only with no HTTP push', () => {
+    const src = readFileSync(path.resolve(__dirname, 'cys/data.ts'), 'utf8')
+    expect(src).toContain('packageJson')
+    expect(src).not.toMatch(/\bfetch\s*\(/)
+    const page = readFileSync(path.join(APP_DIR, 'submissions', '[submissionId]', 'page.tsx'), 'utf8')
+    expect(page).toContain('CysTab')
+    const tab = readFileSync(path.resolve(__dirname, '../components/client/cys-tab.tsx'), 'utf8')
+    expect(tab).toContain('GeneratePackageButton')
+    expect(tab).toContain('FieldActions')
+  })
+
   it('client profile is the Daily Desk case file, not CRM tabs or Call', () => {
     const src = readFileSync(path.join(APP_DIR, 'clients', '[clientId]', 'page.tsx'), 'utf8')
     expect(src).toContain('CaseFileView')
