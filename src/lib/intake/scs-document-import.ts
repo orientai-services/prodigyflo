@@ -1,5 +1,4 @@
 import { selectCohort } from './cohort'
-import { readRestorationPolicy, policyKey, validAdmission } from './restoration-policy'
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
@@ -40,20 +39,6 @@ export async function queueScsDocumentImports(args: {
   for (const doc of args.documents) {
     const sourceDocumentId = value(doc.id)
     if (!sourceDocumentId) continue
-
-    const restoration = readRestorationPolicy()
-    if (restoration?.excludedDocumentIds.includes(sourceDocumentId)) {
-      // A held metadata entry preserves the receipt without attaching/moving
-      // any existing ClientDocument or changing historical import rows.
-      await store.externalDocumentImport.upsert({
-        where:{intakeSubmissionId_sourceDocumentId:{intakeSubmissionId:args.intakeSubmissionId,sourceDocumentId}},
-        create:{organizationId:args.organizationId,clientId:args.clientId,intakeSubmissionId:args.intakeSubmissionId,
-          sourceLeadId:args.sourceLeadId,sourceDocumentId,status:'FAILED',
-          lastError:'RESTORATION HOLD: historical document excluded; separate verification required.'},
-        update:{},
-      })
-      continue
-    }
 
     // SCS source document IDs are durable case-file provenance. A refresh may
     // arrive with a different delivery/submission id, but it must not make a
@@ -113,7 +98,7 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
   let claimedAttempts: number | undefined
   let storedKey: string | undefined
   const claim = await db.externalDocumentImport.updateMany({
-    where: { ...scope, id, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS }, NOT: {AND:[{lastError:{not:null}},{lastError:{startsWith:'RESTORATION HOLD:'}}]} },
+    where: { ...scope, id, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
     data: { status: 'IMPORTING', attempts: { increment: 1 }, lastError: null },
   })
   if (claim.count !== 1) return 'skipped'
@@ -165,11 +150,6 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
     if (contentLength > MAX_IMPORT_MB * 1024 * 1024) throw new Error(`SCS document exceeds ${MAX_IMPORT_MB} MB import limit.`)
     stage = 'reading and validating the exported bytes'
     const bytes = Buffer.from(await response.arrayBuffer())
-    const p = readRestorationPolicy()
-    if (p?.excludedChecksums.includes(sha256(bytes))) {
-      await db.externalDocumentImport.updateMany({where:{id,status:'IMPORTING',attempts:claimedAttempts},data:{status:'FAILED',lastError:'RESTORATION HOLD: disputed document content; manual decision required.'}})
-      return 'skipped'
-    }
     const declaredMime = response.headers.get('content-type') ?? row.sourceMimeType ?? ''
     const validation = validateUpload({
       buffer: bytes,
@@ -255,69 +235,19 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
   }
 }
 
-/**
- * Build the only scope allowed through the paused one-case route. This does
- * not accept an approval from the request: the receipt must already carry a
- * valid post-cutoff admission under the active restoration policy.
- */
-async function exactAdmittedScope(
-  restoration: NonNullable<ReturnType<typeof readRestorationPolicy>>,
-  exact: { leadId: string; documentId: string },
-): Promise<Prisma.ExternalDocumentImportWhereInput> {
-  if (restoration.excludedCaseIds.includes(exact.leadId) || restoration.excludedDocumentIds.includes(exact.documentId)) {
-    throw new Error('Exact case or document is excluded from restoration.')
-  }
-
-  const admission = await db.externalDocumentImport.findFirst({
-    where: {
-      organizationId: restoration.organizationId,
-      sourceLeadId: exact.leadId,
-      sourceDocumentId: exact.documentId,
-      intakeSubmission: { sourceId: restoration.sourceId },
-    },
-    select: { intakeSubmission: { select: { rawPayload: true } } },
-  })
-  const payload = admission?.intakeSubmission.rawPayload
-  const recordedAdmission = payload && typeof payload === 'object'
-    ? (payload as Record<string, unknown>).restoration_admission
-    : undefined
-  if (!validAdmission(restoration, recordedAdmission, exact.leadId)) {
-    throw new Error('Exact case does not have a valid post-cutoff restoration admission.')
-  }
-
-  return {
-    organizationId: restoration.organizationId,
-    sourceLeadId: exact.leadId,
-    sourceDocumentId: exact.documentId,
-    intakeSubmission: {
-      sourceId: restoration.sourceId,
-      rawPayload: { path: ['restoration_admission', 'policy'], equals: policyKey(restoration) },
-    },
-  }
-}
-
 /** Bounded worker used by the existing Vercel five-minute job runner. */
 export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: string; documentId: string }) {
-  // Receipt and document metadata queueing remain enabled during repair.
-  const restoration = readRestorationPolicy()
-  if (restoration && !exact && process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true') return {attempted:0,imported:0,failed:0,skipped:0}
-  let scope: Prisma.ExternalDocumentImportWhereInput
-  if (exact) {
-    if (!restoration) throw new Error('Restoration policy required for one-case execution.')
-    scope = await exactAdmittedScope(restoration, exact)
-  } else {
-    const cohort = selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true')
-    if (!restoration && process.env.SCS_IMPORT_REQUIRE_COHORT === 'true' && cohort === undefined) throw Error('Execution cohort required');
-    if (cohort === null) return { attempted: 0, imported: 0, failed: 0, skipped: 0 }
-    if (cohort && (!cohort.organizationId || !cohort.sourceId)) throw Error('Organization and source required')
-    scope = cohort ? { organizationId: cohort.organizationId, intakeSubmission: { sourceId: cohort.sourceId }, OR: cohort.cases.map(x => ({ sourceLeadId: x.leadId, sourceDocumentId: { in: x.documentIds } })) } : {}
-  }
-  if (restoration && !exact) {
-    const prior = {...scope}
-    Object.keys(scope).forEach(k => delete (scope as Record<string,unknown>)[k])
-    scope.AND = [prior,{organizationId:restoration.organizationId,sourceLeadId:{notIn:restoration.excludedCaseIds},sourceDocumentId:{notIn:restoration.excludedDocumentIds},
-      intakeSubmission:{sourceId:restoration.sourceId,rawPayload:{path:['restoration_admission','policy'],equals:policyKey(restoration)}}}]
-  }
+  const cohort = selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true', exact)
+  if (process.env.SCS_IMPORT_REQUIRE_COHORT === 'true' && cohort === undefined) throw Error('Execution cohort required')
+  if (cohort === null) return { attempted: 0, imported: 0, failed: 0, skipped: 0 }
+  if (cohort && (!cohort.organizationId || !cohort.sourceId)) throw Error('Organization and source required')
+  const scope: Prisma.ExternalDocumentImportWhereInput = cohort
+    ? {
+        organizationId: cohort.organizationId,
+        intakeSubmission: { sourceId: cohort.sourceId },
+        OR: cohort.cases.map(x => ({ sourceLeadId: x.leadId, sourceDocumentId: { in: x.documentIds } })),
+      }
+    : {}
   // Older than the maximum serverless invocation: reclaim only abandoned
   // claims. Exhausted work remains FAILED and requires an explicit decision.
   await db.externalDocumentImport.updateMany({
@@ -325,7 +255,7 @@ export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: 
     data: { status: 'FAILED', lastError: 'Import worker interrupted; bounded retry pending.' },
   })
   const rows = await db.externalDocumentImport.findMany({
-    where: { ...scope, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS }, NOT: {AND:[{lastError:{not:null}},{lastError:{startsWith:'RESTORATION HOLD:'}}]} },
+    where: { ...scope, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
     // New customer uploads are time-sensitive. Prioritize fresh documents and
     // newest first-attempt work; failed rows remain retryable behind it.
     orderBy: [{ attempts: 'asc' }, { createdAt: 'desc' }],
@@ -335,7 +265,6 @@ export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: 
   const result = { attempted: rows.length, imported: 0, failed: 0, skipped: 0 }
   for (const row of rows) {
     if (!exact && selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true') === null) break
-    if (restoration && policyKey(readRestorationPolicy()!) !== policyKey(restoration)) throw Error('Restoration policy changed')
     const outcome = await importOne(row.id, scope)
     if (outcome === 'imported') result.imported++
     else if (outcome === 'failed') result.failed++

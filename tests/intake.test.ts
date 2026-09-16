@@ -127,6 +127,7 @@ describe('intake apply pipeline (db)', () => {
   let inboundTeam: Team
   let webSource: IntakeSource
   let sheetSource: IntakeSource
+  let scsSource: IntakeSource
 
   beforeAll(async () => {
     org = await db.organization.create({
@@ -163,6 +164,18 @@ describe('intake apply pipeline (db)', () => {
         dedupeKeys: ['email', 'phone'],
         sheetId: 'mock-sheet-test',
         sheetTab: 'Leads',
+      },
+    })
+    scsSource = await db.intakeSource.create({
+      data: {
+        organizationId: org.id,
+        kind: 'WEB_FORM',
+        name: 'Test SCS handoff',
+        slug: 'scs-website',
+        authMode: 'TOKEN',
+        secretHash: hashIntakeSecret('scs-test-token'),
+        fieldMapping: { firstName: 'first_name', lastName: 'last_name', email: 'email', phone: 'phone' },
+        dedupeKeys: ['email', 'phone'],
       },
     })
   })
@@ -343,6 +356,40 @@ describe('intake apply pipeline (db)', () => {
     expect(missing.status).toBe(401)
     const unknown = await call(`no-such-slug-${suffix}`, body, signRawBody(secretHash, body))
     expect(unknown.status).toBe(404)
+  })
+
+  it('accepts a normal authenticated SCS receipt without a restoration admission and keeps one case binding', async () => {
+    const leadId = '11111111-1111-4111-8111-111111111111'
+    const packet = (deliveryId: string, email: string) => JSON.stringify({
+      id: deliveryId,
+      lead_id: leadId,
+      first_name: 'Mira',
+      last_name: 'Testley',
+      email,
+      phone: '702-555-0191',
+      data: {
+        schema_version: 'schema_42.v1',
+        stage1_answers: { first_name: 'Mira', last_name: 'Testley', email, phone: '702-555-0191', zip: '89101' },
+        documents: { files: [] },
+      },
+    })
+    const call = (body: string) => webhookPost(
+      new Request('http://localhost/api/intake/scs-website', {
+        method: 'POST', body, headers: { 'x-connector-token': 'scs-test-token' },
+      }) as never,
+      { params: Promise.resolve({ slug: scsSource.slug }) },
+    )
+
+    const first = await call(packet('delivery-a', `mira.${suffix}@example.test`))
+    const firstJson = (await first.json()) as { clientId: string }
+    const refreshed = await call(packet('delivery-b', `mira.updated.${suffix}@example.test`))
+    const refreshedJson = (await refreshed.json()) as { clientId: string }
+
+    expect(first.status).toBe(200)
+    expect(refreshed.status).toBe(200)
+    expect(refreshedJson.clientId).toBe(firstJson.clientId)
+    expect(await db.intakeSubmission.count({ where: { sourceId: scsSource.id, externalId: `scs:${leadId}` } })).toBe(1)
+    expect(await db.client.count({ where: { organizationId: org.id, id: firstJson.clientId } })).toBe(1)
   })
 
   it('syncs sheet rows through the same pipeline, advances the cursor, and re-syncs as a no-op', async () => {

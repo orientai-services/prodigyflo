@@ -42,7 +42,6 @@ vi.mock('./scs-document-requirements', () => ({ scsRequirementId: mocks.scsRequi
 
 import { db } from '@/lib/db'
 import { queueScsDocumentImports, runPendingScsDocumentExtractions, runPendingScsDocumentImports } from './scs-document-import'
-import { policyKey } from './restoration-policy'
 
 const bytes = Buffer.from('%PDF-1.4\nQA document\n')
 const checksum = sha256(bytes)
@@ -96,6 +95,9 @@ describe('runPendingScsDocumentImports', () => {
     vi.unstubAllGlobals()
     delete process.env.SCS_DOCUMENT_EXPORT_BASE_URL
     delete process.env.SCS_DOCUMENT_EXPORT_TOKEN
+    delete process.env.SCS_DOCUMENT_IMPORTS_PAUSED
+    delete process.env.SCS_IMPORT_EXECUTION_COHORT
+    delete process.env.SCS_IMPORT_REQUIRE_COHORT
   })
 
   it('atomically persists a document, ledger update, and audit event with one generated ID', async () => {
@@ -144,33 +146,17 @@ describe('runPendingScsDocumentImports', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('imports one admitted post-cutoff case while the normal worker remains paused', async () => {
+  it('imports one cohort-approved case while the normal worker remains paused', async () => {
     const leadId = '11111111-1111-4111-8111-111111111111'
     const documentId = '22222222-2222-4222-8222-222222222222'
-    const policy = {
-      version: 1 as const,
-      id: 'one-case-test',
-      cutoff: new Date(Date.now() - 60_000).toISOString(),
+    process.env.SCS_DOCUMENT_IMPORTS_PAUSED = 'true'
+    process.env.SCS_IMPORT_EXECUTION_COHORT = JSON.stringify({
+      mode: 'synthetic',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       organizationId: row.organizationId,
       sourceId: 'scs_source_1',
-      excludedCaseIds: [],
-      excludedDocumentIds: [],
-      excludedChecksums: [],
-    }
-    process.env.SCS_DOCUMENT_IMPORTS_PAUSED = 'true'
-    process.env.SCS_RESTORATION_POLICY = JSON.stringify(policy)
-    mocks.importFindFirst
-      .mockResolvedValueOnce({
-        intakeSubmission: {
-          rawPayload: {
-            restoration_admission: {
-              policy: policyKey(policy), caseId: leadId, intakeAt: new Date().toISOString(),
-            },
-          },
-        },
-      })
-      .mockResolvedValueOnce(null)
+      cases: [{ leadId, documentIds: [documentId] }],
+    })
     mocks.importFindUnique.mockResolvedValue({ ...row, sourceLeadId: leadId, sourceDocumentId: documentId })
     ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(bytes, {
       headers: {
@@ -182,8 +168,21 @@ describe('runPendingScsDocumentImports', () => {
     await expect(runPendingScsDocumentImports()).resolves.toEqual({ attempted: 0, imported: 0, failed: 0, skipped: 0 })
     await expect(runPendingScsDocumentImports(1, { leadId, documentId })).resolves.toEqual({ attempted: 1, imported: 1, failed: 0, skipped: 0 })
     expect(mocks.importFindMany).toHaveBeenLastCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ organizationId: row.organizationId, sourceLeadId: leadId, sourceDocumentId: documentId }),
+      where: expect.objectContaining({
+        organizationId: row.organizationId,
+        OR: [{ sourceLeadId: leadId, sourceDocumentId: { in: [documentId] } }],
+      }),
       take: 1,
+    }))
+  })
+
+  it('never selects archived imports for a normal worker run', async () => {
+    mocks.importFindMany.mockResolvedValueOnce([])
+
+    await expect(runPendingScsDocumentImports()).resolves.toEqual({ attempted: 0, imported: 0, failed: 0, skipped: 0 })
+
+    expect(mocks.importFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: { in: ['PENDING', 'FAILED'] } }),
     }))
   })
 

@@ -1,4 +1,3 @@
-import { readRestorationPolicy, validAdmission, validLegacyIntakeTransition } from '@/lib/intake/restoration-policy'
 import { readCohort } from '@/lib/intake/cohort'
 import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
@@ -82,21 +81,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const stableScsLeadId = source.slug === 'scs-website' && isSchema42Payload(payload)
     ? scsLeadId(payload)
     : null
-  if (source.slug === 'scs-website') {
-    try {
-      const p = readRestorationPolicy();
-      if (p && (source.organizationId !== p.organizationId || source.id !== p.sourceId || !stableScsLeadId ||
-          !validAdmission(p,(payload as Record<string, unknown>).restoration_admission,stableScsLeadId))) {
-        return Response.json({error:'Restoration hold: case is not admitted.'},{status:409})
-      }
-      if (p && stableScsLeadId) {
-        const prior = await db.intakeSubmission.findUnique({where:{sourceId_externalId:{sourceId:source.id,externalId:'scs:'+stableScsLeadId}},select:{rawPayload:true}})
-        const admission = (prior?.rawPayload as Record<string,unknown> | undefined)?.restoration_admission
-        const intakeAt = ((payload as Record<string,unknown>).restoration_admission as Record<string,unknown> | undefined)?.intakeAt
-        if (admission && !validAdmission(p,admission,stableScsLeadId) && !validLegacyIntakeTransition(p,admission,stableScsLeadId,intakeAt)) return Response.json({error:'Restoration hold: existing admission differs.'},{status:409})
-      }
-    } catch { return Response.json({error:'Restoration policy unavailable; source must retain work.'},{status:503}) }
-  }
   delete (payload as Record<string, unknown>).stage0_synthetic
   let control: ReturnType<typeof readCohort>
   try { control=readCohort(process.env.SCS_IMPORT_EXECUTION_COHORT) } catch { /* expired execution never blocks durable receipt */ }
