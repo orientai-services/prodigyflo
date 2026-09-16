@@ -100,6 +100,13 @@ describe('navigationFor', () => {
     expect(src).toContain('PipelineBoard')
   })
 
+  it('client profile is the Daily Desk case file, not CRM tabs or Call', () => {
+    const src = readFileSync(path.join(APP_DIR, 'clients', '[clientId]', 'page.tsx'), 'utf8')
+    expect(src).toContain('CaseFileView')
+    expect(src).not.toContain('LogCallButton')
+    expect(src).not.toContain('TAB_KEYS')
+  })
+
   it('keeps Sales, Marketing, Inbox, Attorney, Reports, Agency, and Users off the rail', () => {
     const everything = fixtureUser({
       isOwner: true,
