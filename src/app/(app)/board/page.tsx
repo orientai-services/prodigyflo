@@ -1,5 +1,8 @@
-import Link from 'next/link'
-import { PipelineBoard } from './pipeline-board'
+import { redirect } from 'next/navigation'
+import { requireUser } from '@/lib/rbac'
+import { canReadDesk, loadDeskBoard } from '@/lib/daily-desk-data'
+import { shiftMonth } from '@/lib/daily-desk'
+import { DeskCalendar } from './desk-calendar'
 
 export const metadata = { title: 'Board' }
 
@@ -8,19 +11,21 @@ export default async function BoardPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const user = await requireUser()
+  if (!canReadDesk(user)) redirect('/forbidden')
+
+  const params = await searchParams
+  const month = typeof params.month === 'string' ? params.month : undefined
+  const board = await loadDeskBoard(user, month)
+  const prev = shiftMonth(board.month, -1)
+  const next = shiftMonth(board.month, 1)
+
   return (
-    <PipelineBoard
-      searchParams={searchParams}
-      title="Board"
-      notice={
-        <p className="text-muted-foreground px-4 sm:px-6 -mt-2 mb-4 text-sm">
-          Pipeline kanban also lives at{' '}
-          <Link href="/pipeline" className="text-foreground underline-offset-4 hover:underline">
-            /pipeline
-          </Link>
-          . This page stays the kanban until the Daily Desk calendar lands.
-        </p>
-      }
+    <DeskCalendar
+      board={board}
+      prevHref={`/board?month=${prev}`}
+      nextHref={`/board?month=${next}`}
+      todayHref="/board"
     />
   )
 }

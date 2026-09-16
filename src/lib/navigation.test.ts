@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SUBROUTES, navigationFor, subroutesFor } from '@/lib/navigation'
@@ -87,6 +87,17 @@ describe('navigationFor', () => {
   it('staff Daily rail is Board, Pipeline, Clients, Queue, Engine, Document lab, CYS', () => {
     const everything = fixtureUser({ permissions: ALL_PERMISSIONS })
     expect(hrefsOf(everything)).toEqual(DAILY_RAIL)
+  })
+
+  it('/board is the desk calendar, not the pipeline kanban', () => {
+    const src = readFileSync(path.join(APP_DIR, 'board', 'page.tsx'), 'utf8')
+    expect(src).toContain('DeskCalendar')
+    expect(src).not.toContain('PipelineBoard')
+  })
+
+  it('/pipeline still mounts the kanban', () => {
+    const src = readFileSync(path.join(APP_DIR, 'pipeline', 'page.tsx'), 'utf8')
+    expect(src).toContain('PipelineBoard')
   })
 
   it('keeps Sales, Marketing, Inbox, Attorney, Reports, Agency, and Users off the rail', () => {

@@ -21,8 +21,8 @@ const CLIENT_READ: PermissionKey[] = [
 ]
 
 /**
- * Shared kanban for /board and /pipeline. Same actions, same store.
- * /board keeps this until M2b lands the calendar.
+ * Pipeline kanban. /pipeline is the money-card board; /board is the Daily Desk calendar.
+ * Same moveCardAction store.
  */
 export async function PipelineBoard({
   searchParams,

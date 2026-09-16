@@ -74,7 +74,10 @@ export async function applyCloserAction(raw: unknown): Promise<ApplyAssignmentRe
   const user = await requireUser()
   try {
     const result = await applyAssignment(user, parsed.data)
-    if (result.ok) revalidatePath(`/clients/${parsed.data.clientId}`)
+    if (result.ok) {
+      revalidatePath(`/clients/${parsed.data.clientId}`)
+      revalidatePath('/board')
+    }
     return result
   } catch (err) {
     if (err instanceof ForbiddenError) return { ok: false, error: err.message }
