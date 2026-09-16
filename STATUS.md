@@ -8,9 +8,12 @@ How to maintain it: move items between `OPEN` / `IN PROGRESS` / `CLOSED`, add a 
 the Change log, and keep `Last updated` current. Do not delete closed items for at least a
 release — the record of what was fixed is the point.
 
-**Last updated:** 2026-09-10
-**Deployed:** `scs-intake-42.vercel.app` · `prodigyflo-42.vercel.app`
-(Vercel team OrientAI, production branch `main`, push-to-deploy live)
+**Last updated:** 2026-09-16
+**Canonical map:** `docs/CANONICAL.md` — run `npm run check:canonical` before edits.
+**GitHub `main`:** SCS `f541684` · ProdigyFlo `1c0c64e` (stage 0 restoration policy retired)
+**Deployed:** Vercel `scs-intake-42` → `solarcontractservices.com` · `prodigyflo-42` → `prodigyflo.ai`
+(Vercel team OrientAI / `iorient-ai`, production branch `main`, push-to-deploy live)
+**Canonical checkouts:** `/Users/dakotahanshew/Developer/SCS/scsintake` · `/Users/dakotahanshew/Developer/products/ProdigyFlo/prodigyflo-42`
 **Databases:** Supabase org SCS (Pro) — `vspmjtdwlcqfclkgksel` us-east-1 (SCS),
 `acgmcenrbwabmpxzgwqb` us-west-2 (ProdigyFlo)
 **Revert point:** tag `pre-advisory-reframe` in both repos
@@ -159,6 +162,9 @@ Nothing mid-flight. The mirror and the reframe are both shipped.
 
 ## Change log
 
+- **2026-09-16** — Stage 0 restoration policy retired on production. GitHub `main`
+  matches live. Canonical map and `check:canonical` added so work stays on
+  `orientai-services` + `scs-intake-42` / `prodigyflo-42`.
 - **2026-09-10** — Mirror shipped, journey reframed to advocacy/introduction, consent
   corrected, per-field confirmation of machine-read values enforced. B2 closed.
 - **2026-09-10** — File created after the Vercel + Supabase migration and the first successful
