@@ -165,6 +165,10 @@ Nothing mid-flight. The mirror and the reframe are both shipped.
 
 ## Change log
 
+- **2026-09-15** — SCS public-record packet kinds (`public_record_deed`,
+  `public_record_permit`, `public_record_lien`, `public_record_ucc`,
+  `public_record_property`) map onto the existing ownership / permits / lien
+  upload areas so a republish files them on the case.
 - **2026-09-16** — Contact-first companion on `dakota/scs-contact-first`.
   `lead.received` packets with empty documents keep one Client. Client list
   shows derived Incomplete intake vs Assignable for SCS cases.
