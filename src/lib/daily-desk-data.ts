@@ -2,6 +2,7 @@ import 'server-only'
 import { AppointmentStatus, DocumentStatus } from '@prisma/client'
 import { db } from '@/lib/db'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
+import { deskVisibleClientWhere } from '@/lib/intake/scs-desk'
 import {
   DESK_TIMEZONE,
   civilDate,
@@ -60,7 +61,7 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
       orderBy: { name: 'asc' },
     }),
     db.client.findMany({
-      where: { AND: [clientScope(user), { status: 'ACTIVE', deletedAt: null }] },
+      where: { AND: [clientScope(user), deskVisibleClientWhere(), { status: 'ACTIVE', deletedAt: null }] },
       orderBy: { lastActivityAt: 'desc' },
       take: 600,
       select: {

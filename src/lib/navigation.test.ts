@@ -130,6 +130,18 @@ describe('navigationFor', () => {
     expect(src).not.toContain('currency(')
   })
 
+  it('Board, Clients, Queue, and Pipeline loaders hide non-SCS clients', () => {
+    const files = [
+      readFileSync(path.join(APP_DIR, 'clients', 'page.tsx'), 'utf8'),
+      readFileSync(path.join(APP_DIR, 'board', 'pipeline-board.tsx'), 'utf8'),
+      readFileSync(path.resolve(__dirname, 'daily-desk-data.ts'), 'utf8'),
+      readFileSync(path.resolve(__dirname, 'daily-desk-queue-data.ts'), 'utf8'),
+    ]
+    for (const src of files) {
+      expect(src).toContain('deskVisibleClientWhere')
+    }
+  })
+
   it('Clients, Engine, Document lab, and CYS use Daily Desk chrome, not PageHeader', () => {
     for (const rel of ['clients/page.tsx', 'engine/page.tsx', 'documents/page.tsx', 'submissions/page.tsx']) {
       const src = readFileSync(path.join(APP_DIR, rel), 'utf8')

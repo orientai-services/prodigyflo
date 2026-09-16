@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { can, canAny, clientScope, requireUser } from '@/lib/rbac'
+import { deskVisibleClientWhere } from '@/lib/intake/scs-desk'
 import type { PermissionKey } from '@/lib/permissions'
 import { CATEGORY_LABELS, CATEGORY_STYLES } from '@/lib/pipeline'
 import { fullName } from '@/lib/format'
@@ -45,6 +46,7 @@ export async function PipelineBoard({
 
   const filters: Prisma.ClientWhereInput[] = [
     clientScope(user),
+    deskVisibleClientWhere(),
     { status: 'ACTIVE' },
     { currentStage: { isTerminal: false } },
   ]

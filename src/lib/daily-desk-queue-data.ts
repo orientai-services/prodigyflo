@@ -1,6 +1,7 @@
 import 'server-only'
 import { db } from '@/lib/db'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
+import { deskVisibleClientWhere } from '@/lib/intake/scs-desk'
 import { loadDefinitions } from '@/lib/cys/data'
 import { approvalBlockers } from '@/lib/cys/readiness'
 import { CASE_DOC_KINDS, matchDocKind } from '@/lib/daily-desk-docs'
@@ -44,7 +45,7 @@ export async function loadDeskQueue(user: SessionUser): Promise<DeskQueue> {
   const now = new Date()
   const [clients, requirements, definitions, closers] = await Promise.all([
     db.client.findMany({
-      where: { AND: [clientScope(user), { status: 'ACTIVE', deletedAt: null }] },
+      where: { AND: [clientScope(user), deskVisibleClientWhere(), { status: 'ACTIVE', deletedAt: null }] },
       orderBy: { lastActivityAt: 'desc' },
       take: 400,
       select: {
