@@ -15,8 +15,19 @@ export const SCS_DOCUMENT_REQUIREMENTS = [
 
 const MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/webp']
 
+/** Packet worker files as public_record_<kind>; fold them into the same upload areas. */
+const PACKET_SOURCE_TYPES: Record<string, (typeof SCS_DOCUMENT_REQUIREMENTS)[number]['sourceType']> = {
+  public_record_deed: 'ownership',
+  public_record_property: 'ownership',
+  public_record_permit: 'permits',
+  public_record_lien: 'lien_filing',
+  public_record_ucc: 'lien_filing',
+}
+
 export function scsRequirementFor(sourceType: string | null | undefined) {
-  return SCS_DOCUMENT_REQUIREMENTS.find((requirement) => requirement.sourceType === sourceType) ?? null
+  if (!sourceType) return null
+  const canonical = PACKET_SOURCE_TYPES[sourceType] ?? sourceType
+  return SCS_DOCUMENT_REQUIREMENTS.find((requirement) => requirement.sourceType === canonical) ?? null
 }
 
 /**
