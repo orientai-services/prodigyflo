@@ -26,11 +26,14 @@ function uniqueViolation(error: unknown): boolean {
 // A deployment may override this only when it intentionally has a different
 // shared workspace. Do not accept a workspace identifier from the browser.
 const DEFAULT_PUBLIC_SIGNUP_WORKSPACE_SLUG = 'prodigyflo'
-const PUBLIC_SIGNUP_ROLE = RoleKey.ADMIN
+// Defense in depth: even if ALLOW_SELF_SIGNUP is left on, a stranger must not
+// land as Admin. Invite flow is how staff get real roles.
+const PUBLIC_SIGNUP_ROLE = RoleKey.DOCUMENT_COLLECTOR
 
 /**
- * Public signup joins a new Admin to the configured shared workspace. The
- * account is never an owner and cannot create a separate tenant from this flow.
+ * Public signup joins a new Document Collector to the configured shared
+ * workspace. The account is never an owner and cannot create a separate tenant.
+ * Production should keep ALLOW_SELF_SIGNUP unset or false.
  */
 export async function signupAction(_prev: SignupState, formData: FormData): Promise<SignupState> {
   if (process.env.ALLOW_SELF_SIGNUP !== 'true') {
