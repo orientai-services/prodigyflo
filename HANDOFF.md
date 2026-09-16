@@ -1,15 +1,19 @@
 # Handoff — SCS Intake + ProdigyFlo
 
+**The table below is stale.** Production identity is
+[`docs/CANONICAL.md`](docs/CANONICAL.md): GitHub
+`orientai-services/scs-intake` and `orientai-services/prodigyflo`, branch
+`main`, Vercel `scs-intake-42` / `prodigyflo-42`. Ignore `lxrdgatsby/*` remotes
+in this file. Run `npm run check:canonical` before any production change.
+
 These are **two separate Next.js apps**. Clone them independently. Do not merge the repos. Do not copy folders off the previous Mac — those trees have secrets, `node_modules`, and a machine-local Postgres.
 
-**GitHub is the source of truth.**
+**GitHub is the source of truth.** (historical table — do not follow)
 
 | App | Repo | Branch to use | Local port |
 |---|---|---|---|
-| SCS Intake (homeowner funnel) | https://github.com/lxrdgatsby/scs-intake | `feat/schema-42-journey` | 3000 |
-| ProdigyFlo (ops CRM) | https://github.com/lxrdgatsby/prodigyflo | `feat/schema-42-packet` | 3001 |
-
-`dakotahanshew` has write access on both. Do not push to `main`.
+| SCS Intake (homeowner funnel) | ~~https://github.com/lxrdgatsby/scs-intake~~ → `orientai-services/scs-intake` | `main` | 3000 |
+| ProdigyFlo (ops CRM) | ~~https://github.com/lxrdgatsby/prodigyflo~~ → `orientai-services/prodigyflo` | `main` | 3001 |
 
 ---
 
