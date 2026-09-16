@@ -14,6 +14,7 @@ import { SavedFilters, type SavedFilterChip } from './saved-filters'
 import { canDeleteSavedFilter, savedFilterVisibleWhere } from '@/lib/reporting'
 import { currency, fullName, relativeTime } from '@/lib/format'
 import { DEFAULT_STAGES } from '@/lib/pipeline'
+import { scsReadiness, scsReadinessLabel } from '@/lib/intake/scs-readiness'
 
 export const metadata = { title: 'Clients' }
 
@@ -79,6 +80,11 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
         team: { select: { name: true } },
         currentStage: { select: { key: true, name: true, category: true, slaHours: true } },
         leadSource: { select: { name: true } },
+        intakeSubmissions: {
+          where: { source: { slug: 'scs-website' } },
+          select: { id: true },
+          take: 1,
+        },
       },
     }),
     db.client.count({ where }),
@@ -115,6 +121,19 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
   const showBulk = canReassign || canBulkStage || canBulkNote
   const ownerOptions = owners.map((o) => ({ value: o.id, label: o.name }))
   const pageIds = clients.map((c) => c.id)
+  const scsIds = clients.filter((c) => c.intakeSubmissions.length > 0).map((c) => c.id)
+  const scsImports = scsIds.length
+    ? await db.externalDocumentImport.findMany({
+        where: { clientId: { in: scsIds } },
+        select: { clientId: true, sourceDocumentType: true, status: true },
+      })
+    : []
+  const importsByClient = new Map<string, typeof scsImports>()
+  for (const row of scsImports) {
+    const list = importsByClient.get(row.clientId) ?? []
+    list.push(row)
+    importsByClient.set(row.clientId, list)
+  }
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const exportHref = `/api/clients/export?${new URLSearchParams(
@@ -185,7 +204,12 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
                 </tr>
               </thead>
               <tbody>
-                {clients.map((c) => (
+                {clients.map((c) => {
+                  const readiness = scsReadiness({
+                    hasScsIntake: c.intakeSubmissions.length > 0,
+                    imports: importsByClient.get(c.id) ?? [],
+                  })
+                  return (
                   <tr key={c.id} className="hover:bg-muted/40 border-b transition-colors">
                     {showBulk && (
                       <td className="px-4 py-2.5">
@@ -197,6 +221,11 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
                         <span className="font-medium">{fullName(c)}</span>
                         <span className="text-muted-foreground block truncate text-xs">{c.email}</span>
                       </Link>
+                      {readiness && (
+                        <span className="text-muted-foreground mt-1 inline-block text-[11px] tracking-wide uppercase">
+                          {scsReadinessLabel(readiness)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5">
                       <StageBadge
@@ -222,7 +251,8 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
                       {relativeTime(c.lastActivityAt)}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

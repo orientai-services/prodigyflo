@@ -165,6 +165,9 @@ Nothing mid-flight. The mirror and the reframe are both shipped.
 
 ## Change log
 
+- **2026-09-16** — Contact-first companion on `dakota/scs-contact-first`.
+  `lead.received` packets with empty documents keep one Client. Client list
+  shows derived Incomplete intake vs Assignable for SCS cases.
 - **2026-09-16** — Live source is GitHub `main` (`6761220` / `7fd8b36`) on
   `dpl_CQBxG9xApXYAGAyX1cuJVsyBWEUx` and `dpl_8u6BreVH9TsZCUdC9Wy18CchakCB`.
   Restoration policy retired; five historical SCS→PF deliveries archived

@@ -360,9 +360,10 @@ describe('intake apply pipeline (db)', () => {
 
   it('accepts a normal authenticated SCS receipt without a restoration admission and keeps one case binding', async () => {
     const leadId = '11111111-1111-4111-8111-111111111111'
-    const packet = (deliveryId: string, email: string) => JSON.stringify({
+    const packet = (deliveryId: string, email: string, eventType = 'lead.received') => JSON.stringify({
       id: deliveryId,
       lead_id: leadId,
+      event_type: eventType,
       first_name: 'Mira',
       last_name: 'Testley',
       email,
