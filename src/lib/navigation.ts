@@ -18,92 +18,28 @@ export type NavItem = {
 
 export type NavSection = { title: string; items: NavItem[] }
 
+const CLIENT_READ: PermissionKey[] = [
+  'clients:read_assigned',
+  'clients:read_team',
+  'clients:read_region',
+  'clients:read_all',
+]
+
 /**
- * Every entry here must point at a route that exists and that the listed
- * permission actually opens — a nav item the user can click into a 404 or a
- * /forbidden bounce is worse than no nav item. P1+ destinations (pipeline board,
- * performance, marketing, client portal) are added when those routes ship.
+ * Daily Desk rail. Every href must exist. Routes taken off the rail stay
+ * mounted and appear in SUBROUTES (⌘K) so bookmarks and the palette still work.
  */
 const SECTIONS: NavSection[] = [
   {
-    title: 'Work',
+    title: 'Desk',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard', anyOf: ['analytics:org'] },
-      { href: '/engine', label: 'Prodigy Engine', icon: 'Sparkles', anyOf: ['ai:review'] },
-      { href: '/inbox', label: 'Inbox', icon: 'Inbox', anyOf: ['communications:read'] },
-      { href: '/inbound', label: 'Inbound', icon: 'DownloadCloud', anyOf: ['connectors:read'] },
-      { href: '/notifications', label: 'Notifications', icon: 'Bell' },
-    ],
-  },
-  {
-    title: 'Sales',
-    items: [
-      {
-        href: '/sales',
-        label: 'Sales command',
-        icon: 'Target',
-        anyOf: ['analytics:self', 'analytics:team', 'analytics:region', 'analytics:org'],
-      },
-      {
-        href: '/board',
-        label: 'Pipeline board',
-        icon: 'Columns3',
-        anyOf: ['clients:read_assigned', 'clients:read_team', 'clients:read_region', 'clients:read_all'],
-      },
-      {
-        href: '/performance',
-        label: 'Scoreboard',
-        icon: 'Trophy',
-        anyOf: ['analytics:self', 'analytics:team', 'analytics:region', 'analytics:org'],
-      },
-    ],
-  },
-  {
-    title: 'Marketing',
-    items: [
-      { href: '/marketing', label: 'Overview', icon: 'Megaphone', anyOf: ['analytics:marketing'], exact: true },
-      { href: '/marketing/sources', label: 'Lead sources', icon: 'Radar', anyOf: ['analytics:marketing'] },
-      { href: '/marketing/meta', label: 'Meta Ads', icon: 'Facebook', anyOf: ['connectors:read'] },
-      { href: '/marketing/analytics', label: 'Attribution & forecast', icon: 'ChartSpline', anyOf: ['analytics:marketing'] },
-    ],
-  },
-  {
-    title: 'Clients',
-    items: [
-      {
-        href: '/clients',
-        label: 'All clients',
-        icon: 'Users',
-        anyOf: ['clients:read_assigned', 'clients:read_team', 'clients:read_region', 'clients:read_all'],
-      },
-      { href: '/documents', label: 'Document review', icon: 'FileText', anyOf: ['documents:review'] },
-      { href: '/attorney', label: 'Attorney review', icon: 'Scale', anyOf: ['submissions:prepare'] },
-      { href: '/submissions', label: 'Submissions', icon: 'Send', anyOf: ['submissions:read'] },
-    ],
-  },
-  {
-    title: 'Insight',
-    items: [
-      { href: '/reports', label: 'Reports', icon: 'BarChart3', anyOf: ['analytics:team', 'analytics:region', 'analytics:org'] },
-    ],
-  },
-  {
-    title: 'Setup',
-    items: [
-      { href: '/settings/profile', label: 'My profile', icon: 'UserRound' },
-      { href: '/settings/users', label: 'Users & access', icon: 'UserCog', anyOf: ['users:read'] },
-      { href: '/agency', label: 'Agency accounts', icon: 'Building2', anyOf: ['users:manage'], agencyOnly: true },
-      { href: '/settings/sequences', label: 'Sequences', icon: 'Workflow', anyOf: ['connectors:read'] },
-      { href: '/settings/phone-numbers', label: 'Phone numbers', icon: 'Phone', anyOf: ['telephony:read'] },
-      { href: '/settings/connectors', label: 'Connectors', icon: 'Blocks', anyOf: ['connectors:read'] },
-      { href: '/settings/intake', label: 'Intake sources', icon: 'Plug', anyOf: ['connectors:read'] },
-      { href: '/settings/templates', label: 'Message templates', icon: 'MessageSquare', anyOf: ['connectors:manage'] },
-      { href: '/settings/cys', label: 'CYS field map', icon: 'ListChecks', anyOf: ['submissions:prepare'] },
-      // Planning boards and their report index are not in this deployment, so
-      // the entry that pointed at /settings/progress is withdrawn rather than
-      // left linking at a 404. Individual reports remain reachable directly at
-      // /settings/progress/<report>. Restore this when the boards land.
-      { href: '/settings/deploy', label: 'Deployments', icon: 'Rocket', ownerOnly: true },
+      { href: '/board', label: 'Board', icon: 'LayoutDashboard', anyOf: CLIENT_READ },
+      { href: '/pipeline', label: 'Pipeline', icon: 'Columns3', anyOf: CLIENT_READ },
+      { href: '/clients', label: 'Clients', icon: 'Users', anyOf: CLIENT_READ },
+      { href: '/queue', label: 'Queue', icon: 'ListTodo', anyOf: CLIENT_READ },
+      { href: '/engine', label: 'Engine', icon: 'Sparkles', anyOf: ['ai:review'] },
+      { href: '/documents', label: 'Document lab', icon: 'FileText', anyOf: ['documents:review'] },
+      { href: '/submissions', label: 'CYS', icon: 'Send', anyOf: ['submissions:read'] },
     ],
   },
 ]
@@ -120,6 +56,24 @@ const REPORT_ANALYTICS: PermissionKey[] = ['analytics:team', 'analytics:region',
  * against the filesystem) and anyOf must mirror the page's actual gate.
  */
 export const SUBROUTES: NavItem[] = [
+  { href: '/inbox', label: 'Inbox', icon: 'Inbox', anyOf: ['communications:read'] },
+  { href: '/inbound', label: 'Inbound', icon: 'DownloadCloud', anyOf: ['connectors:read'] },
+  { href: '/sales', label: 'Sales command', icon: 'Target', anyOf: SALES_ANALYTICS },
+  { href: '/performance', label: 'Scoreboard', icon: 'Trophy', anyOf: SALES_ANALYTICS },
+  { href: '/marketing', label: 'Marketing overview', icon: 'Megaphone', anyOf: ['analytics:marketing'] },
+  { href: '/marketing/sources', label: 'Lead sources', icon: 'Radar', anyOf: ['analytics:marketing'] },
+  { href: '/marketing/meta', label: 'Meta Ads', icon: 'Facebook', anyOf: ['connectors:read'] },
+  { href: '/marketing/analytics', label: 'Attribution & forecast', icon: 'ChartSpline', anyOf: ['analytics:marketing'] },
+  { href: '/attorney', label: 'Attorney review', icon: 'Scale', anyOf: ['submissions:prepare'] },
+  { href: '/reports', label: 'Reports', icon: 'BarChart3', anyOf: REPORT_ANALYTICS },
+  { href: '/settings/users', label: 'Users & access', icon: 'UserCog', anyOf: ['users:read'] },
+  { href: '/agency', label: 'Agency accounts', icon: 'Building2', anyOf: ['users:manage'], agencyOnly: true },
+  { href: '/settings/sequences', label: 'Sequences', icon: 'Workflow', anyOf: ['connectors:read'] },
+  { href: '/settings/phone-numbers', label: 'Phone numbers', icon: 'Phone', anyOf: ['telephony:read'] },
+  { href: '/settings/connectors', label: 'Connectors', icon: 'Blocks', anyOf: ['connectors:read'] },
+  { href: '/settings/intake', label: 'Intake sources', icon: 'Plug', anyOf: ['connectors:read'] },
+  { href: '/settings/templates', label: 'Message templates', icon: 'MessageSquare', anyOf: ['connectors:manage'] },
+  { href: '/settings/cys', label: 'CYS field map', icon: 'ListChecks', anyOf: ['submissions:prepare'] },
   { href: '/sales/huddle', label: 'Daily huddle', icon: 'Sunrise', anyOf: SALES_ANALYTICS },
   { href: '/sales/hot-leads', label: 'Hot leads', icon: 'Flame', anyOf: SALES_ANALYTICS },
   { href: '/sales/qualifier', label: 'Qualifier queue', icon: 'ClipboardCheck', anyOf: ['qualification:review'] },

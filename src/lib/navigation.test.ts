@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { SUBROUTES, navigationFor } from '@/lib/navigation'
-import { PERMISSIONS, type PermissionKey } from '@/lib/permissions'
+import { SUBROUTES, navigationFor, subroutesFor } from '@/lib/navigation'
+import { PERMISSIONS, homeFor, type PermissionKey } from '@/lib/permissions'
 import type { SessionUser } from '@/lib/rbac'
 
 const APP_DIR = path.resolve(__dirname, '../app/(app)')
@@ -42,6 +42,13 @@ function hrefsOf(user: SessionUser): string[] {
   return navigationFor(user).flatMap((s) => s.items.map((i) => i.href))
 }
 
+function paletteHrefs(user: SessionUser): string[] {
+  return subroutesFor(user).map((i) => i.href)
+}
+
+const DAILY_RAIL = ['/board', '/pipeline', '/clients', '/queue', '/engine', '/documents', '/submissions']
+const OFF_RAIL = ['/sales', '/marketing', '/inbox', '/attorney', '/reports', '/agency', '/settings/users']
+
 describe('SUBROUTES', () => {
   it('every href points at an existing page.tsx under src/app/(app)', () => {
     const missing = SUBROUTES.filter((item) => !pageExists(item.href)).map((item) => item.href)
@@ -77,19 +84,36 @@ describe('navigationFor', () => {
     expect(missing, `stale nav routes (no page.tsx on disk): ${missing.join(', ')}`).toEqual([])
   })
 
-  it('shows /agency to an agency-home user holding users:manage', () => {
+  it('staff Daily rail is Board, Pipeline, Clients, Queue, Engine, Document lab, CYS', () => {
+    const everything = fixtureUser({ permissions: ALL_PERMISSIONS })
+    expect(hrefsOf(everything)).toEqual(DAILY_RAIL)
+  })
+
+  it('keeps Sales, Marketing, Inbox, Attorney, Reports, Agency, and Users off the rail', () => {
+    const everything = fixtureUser({
+      isOwner: true,
+      organizationKind: 'AGENCY',
+      permissions: ALL_PERMISSIONS,
+    })
+    for (const href of OFF_RAIL) {
+      expect(hrefsOf(everything), href).not.toContain(href)
+    }
+  })
+
+  it('shows /agency in the palette to an agency-home user holding users:manage', () => {
     const user = fixtureUser({ organizationKind: 'AGENCY' })
-    expect(hrefsOf(user)).toContain('/agency')
+    expect(paletteHrefs(user)).toContain('/agency')
+    expect(hrefsOf(user)).not.toContain('/agency')
   })
 
   it('hides /agency from a client-org user even with users:manage', () => {
     const user = fixtureUser({ organizationKind: 'CLIENT' })
-    expect(hrefsOf(user)).not.toContain('/agency')
+    expect(paletteHrefs(user)).not.toContain('/agency')
   })
 
   it('hides /agency when organizationKind is absent (legacy fixtures = CLIENT)', () => {
     const user = fixtureUser({ organizationKind: undefined })
-    expect(hrefsOf(user)).not.toContain('/agency')
+    expect(paletteHrefs(user)).not.toContain('/agency')
   })
 
   it('hides /agency from an agency user without users:manage', () => {
@@ -97,14 +121,26 @@ describe('navigationFor', () => {
       organizationKind: 'AGENCY',
       permissions: new Set<PermissionKey>(['users:read']),
     })
-    expect(hrefsOf(user)).not.toContain('/agency')
+    expect(paletteHrefs(user)).not.toContain('/agency')
   })
 
   it('agencyOnly stacks on top of permissions like ownerOnly does', () => {
     // Same permissions, only the home-org kind differs — the flag is the gate.
     const agency = fixtureUser({ organizationKind: 'AGENCY' })
     const client = fixtureUser({ organizationKind: 'CLIENT' })
-    expect(hrefsOf(agency)).toContain('/agency')
-    expect(hrefsOf(client)).not.toContain('/agency')
+    expect(paletteHrefs(agency)).toContain('/agency')
+    expect(paletteHrefs(client)).not.toContain('/agency')
+  })
+})
+
+describe('homeFor', () => {
+  it('lands Admin / Operations / Closer on Board', () => {
+    expect(homeFor({ role: 'ADMIN' })).toBe('/board')
+    expect(homeFor({ role: 'SUPER_ADMIN' })).toBe('/board')
+    expect(homeFor({ role: 'CLOSER' })).toBe('/board')
+  })
+
+  it('keeps a per-user landingPath override', () => {
+    expect(homeFor({ role: 'ADMIN', landingPath: '/survey' })).toBe('/survey')
   })
 })

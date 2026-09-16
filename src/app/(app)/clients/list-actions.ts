@@ -66,6 +66,7 @@ export async function bulkStageAction(input: z.infer<typeof bulkStageSchema>): P
     })
     revalidatePath('/clients')
     revalidatePath('/board')
+    revalidatePath('/pipeline')
     return { ok: true, results, moved, failed }
   } catch (error) {
     return fail(error)
@@ -98,6 +99,7 @@ export async function bulkReassignAction(input: z.infer<typeof reassignSchema>):
     }
     revalidatePath('/clients')
     revalidatePath('/board')
+    revalidatePath('/pipeline')
     return { ok: true, results, moved, failed }
   } catch (error) {
     return fail(error)

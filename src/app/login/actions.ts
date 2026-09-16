@@ -40,7 +40,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
       orderBy: { createdAt: 'asc' },
       select: { role: { select: { key: true } }, landingPath: true },
     })
-    redirectTo = user ? homeFor({ role: user.role.key, landingPath: user.landingPath }) : '/dashboard'
+    redirectTo = user ? homeFor({ role: user.role.key, landingPath: user.landingPath }) : '/board'
   }
 
   try {

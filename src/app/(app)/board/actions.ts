@@ -38,6 +38,7 @@ export async function moveCardAction(input: z.infer<typeof moveSchema>): Promise
     })
 
     revalidatePath('/board')
+    revalidatePath('/pipeline')
     revalidatePath('/clients')
     return { ok: true }
   } catch (error) {

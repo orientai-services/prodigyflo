@@ -1,6 +1,7 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { AlertTriangle } from 'lucide-react'
-import { requirePermissionPage } from '@/lib/rbac'
+import { requirePermissionPage, requireUser } from '@/lib/rbac'
 import {
   getAtRiskClients,
   getFunnel,
@@ -25,6 +26,11 @@ import { currency, duration, number, percent } from '@/lib/format'
 export const metadata = { title: 'Dashboard' }
 
 export default async function DashboardPage() {
+  const session = await requireUser()
+  if (session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.role === 'CLOSER') {
+    redirect('/board')
+  }
+
   const user = await requirePermissionPage('analytics:org')
 
   const [metrics, funnel, trend, atRisk, workload, lossReasons, attention] = await Promise.all([
