@@ -788,6 +788,13 @@
   flex-direction: column;
   gap: 6px;
   min-height: 92px;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.desk-doc:hover {
+  background: var(--desk-teal-soft);
 }
 .desk-doc-top {
   display: flex;

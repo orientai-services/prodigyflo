@@ -105,6 +105,9 @@ describe('navigationFor', () => {
     expect(src).toContain('CaseFileView')
     expect(src).not.toContain('LogCallButton')
     expect(src).not.toContain('TAB_KEYS')
+    const ui = readFileSync(path.join(APP_DIR, 'clients', '[clientId]', 'case-file-client.tsx'), 'utf8')
+    expect(ui).toContain('applyCloserAction')
+    expect(ui).not.toContain('Call')
   })
 
   it('keeps Sales, Marketing, Inbox, Attorney, Reports, Agency, and Users off the rail', () => {

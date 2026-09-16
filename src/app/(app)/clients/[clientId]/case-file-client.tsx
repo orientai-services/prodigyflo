@@ -18,8 +18,9 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { cellDisplay } from '@/lib/daily-desk-finance'
 import type { CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
-import { assignDeskCloserAction, bookAppointmentAction } from '@/app/(app)/board/actions'
+import { bookAppointmentAction } from '@/app/(app)/board/actions'
 import { requestDocuments } from '@/app/(app)/documents/actions'
+import { applyCloserAction } from './assignment-actions'
 import { approveBriefAction, editBriefAction } from './closeops-actions'
 
 export function CaseFileView({ data, children }: { data: CaseFileData; children?: ReactNode }) {
@@ -29,7 +30,6 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
   const [editOpen, setEditOpen] = useState(false)
   const [look, setLook] = useState<CaseDocTile | null>(null)
   const [closerId, setCloserId] = useState(data.closers[0]?.id ?? '')
-  const [note, setNote] = useState('')
   const [bookDate, setBookDate] = useState(data.bookDate)
   const [bookTime, setBookTime] = useState(data.bookTime)
   const [briefBody, setBriefBody] = useState(data.brief?.body ?? '')
@@ -40,7 +40,7 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
   async function runAssign() {
     if (!closerId) return
     setPending(true)
-    const result = await assignDeskCloserAction({ clientId: data.id, closerId, note: note.trim() || undefined })
+    const result = await applyCloserAction({ clientId: data.id, assigneeId: closerId })
     setPending(false)
     if (result.ok) {
       toast.success('Closer assigned.')
@@ -132,8 +132,17 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
             <span className={`desk-tag ${data.packetReady ? 'ok' : 'warn'}`}>
               {data.packetReady ? 'Packet READY' : 'Packet not ready'}
             </span>
-            <span className={`desk-tag ${data.cysApproved ? 'ok' : 'warn'}`}>
-              {data.cysApproved ? 'CYS ready' : data.cysApprovable ? 'CYS approvable' : 'CYS not ready'}
+            <span
+              className={`desk-tag ${data.cysApproved ? 'ok' : 'warn'}`}
+              title={
+                data.cysApproved
+                  ? 'Human CYS approvedAt is set'
+                  : data.cysBlockers.length
+                    ? data.cysBlockers.join(' ')
+                    : 'Fields verified; waiting on human approvedAt'
+              }
+            >
+              {data.cysApproved ? 'CYS ready' : 'CYS not ready'}
             </span>
           </div>
         </div>
@@ -198,17 +207,15 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
         <p className="desk-muted">Quick look opens the real file when one is on disk. Missing tiles stay empty.</p>
         <div className="desk-docs">
           {data.docs.map((doc) => (
-            <div key={doc.key} className="desk-doc">
+            <button key={doc.key} type="button" className="desk-doc" onClick={() => setLook(doc)}>
               <div className="desk-doc-top">
                 <span>{doc.label}</span>
-                <button type="button" className="desk-look" onClick={() => setLook(doc)}>
-                  Quick look
-                </button>
+                <span className="desk-look">Quick look</span>
               </div>
               <div className={`desk-st ${doc.state === 'missing' || doc.state === 'failed' ? 'miss' : 'ok'}`}>
                 {doc.state.replace('_', ' ')}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </section>
@@ -312,8 +319,6 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
                 </option>
               ))}
             </NativeSelect>
-            <Label htmlFor="case-note">Optional note</Label>
-            <Textarea id="case-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssignOpen(false)}>

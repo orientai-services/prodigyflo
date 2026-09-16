@@ -143,6 +143,17 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     { label: 'First payment date', cell: sourceText(firstPay) },
   ]
 
+  const utility =
+    extracted(docs, 'utility_bill', 'utility_name') || str(answers.utility) || str(answers.utility_name)
+  const usage =
+    extracted(docs, 'production_report', 'production_kwh') ||
+    extracted(docs, 'utility_bill', 'kwh') ||
+    str(answers.usage_kwh) ||
+    str(answers.annual_usage)
+  const roofHome = [str(answers.yearsAtAddress) && `${answers.yearsAtAddress} years at address`, str(answers.line1) || addr?.line1]
+    .filter(Boolean)
+    .join(' · ')
+
   const solar: CaseCell[] = [
     { label: 'Agreement type', cell: sourceText(product) },
     { label: 'Installer', cell: sourceText(installer) },
@@ -152,6 +163,9 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
       hint: 'SCS intake only · not a bureau pull',
     },
     { label: 'System size', cell: kw ? { kind: 'value', display: `${kw} kW` } : { kind: 'missing' } },
+    { label: 'Utility', cell: sourceText(utility) },
+    { label: 'Usage', cell: usage ? { kind: 'value', display: /kwh/i.test(usage) ? usage : `${usage} kWh` } : { kind: 'missing' } },
+    { label: 'Roof / home', cell: sourceText(roofHome) },
   ]
 
   const reqByKind = new Map<string, { id: string; key: string }>()
@@ -249,7 +263,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     extractionLabel,
     creditLabel: creditRaw || 'Credit not on file',
     creditOnFile: Boolean(creditRaw),
-    packetReady: Boolean(packet?.ready.ready),
+    packetReady: Boolean(packet?.floor.floorStampedReady),
     packetMissing: packet?.ready.missing ?? [],
     cysApproved: Boolean(cys?.readiness.approvedAt),
     cysApprovable: (cys?.blockers.length ?? 1) === 0,
