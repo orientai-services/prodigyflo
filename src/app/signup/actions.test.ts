@@ -40,7 +40,7 @@ describe('signupAction', () => {
     mocks.organizationFindUnique.mockResolvedValue({
       id: 'prodigyflo-workspace',
       deletedAt: null,
-      roles: [{ id: 'admin-role' }],
+      roles: [{ id: 'collector-role' }],
     })
     mocks.userCreate.mockResolvedValue({ id: 'new-user' })
     mocks.auditEventCreate.mockResolvedValue({})
@@ -52,7 +52,7 @@ describe('signupAction', () => {
     delete process.env.PUBLIC_SIGNUP_ORGANIZATION_SLUG
   })
 
-  it('places a self-registered account in the shared ProdigyFlo workspace as a non-owner Admin', async () => {
+  it('places a self-registered account in the shared workspace as a non-owner Document Collector', async () => {
     await expect(signupAction({}, signupForm())).rejects.toThrow('NEXT_REDIRECT')
 
     expect(mocks.organizationFindUnique).toHaveBeenCalledWith({
@@ -60,13 +60,13 @@ describe('signupAction', () => {
       select: {
         id: true,
         deletedAt: true,
-        roles: { where: { key: 'ADMIN' }, select: { id: true } },
+        roles: { where: { key: 'DOCUMENT_COLLECTOR' }, select: { id: true } },
       },
     })
     expect(mocks.userCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         organizationId: 'prodigyflo-workspace',
-        roleId: 'admin-role',
+        roleId: 'collector-role',
         email: 'new.teammate@example.test',
         isOwner: false,
       }),
