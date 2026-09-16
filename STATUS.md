@@ -10,9 +10,9 @@ release — the record of what was fixed is the point.
 
 **Last updated:** 2026-09-16
 **Canonical map:** `docs/CANONICAL.md` — run `npm run check:canonical` before edits.
-**GitHub `main`:** SCS `f541684` · ProdigyFlo `1c0c64e` (stage 0 restoration policy retired)
-**Deployed:** Vercel `scs-intake-42` → `solarcontractservices.com` · `prodigyflo-42` → `prodigyflo.ai`
-(Vercel team OrientAI / `iorient-ai`, production branch `main`, push-to-deploy live)
+**GitHub `main`:** SCS `6761220` · ProdigyFlo `7fd8b36` (docs on top of restoration-policy retirement `f541684` / `1c0c64e`)
+**Deployed:** `solarcontractservices.com` → `dpl_CQBxG9xApXYAGAyX1cuJVsyBWEUx` · `prodigyflo.ai` → `dpl_8u6BreVH9TsZCUdC9Wy18CchakCB`
+(Vercel team OrientAI / `iorient-ai`, production branch `main`, GitHub is the live source)
 **Canonical checkouts:** `/Users/dakotahanshew/Developer/SCS/scsintake` · `/Users/dakotahanshew/Developer/products/ProdigyFlo/prodigyflo-42`
 **Databases:** Supabase org SCS (Pro) — `vspmjtdwlcqfclkgksel` us-east-1 (SCS),
 `acgmcenrbwabmpxzgwqb` us-west-2 (ProdigyFlo)
@@ -25,13 +25,16 @@ release — the record of what was fixed is the point.
 | # | Item | Why it blocks | Owner |
 |---|---|---|---|
 | B1 | **Repositioning is half done.** The homeowner-facing journey now reads as advocacy and introduction. ProdigyFlo still speaks the old language internally — closers, READY, Strawberry submitting to CYS/attorney — and the marketing site has not been swept. | Staff see "closer" and "Submit" while the public site says we only review and introduce. The two halves describe different businesses. | Dakota |
-| B3 | **No `RESEND_API_KEY`** — no confirmation email, no resume link. | The funnel promises "add it later from the link we email you". That link never sends. Anyone who does not finish in one sitting is lost. | Dakota |
 | B4 | **No Turnstile keys** — public form, no bot protection. | Spam will pollute the CRM, and ad spend will pay for it. | Dakota |
 | B5 | **251 seeded fake clients in the production CRM** (250 demo homeowners + 34 staff users). | Real leads land indistinguishable from fixtures in a closer's queue. | Dakota |
 | B6 | **`PRODIGYFLO_CONNECTOR_TOKEN` is still `local-dev-token`** — hardcoded in `prisma/seeds/intake.ts`, readable by anyone with repo access. | Anyone who can read the repo can post leads into the CRM. Rotate the env var and the `IntakeSource.secretHash` row together or delivery breaks. | Dakota |
 
 **B2 is closed** — see below. The counsel-pending guarantee copy was removed rather than
 softened, so there is nothing left on that screen awaiting sign-off.
+
+**B3 is closed** — `RESEND_API_KEY` is present on production for both `scs-intake-42`
+and `prodigyflo-42` (verified 2026-09-16, name only). A live send was not re-tested
+in this pass.
 
 ## 1 · Open
 
@@ -162,6 +165,11 @@ Nothing mid-flight. The mirror and the reframe are both shipped.
 
 ## Change log
 
+- **2026-09-16** — Live source is GitHub `main` (`6761220` / `7fd8b36`) on
+  `dpl_CQBxG9xApXYAGAyX1cuJVsyBWEUx` and `dpl_8u6BreVH9TsZCUdC9Wy18CchakCB`.
+  Restoration policy retired; five historical SCS→PF deliveries archived
+  (`0012`); restoration/cohort env gone; pause keys remain `false`. B3 closed
+  (RESEND key present both projects; send not re-tested).
 - **2026-09-16** — Stage 0 restoration policy retired on production. GitHub `main`
   matches live. Canonical map and `check:canonical` added so work stays on
   `orientai-services` + `scs-intake-42` / `prodigyflo-42`.

@@ -44,8 +44,8 @@ These still exist. They are not production.
 - `/Users/dakotahanshew/Developer/~SCS~/`
 - `/Users/dakotahanshew/Developer/products/scs-intake` (Hycamax remote)
 - `/Users/dakotahanshew/Developer/products/ProdigyFlo/prodigyflo` (Hycamax remote)
-- `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/stage0/` (containment evidence)
-- `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/policy-retirement/` (old worktrees)
+- `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/stage0/` — frozen evidence only. Not a checkout. Do not deploy from it.
+- `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/policy-retirement/` — **does not exist.** Former extra worktrees; treat as forbidden evidence, not a checkout.
 
 `/Users/dakotahanshew/Developer/SCS/prodigyflo` is an empty placeholder. Until
 it holds a checkout, ProdigyFlo work stays in
