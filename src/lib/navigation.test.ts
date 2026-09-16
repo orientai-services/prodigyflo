@@ -100,6 +100,36 @@ describe('navigationFor', () => {
     expect(src).toContain('PipelineBoard')
   })
 
+  it('/queue is a live desk with four work buckets, not a stub', () => {
+    const src = readFileSync(path.join(APP_DIR, 'queue', 'page.tsx'), 'utf8')
+    expect(src).toContain('DeskQueueView')
+    expect(src).not.toContain('EmptyState')
+    expect(src).not.toContain('coming soon')
+    const ui = readFileSync(path.join(APP_DIR, 'queue', 'desk-queue.tsx'), 'utf8')
+    const logic = readFileSync(path.resolve(__dirname, 'daily-desk-queue.ts'), 'utf8')
+    expect(logic).toContain("'unassigned'")
+    expect(logic).toContain("'unscheduled'")
+    expect(logic).toContain("'missing_docs'")
+    expect(logic).toContain("'cys'")
+    expect(ui).toContain('applyCloserAction')
+    expect(ui).toContain('bookAppointmentAction')
+    expect(ui).toContain('requestDocuments')
+    expect(ui).not.toContain('Call')
+  })
+
+  it('/board chips do not render invented dollar amounts', () => {
+    const src = readFileSync(path.join(APP_DIR, 'board', 'desk-calendar.tsx'), 'utf8')
+    expect(src).not.toContain('currency(')
+    expect(src).not.toContain('estimatedValue')
+    expect(src).not.toContain('$0')
+  })
+
+  it('clients list uses listedMoney instead of currency($0)', () => {
+    const src = readFileSync(path.join(APP_DIR, 'clients', 'page.tsx'), 'utf8')
+    expect(src).toContain('listedMoney')
+    expect(src).not.toContain('currency(')
+  })
+
   it('client profile is the Daily Desk case file, not CRM tabs or Call', () => {
     const src = readFileSync(path.join(APP_DIR, 'clients', '[clientId]', 'page.tsx'), 'utf8')
     expect(src).toContain('CaseFileView')

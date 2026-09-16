@@ -128,3 +128,15 @@ export function cellDisplay(cell: ComputedCell): string {
   if (cell.kind === 'missing') return 'Missing'
   return 'Cannot compute'
 }
+
+/** List/chip money: never print $0 for a blank or zero stored value. */
+export function listedMoney(raw: string | number | { toString(): string } | null | undefined): string {
+  const n =
+    raw == null
+      ? null
+      : typeof raw === 'number'
+        ? raw
+        : parseNumber(typeof raw === 'string' ? raw : raw.toString())
+  if (n == null || n === 0) return 'Cannot compute'
+  return MONEY.format(n)
+}

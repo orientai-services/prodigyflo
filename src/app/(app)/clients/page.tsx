@@ -12,7 +12,8 @@ import { ClientFilters } from './client-filters'
 import { BulkBar, BulkCheckbox, BulkProvider, BulkSelectAll, OwnerReassign } from './bulk-actions'
 import { SavedFilters, type SavedFilterChip } from './saved-filters'
 import { canDeleteSavedFilter, savedFilterVisibleWhere } from '@/lib/reporting'
-import { currency, fullName, relativeTime } from '@/lib/format'
+import { fullName, relativeTime } from '@/lib/format'
+import { listedMoney } from '@/lib/daily-desk-finance'
 import { DEFAULT_STAGES } from '@/lib/pipeline'
 import { scsReadiness, scsReadinessLabel } from '@/lib/intake/scs-readiness'
 
@@ -246,7 +247,7 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
                       {c.team && <span className="block text-xs">{c.team.name}</span>}
                     </td>
                     <td className="text-muted-foreground px-4 py-2.5 text-xs">{c.leadSource?.name ?? '—'}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{currency(c.estimatedValue)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{listedMoney(c.estimatedValue)}</td>
                     <td className="text-muted-foreground px-4 py-2.5 text-right text-xs whitespace-nowrap">
                       {relativeTime(c.lastActivityAt)}
                     </td>

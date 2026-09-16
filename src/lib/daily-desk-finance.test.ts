@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { amortize, cellDisplay, sourceMoney } from '@/lib/daily-desk-finance'
+import { amortize, cellDisplay, listedMoney, sourceMoney } from '@/lib/daily-desk-finance'
+
+describe('listedMoney', () => {
+  it('does not invent $0 on lists or chips', () => {
+    expect(listedMoney(null)).toBe('Cannot compute')
+    expect(listedMoney(0)).toBe('Cannot compute')
+    expect(listedMoney('0')).toBe('Cannot compute')
+    expect(listedMoney(31860)).toBe('$31,860.00')
+  })
+})
 
 describe('sourceMoney', () => {
   it('treats blank and $0 as missing, never as a balance', () => {
