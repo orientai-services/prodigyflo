@@ -180,8 +180,11 @@ export async function applyToCrm(
 
     if (opts.clientId) {
       matches = [{ clientId: opts.clientId, matchedOn: 'source case id' }]
-    } else if (opts.strictScs && matches.length) {
-      return { ...base, status: IntakeStatus.NEEDS_MAPPING, error: 'SCS case identity requires reconciliation; contact similarity alone cannot link a property case.' }
+    } else if (opts.strictScs) {
+      // Do not MERGE a property case on email/phone/name alone. Ignore those
+      // hits and create a new Client (same path as no matches). Never attach
+      // onto an existing id from contact similarity.
+      matches = []
     }
 
     if (matches.length > 0) {
