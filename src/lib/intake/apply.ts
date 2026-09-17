@@ -405,9 +405,17 @@ async function processInboundLocked(
     const newTime = sourceTime(packet)
     const completed = !['FAILED', 'RECEIVED', 'NEEDS_MAPPING'].includes(existing.status)
     if (oldTime !== null && (newTime === null || newTime < oldTime)) {
+      if (existing.clientId) {
+        const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
+        await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload, store })
+      }
       return { duplicate: true, submission: existing }
     }
     if (completed && newTime === oldTime && typeof packet.id === 'string' && packet.id === old.id) {
+      if (existing.clientId) {
+        const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
+        await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload, store })
+      }
       return { duplicate: true, submission: existing }
     }
   }
@@ -469,6 +477,8 @@ async function processInboundLocked(
       const { ingestScsPacket } = await import('@/lib/intake/scs-packet')
       await ingestScsPacket({ organizationId: source.organizationId, clientId: outcome.clientId,
         intakeSubmissionId: submission.id, rawPayload }, store)
+      const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
+      await upsertIntakeAppointment({ source, clientId: outcome.clientId, rawPayload, store })
     }
     submission = await store.intakeSubmission.update({
       where: { id: submission.id },
