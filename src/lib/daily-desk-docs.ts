@@ -26,10 +26,43 @@ export const CASE_DOC_KINDS: DeskDocKind[] = [
 
 export type DeskDocState = 'missing' | 'uploaded' | 'extracted' | 'unverified' | 'verified' | 'failed'
 
+const FINANCE_NAME =
+  /goodleap|\bmosaic\b|\bsunlight\b|truth\s*-?\s*in\s*-?\s*lending|\btil\b|credit\s+agreement|promissory\s+note|loan\s+agreement/i
+
+const INSTALL_NAME =
+  /solar\s+agreement|\binstall(?:ation)?\b|\bppa\b|power\s+purchase|\blease\b|\bsteele\b/i
+
 export function matchDocKind(raw: string | null | undefined): DeskDocKind | null {
   const key = (raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
   if (!key) return null
   return CASE_DOC_KINDS.find((k) => k.key === key || k.aliases.includes(key)) ?? null
+}
+
+/**
+ * Put every inbound file on a known tile.
+ * Lender names → finance. Install / Steele / unknown parent → signed contract.
+ * Never leave an extra leftover card.
+ */
+export function classifyDeskKind(input: {
+  requirementKey?: string | null
+  detectedType?: string | null
+  label?: string | null
+  fileName?: string | null
+}): DeskDocKind | null {
+  const direct =
+    matchDocKind(input.requirementKey) ||
+    matchDocKind(input.detectedType) ||
+    matchDocKind(input.label) ||
+    matchDocKind(input.fileName)
+  if (direct) return direct
+
+  const hay = [input.fileName, input.label, input.detectedType, input.requirementKey]
+    .filter((s): s is string => Boolean(s && s.trim()))
+    .join('\n')
+  if (!hay) return null
+  if (FINANCE_NAME.test(hay)) return CASE_DOC_KINDS.find((k) => k.key === 'finance_agreement') ?? null
+  if (INSTALL_NAME.test(hay)) return CASE_DOC_KINDS.find((k) => k.key === 'signed_contract') ?? null
+  return CASE_DOC_KINDS.find((k) => k.key === 'signed_contract') ?? null
 }
 
 export function tileState(input: {
