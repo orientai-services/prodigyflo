@@ -9,31 +9,10 @@ import { listBriefViews } from '@/lib/ai/closeops-ai'
 import { DESK_TIMEZONE, timeLabel } from '@/lib/daily-desk'
 import { CASE_DOC_KINDS, classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { amortize, sourceMoney, sourcePercent, sourceText } from '@/lib/daily-desk-finance'
+import { extracted } from '@/lib/desk-extract'
 import type { CaseCell, CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 
 export type { CaseCell, CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
-
-function extracted(
-  docs: {
-    requirement: { key: string } | null
-    extractions: {
-      detectedTypeKey: string | null
-      fields: { key: string; value: string | null; correctedValue: string | null }[]
-    }[]
-  }[],
-  typeKey: string,
-  fieldKey: string,
-): string {
-  for (const d of docs) {
-    for (const ex of d.extractions) {
-      if (str(ex.detectedTypeKey) !== typeKey) continue
-      const f = ex.fields.find((x) => x.key === fieldKey)
-      const v = str(f?.correctedValue) || str(f?.value)
-      if (v) return v
-    }
-  }
-  return ''
-}
 
 function stringifyAnswer(value: unknown): string {
   if (value == null || value === '') return ''
@@ -109,19 +88,25 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
   const answers = asRecord(client.surveyResponses[0]?.answers)
   const addr = client.addresses[0]
   const docs = client.documents
-  const amt = extracted(docs, 'finance_agreement', 'amount_financed')
+  const amt = extracted(docs, 'finance_agreement', 'amount_financed') || str(answers.amount_financed)
   const apr =
-    extracted(docs, 'finance_agreement', 'apr') || extracted(docs, 'finance_agreement', 'interest_rate')
-  const term = extracted(docs, 'finance_agreement', 'term_months')
-  const pay = extracted(docs, 'finance_agreement', 'monthly_payment')
-  const firstPay = extracted(docs, 'finance_agreement', 'first_payment_date')
-  const dealerFee = extracted(docs, 'finance_agreement', 'dealer_fee')
+    extracted(docs, 'finance_agreement', 'apr') ||
+    extracted(docs, 'finance_agreement', 'interest_rate') ||
+    str(answers.interest_rate) ||
+    str(answers.apr)
+  const term = extracted(docs, 'finance_agreement', 'term_months') || str(answers.term_months)
+  const pay = extracted(docs, 'finance_agreement', 'monthly_payment') || str(answers.monthly_payment)
+  const firstPay = extracted(docs, 'finance_agreement', 'first_payment_date') || str(answers.first_payment_date)
+  const dealerFee = extracted(docs, 'finance_agreement', 'dealer_fee') || str(answers.dealer_fee)
   const lender =
     extracted(docs, 'finance_agreement', 'lender_name') || str(answers.lender_confirmed) || str(answers.lender_guess)
   const product =
     str(answers.product_confirmed) || str(client.contracts[0]?.productType) || str(answers.product_type_guess)
   const installer = extracted(docs, 'solar_contract', 'installer_name') || str(answers.installer_guess) || str(answers.counterparty)
-  const kw = extracted(docs, 'solar_contract', 'system_size_kw') || extracted(docs, 'production_report', 'system_size_kw')
+  const kw =
+    extracted(docs, 'solar_contract', 'system_size_kw') ||
+    extracted(docs, 'production_report', 'system_size_kw') ||
+    str(answers.system_size_kw)
   const creditBand =
     str(answers.credit_band) ||
     nestedStr(answers, 'screening', 'credit_band') ||
