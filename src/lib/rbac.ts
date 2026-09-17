@@ -189,7 +189,9 @@ export function clientScope(user: SessionUser): Prisma.ClientWhereInput {
     deletedAt: null,
   }
 
-  if (user.permissions.has('clients:read_all')) return base
+  // ADMIN / SUPER_ADMIN see every client in THIS organization. Team filters
+  // must not hide a file from org admins. Other orgs stay unreachable.
+  if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.permissions.has('clients:read_all')) return base
 
   if (user.permissions.has('clients:read_region')) {
     return {
