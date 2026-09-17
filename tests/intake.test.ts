@@ -434,6 +434,56 @@ describe('intake apply pipeline (db)', () => {
     expect(await db.client.count({ where: { organizationId: org.id, email } })).toBe(2)
   })
 
+  it('writes a desk Appointment from an SCS packet booking window', async () => {
+    const role = await db.role.create({
+      data: { organizationId: org.id, key: 'CLOSER', name: 'Closer' },
+    })
+    const closer = await db.user.create({
+      data: {
+        organizationId: org.id,
+        roleId: role.id,
+        email: `closer.book.${suffix}@example.test`,
+        name: 'Book Closer',
+        passwordHash: 'x',
+      },
+    })
+    await db.intakeSource.update({
+      where: { id: scsSource.id },
+      data: { defaultOwnerId: closer.id },
+    })
+    scsSource = await db.intakeSource.findUniqueOrThrow({ where: { id: scsSource.id } })
+    const leadId = '33333333-3333-4333-8333-333333333333'
+    const starts = '2026-09-17T18:30:00.000Z'
+    const packet = {
+      id: `delivery-book-${suffix}`,
+      lead_id: leadId,
+      event_type: 'lead.booked',
+      first_name: 'Pat',
+      last_name: 'Booked',
+      email: `pat.booked.${suffix}@example.test`,
+      phone: '702-555-0411',
+      data: {
+        schema_version: 'schema_42.v1',
+        status: 'booked',
+        stage1_answers: { first_name: 'Pat', last_name: 'Booked', email: `pat.booked.${suffix}@example.test` },
+        booking: {
+          scheduled_at: starts,
+          ends_at: '2026-09-17T18:55:00.000Z',
+          calendly_event_uri: 'https://api.calendly.com/scheduled_events/ab14c097-test',
+          timezone: 'America/Los_Angeles',
+        },
+        documents: { files: [] },
+      },
+    }
+    const { submission } = await processInbound(scsSource, `scs:${leadId}`, packet)
+    expect(submission.clientId).toBeTruthy()
+    const appt = await db.appointment.findFirst({ where: { clientId: submission.clientId! } })
+    expect(appt).toBeTruthy()
+    expect(appt!.startsAt.toISOString()).toBe(starts)
+    expect(appt!.externalEventId).toContain('ab14c097-test')
+    expect(appt!.status).toBe('SCHEDULED')
+  })
+
   it('syncs sheet rows through the same pipeline, advances the cursor, and re-syncs as a no-op', async () => {
     const first = await runSheetSync(sheetSource)
     expect(first.ok).toBe(true)
