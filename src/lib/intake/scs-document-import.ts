@@ -163,7 +163,22 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
     const sourceChecksum = response.headers.get('x-scs-sha256')
     if (sourceChecksum && sourceChecksum !== checksum) throw new Error('SCS document checksum mismatch.')
     stage = 'resolving the SCS upload area'
-    const requirementId = await scsRequirementId(row.organizationId, row.sourceDocumentType)
+    let requirementId = await scsRequirementId(row.organizationId, row.sourceDocumentType)
+    if (requirementId) {
+      // Two SCS files can share kind=agreement (contract + amendment). The
+      // first occupies the upload-area slot; later files still persist as
+      // their own ClientDocument and must not be dropped as a filled slot.
+      const occupied = await db.clientDocument.findFirst({
+        where: {
+          clientId: row.clientId,
+          requirementId,
+          storageKey: { not: null },
+          status: { notIn: ['REJECTED', 'EXPIRED'] },
+        },
+        select: { id: true },
+      })
+      if (occupied) requirementId = null
+    }
     stage = 'copying the file into private storage'
     const { key } = await getFileStorage().put(bytes, {
       fileName: row.sourceFileName ?? 'scs-document',
@@ -194,7 +209,7 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
           sizeBytes: bytes.length,
           checksum,
           scanStatus: 'clean',
-          label: (row.sourceDocumentType ?? row.sourceFileName ?? 'SCS document').slice(0, 120),
+          label: (row.sourceFileName ?? row.sourceDocumentType ?? 'SCS document').slice(0, 120),
           receivedAt: now,
           internalComment: `Imported from SCS document ${row.sourceDocumentId}${row.sourceLeadId ? ` for lead ${row.sourceLeadId}` : ''}.`,
         },
