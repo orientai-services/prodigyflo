@@ -3,18 +3,18 @@ import { Download, Plus, Upload } from 'lucide-react'
 import type { Prisma, StageKey } from '@prisma/client'
 import { db } from '@/lib/db'
 import { can, clientScope, requireUser } from '@/lib/rbac'
-import { PageHeader } from '@/components/page-header'
-import { Button } from '@/components/ui/button'
+import { DeskChrome } from '@/components/desk/desk-chrome'
 import { StageBadge } from '@/components/stage-badge'
 import { SlaIndicator } from '@/components/sla-indicator'
-import { EmptyState } from '@/components/empty-state'
 import { ClientFilters } from './client-filters'
 import { BulkBar, BulkCheckbox, BulkProvider, BulkSelectAll, OwnerReassign } from './bulk-actions'
 import { SavedFilters, type SavedFilterChip } from './saved-filters'
 import { canDeleteSavedFilter, savedFilterVisibleWhere } from '@/lib/reporting'
-import { currency, fullName, relativeTime } from '@/lib/format'
+import { fullName, relativeTime } from '@/lib/format'
+import { listedMoney } from '@/lib/daily-desk-finance'
 import { DEFAULT_STAGES } from '@/lib/pipeline'
 import { scsReadiness, scsReadinessLabel } from '@/lib/intake/scs-readiness'
+import { deskVisibleClientWhere } from '@/lib/intake/scs-desk'
 
 export const metadata = { title: 'Clients' }
 
@@ -43,7 +43,7 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
   const sort = (str(params.sort) as SortKey) ?? 'recent'
   const page = Math.max(1, Number(str(params.page) ?? 1) || 1)
 
-  const filters: Prisma.ClientWhereInput[] = [clientScope(user)]
+  const filters: Prisma.ClientWhereInput[] = [clientScope(user), deskVisibleClientWhere()]
   if (q) {
     filters.push({
       OR: [
@@ -143,150 +143,142 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
   )}`
 
   return (
-    <>
-      <PageHeader
-        title="Clients"
-        description={`${total.toLocaleString()} record${total === 1 ? '' : 's'} you can see`}
-        actions={
-          <>
-            <Button variant="outline" size="sm" render={<a href={exportHref} />}>
-              <Download className="size-3.5" />
-              Export CSV
-            </Button>
-            {can(user, 'clients:create') && (
-              <>
-                <Button variant="outline" size="sm" render={<Link href="/clients/import" />}>
-                  <Upload className="size-3.5" />
-                  Import CSV
-                </Button>
-                <Button size="sm" render={<Link href="/clients/new" />}>
-                  <Plus className="size-3.5" />
-                  New client
-                </Button>
-              </>
-            )}
-          </>
-        }
-      >
-        <ClientFilters
-          stages={DEFAULT_STAGES.map((s) => ({ key: s.key, name: s.name }))}
-          owners={owners}
-          teams={teams}
-          canFilterOwner={can(user, 'clients:read_team') || can(user, 'clients:read_all')}
-        />
-        <SavedFilters filters={filterChips} />
-      </PageHeader>
+    <DeskChrome
+      title="Clients"
+      description={`${total.toLocaleString()} record${total === 1 ? '' : 's'} you can see. Value never invents $0.`}
+      actions={
+        <>
+          <a href={exportHref} className="desk-btn-secondary">
+            <Download className="size-3.5" />
+            Export CSV
+          </a>
+          {can(user, 'clients:create') && (
+            <>
+              <Link href="/clients/import" className="desk-btn-secondary">
+                <Upload className="size-3.5" />
+                Import CSV
+              </Link>
+              <Link href="/clients/new" className="btn-desk">
+                <Plus className="size-3.5" />
+                New client
+              </Link>
+            </>
+          )}
+        </>
+      }
+    >
+      <ClientFilters
+        stages={DEFAULT_STAGES.map((s) => ({ key: s.key, name: s.name }))}
+        owners={owners}
+        teams={teams}
+        canFilterOwner={can(user, 'clients:read_team') || can(user, 'clients:read_all')}
+      />
+      <SavedFilters filters={filterChips} />
 
       {clients.length === 0 ? (
-        <EmptyState
-          icon="Users"
-          title="No clients match these filters"
-          description="Try clearing the search or widening the stage and owner filters."
-        />
+        <section className="desk-card desk-block">
+          <p className="desk-empty">No clients match these filters. Clear search or widen stage and owner.</p>
+        </section>
       ) : (
         <BulkProvider>
-          <div className="scroll-x">
-            <table className="w-full min-w-[52rem] text-sm tabular-nums">
-              <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
-                <tr className="border-b">
-                  {showBulk && (
-                    <th className="w-8 px-4 py-2 text-left">
-                      <BulkSelectAll pageIds={pageIds} />
-                    </th>
-                  )}
-                  <th className="px-4 py-2 text-left">Client</th>
-                  <th className="px-4 py-2 text-left">Stage</th>
-                  <th className="px-4 py-2 text-left">In stage</th>
-                  <th className="px-4 py-2 text-left">Owner</th>
-                  <th className="px-4 py-2 text-left">Source</th>
-                  <th className="px-4 py-2 text-right">Value</th>
-                  <th className="px-4 py-2 text-right">Activity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clients.map((c) => {
-                  const readiness = scsReadiness({
-                    hasScsIntake: c.intakeSubmissions.length > 0,
-                    imports: importsByClient.get(c.id) ?? [],
-                  })
-                  return (
-                  <tr key={c.id} className="hover:bg-muted/40 border-b transition-colors">
+          <section className="desk-card desk-block">
+            <div className="scroll-x">
+              <table className="desk-table">
+                <thead>
+                  <tr>
                     {showBulk && (
-                      <td className="px-4 py-2.5">
-                        <BulkCheckbox id={c.id} name={fullName(c)} />
-                      </td>
+                      <th>
+                        <BulkSelectAll pageIds={pageIds} />
+                      </th>
                     )}
-                    <td className="px-4 py-2.5">
-                      <Link href={`/clients/${c.id}`} className="block">
-                        <span className="font-medium">{fullName(c)}</span>
-                        <span className="text-muted-foreground block truncate text-xs">{c.email}</span>
-                      </Link>
-                      {readiness && (
-                        <span className="text-muted-foreground mt-1 inline-block text-[11px] tracking-wide uppercase">
-                          {scsReadinessLabel(readiness)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <StageBadge
-                        stageKey={c.currentStage.key}
-                        name={c.currentStage.name}
-                        category={c.currentStage.category}
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <SlaIndicator since={c.stageEnteredAt} slaHours={c.currentStage.slaHours} />
-                    </td>
-                    <td className="text-muted-foreground px-4 py-2.5">
-                      {canReassign ? (
-                        <OwnerReassign clientId={c.id} ownerId={c.owner?.id ?? null} owners={ownerOptions} />
-                      ) : (
-                        (c.owner?.name ?? <span className="italic">Unassigned</span>)
-                      )}
-                      {c.team && <span className="block text-xs">{c.team.name}</span>}
-                    </td>
-                    <td className="text-muted-foreground px-4 py-2.5 text-xs">{c.leadSource?.name ?? '—'}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{currency(c.estimatedValue)}</td>
-                    <td className="text-muted-foreground px-4 py-2.5 text-right text-xs whitespace-nowrap">
-                      {relativeTime(c.lastActivityAt)}
-                    </td>
+                    <th>Client</th>
+                    <th>Stage</th>
+                    <th>In stage</th>
+                    <th>Owner</th>
+                    <th>Source</th>
+                    <th>Value</th>
+                    <th>Activity</th>
                   </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {clients.map((c) => {
+                    const readiness = scsReadiness({
+                      hasScsIntake: c.intakeSubmissions.length > 0,
+                      imports: importsByClient.get(c.id) ?? [],
+                    })
+                    return (
+                      <tr key={c.id}>
+                        {showBulk && (
+                          <td>
+                            <BulkCheckbox id={c.id} name={fullName(c)} />
+                          </td>
+                        )}
+                        <td>
+                          <Link href={`/clients/${c.id}`}>{fullName(c)}</Link>
+                          <div className="desk-muted" style={{ marginBottom: 0 }}>
+                            {c.email}
+                          </div>
+                          {readiness && (
+                            <div className="desk-muted" style={{ marginBottom: 0, letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: 11 }}>
+                              {scsReadinessLabel(readiness)}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <StageBadge
+                            stageKey={c.currentStage.key}
+                            name={c.currentStage.name}
+                            category={c.currentStage.category}
+                          />
+                        </td>
+                        <td>
+                          <SlaIndicator since={c.stageEnteredAt} slaHours={c.currentStage.slaHours} />
+                        </td>
+                        <td>
+                          {canReassign ? (
+                            <OwnerReassign clientId={c.id} ownerId={c.owner?.id ?? null} owners={ownerOptions} />
+                          ) : (
+                            (c.owner?.name ?? <span className="desk-muted">Unassigned</span>)
+                          )}
+                          {c.team && <div className="desk-muted" style={{ marginBottom: 0 }}>{c.team.name}</div>}
+                        </td>
+                        <td>{c.leadSource?.name ?? '—'}</td>
+                        <td>{listedMoney(c.estimatedValue)}</td>
+                        <td>{relativeTime(c.lastActivityAt)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           {pageCount > 1 && (
-            <nav className="flex items-center justify-between px-4 py-3 sm:px-6" aria-label="Pagination">
-              <p className="text-muted-foreground text-xs">
+            <nav className="desk-actions-row" style={{ justifyContent: 'space-between', marginTop: 12 }} aria-label="Pagination">
+              <p className="desk-muted" style={{ marginBottom: 0 }}>
                 Page {page} of {pageCount}
               </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  render={
-                    <Link
-                      href={`/clients?${new URLSearchParams({ ...(params as Record<string, string>), page: String(page - 1) })}`}
-                    />
-                  }
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= pageCount}
-                  render={
-                    <Link
-                      href={`/clients?${new URLSearchParams({ ...(params as Record<string, string>), page: String(page + 1) })}`}
-                    />
-                  }
-                >
-                  Next
-                </Button>
+              <div className="desk-actions-row">
+                {page > 1 ? (
+                  <Link
+                    href={`/clients?${new URLSearchParams({ ...(params as Record<string, string>), page: String(page - 1) })}`}
+                    className="desk-btn-secondary"
+                  >
+                    Previous
+                  </Link>
+                ) : (
+                  <span className="desk-btn-secondary" style={{ opacity: 0.5 }}>Previous</span>
+                )}
+                {page < pageCount ? (
+                  <Link
+                    href={`/clients?${new URLSearchParams({ ...(params as Record<string, string>), page: String(page + 1) })}`}
+                    className="desk-btn-secondary"
+                  >
+                    Next
+                  </Link>
+                ) : (
+                  <span className="desk-btn-secondary" style={{ opacity: 0.5 }}>Next</span>
+                )}
               </div>
             </nav>
           )}
@@ -302,6 +294,6 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
           )}
         </BulkProvider>
       )}
-    </>
+    </DeskChrome>
   )
 }

@@ -185,7 +185,7 @@ export function ApproveReadinessDialog({
         <ShieldCheck />
         Approve as CYS ready
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="desk desk-dialog sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Approve as CYS ready</DialogTitle>
           <DialogDescription>

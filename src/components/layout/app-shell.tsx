@@ -243,7 +243,7 @@ export function AppShell({
     )
 
   return (
-    <div className="flex min-h-dvh">
+    <div className="desk flex min-h-dvh">
       {/* Desktop sidebar — a collapsed icon rail by default, expanded to the
           full 240px layout when <html> carries `pf-nav-open` (stamped before
           first paint from localStorage). The flex row means the main column
@@ -259,7 +259,10 @@ export function AppShell({
               className="focus-visible:ring-ring flex items-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
             >
               {/* Two marks, CSS-toggled, so the wordmark appears without a remount. */}
-              <AppBrand slug={activeOrgSlug} className="hidden h-7 [.pf-nav-open_&]:inline-flex" />
+              <span className="hidden flex-col [.pf-nav-open_&]:flex">
+                <span className="desk-kicker">SCS operations</span>
+                <AppBrand slug={activeOrgSlug} className="h-7" />
+              </span>
               <AppBrand slug={activeOrgSlug} showWordmark={false} className="h-7 [.pf-nav-open_&]:hidden" />
             </Link>
           </div>
@@ -329,7 +332,7 @@ export function AppShell({
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="bg-background/80 supports-backdrop-filter:bg-background/65 sticky top-0 z-40 flex h-14 items-center gap-2 border-b px-3 backdrop-blur-md sm:px-5">
+        <header className="desk-top sticky top-0 z-40 flex h-14 items-center gap-2 border-b px-3 sm:px-5">
           <Button
             variant="ghost"
             size="icon-sm"

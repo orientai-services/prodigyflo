@@ -191,23 +191,20 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
   CLIENT: 'Client',
 }
 
-/** Landing route per role — the home experience changes with who signs in. */
 /**
- * Landing route per role. Each target must exist and be reachable with that
- * role's permissions — the role-specific homes (/my-day, /collector,
- * /performance, /marketing, /portal) are P1+ and are not routed yet.
+ * Post-login landing. A per-user landingPath wins. Admin / Operations /
+ * Closer (and Super Admin, whose old home was Dashboard) land on Board.
  */
-/** Post-login landing for a user: a per-user override wins over the role default. */
 export function homeFor(user: { role: RoleKey; landingPath?: string | null }): string {
   return user.landingPath || ROLE_HOME[user.role]
 }
 
 export const ROLE_HOME: Record<RoleKey, string> = {
-  SUPER_ADMIN: '/dashboard',
-  ADMIN: '/dashboard',
+  SUPER_ADMIN: '/board',
+  ADMIN: '/board',
   REGIONAL_MANAGER: '/sales',
   SALES_MANAGER: '/sales',
-  CLOSER: '/sales/hot-leads',
+  CLOSER: '/board',
   DOCUMENT_COLLECTOR: '/clients',
   MARKETING: '/marketing',
   CLIENT: '/portal',

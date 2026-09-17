@@ -12,9 +12,9 @@ export const metadata = { title: 'Sign in' }
 export const dynamic = 'force-dynamic'
 
 export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
-  // The panel prints real sign-in credentials, so it never renders on a public
-  // deployment. Opt out by setting SHOW_DEMO_ACCOUNTS=false in the environment.
-  const showDemoAccounts = process.env.SHOW_DEMO_ACCOUNTS !== 'false'
+  // Demo credentials never render unless a deployment explicitly opts in.
+  // Production and preview must set SHOW_DEMO_ACCOUNTS=false or leave it unset.
+  const showDemoAccounts = process.env.SHOW_DEMO_ACCOUNTS === 'true'
 
   const user = await getSessionUser()
   if (user) redirect(homeFor(user))
@@ -57,7 +57,7 @@ export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
               className="border-success/40 bg-success/10 mt-6 flex items-start gap-2 rounded-md border p-3 text-sm motion-safe:animate-in motion-safe:fade-in"
             >
               <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
-              <span>Your admin account is ready. Sign in to continue.</span>
+              <span>Your account is ready. Sign in to continue.</span>
             </div>
           )}
 
@@ -66,11 +66,8 @@ export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
       </div>
 
       {/*
-        The right column carries the demo-credentials panel in development. On a
-        public deployment SHOW_DEMO_ACCOUNTS is false and that half of the page
-        was simply blank — so it now carries the full lockup instead. This is the
-        one place the tagline belongs: a full-bleed brand surface with room for
-        it, rather than the 14px app chrome.
+        The right column carries the demo-credentials panel only when a
+        deployment opts in. Public hosts show the brand lockup instead.
       */}
       <aside className="bg-sidebar hidden border-l lg:flex lg:flex-col lg:justify-center lg:px-16">
         <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700">

@@ -1,8 +1,8 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { SUBROUTES, navigationFor } from '@/lib/navigation'
-import { PERMISSIONS, type PermissionKey } from '@/lib/permissions'
+import { SUBROUTES, navigationFor, subroutesFor } from '@/lib/navigation'
+import { PERMISSIONS, homeFor, type PermissionKey } from '@/lib/permissions'
 import type { SessionUser } from '@/lib/rbac'
 
 const APP_DIR = path.resolve(__dirname, '../app/(app)')
@@ -42,6 +42,13 @@ function hrefsOf(user: SessionUser): string[] {
   return navigationFor(user).flatMap((s) => s.items.map((i) => i.href))
 }
 
+function paletteHrefs(user: SessionUser): string[] {
+  return subroutesFor(user).map((i) => i.href)
+}
+
+const DAILY_RAIL = ['/board', '/pipeline', '/clients', '/queue', '/engine', '/documents', '/submissions']
+const OFF_RAIL = ['/sales', '/marketing', '/inbox', '/attorney', '/reports', '/agency', '/settings/users']
+
 describe('SUBROUTES', () => {
   it('every href points at an existing page.tsx under src/app/(app)', () => {
     const missing = SUBROUTES.filter((item) => !pageExists(item.href)).map((item) => item.href)
@@ -77,19 +84,129 @@ describe('navigationFor', () => {
     expect(missing, `stale nav routes (no page.tsx on disk): ${missing.join(', ')}`).toEqual([])
   })
 
-  it('shows /agency to an agency-home user holding users:manage', () => {
+  it('staff Daily rail is Board, Pipeline, Clients, Queue, Engine, Document lab, CYS', () => {
+    const everything = fixtureUser({ permissions: ALL_PERMISSIONS })
+    expect(hrefsOf(everything)).toEqual(DAILY_RAIL)
+  })
+
+  it('/board is the desk calendar, not the pipeline kanban', () => {
+    const src = readFileSync(path.join(APP_DIR, 'board', 'page.tsx'), 'utf8')
+    expect(src).toContain('DeskCalendar')
+    expect(src).not.toContain('PipelineBoard')
+  })
+
+  it('/pipeline still mounts the kanban', () => {
+    const src = readFileSync(path.join(APP_DIR, 'pipeline', 'page.tsx'), 'utf8')
+    expect(src).toContain('PipelineBoard')
+  })
+
+  it('/queue is a live desk with four work buckets, not a stub', () => {
+    const src = readFileSync(path.join(APP_DIR, 'queue', 'page.tsx'), 'utf8')
+    expect(src).toContain('DeskQueueView')
+    expect(src).not.toContain('EmptyState')
+    expect(src).not.toContain('coming soon')
+    const ui = readFileSync(path.join(APP_DIR, 'queue', 'desk-queue.tsx'), 'utf8')
+    const logic = readFileSync(path.resolve(__dirname, 'daily-desk-queue.ts'), 'utf8')
+    expect(logic).toContain("'unassigned'")
+    expect(logic).toContain("'unscheduled'")
+    expect(logic).toContain("'missing_docs'")
+    expect(logic).toContain("'cys'")
+    expect(ui).toContain('applyCloserAction')
+    expect(ui).toContain('bookAppointmentAction')
+    expect(ui).toContain('requestDocuments')
+    expect(ui).not.toContain('Call')
+  })
+
+  it('/board chips do not render invented dollar amounts', () => {
+    const src = readFileSync(path.join(APP_DIR, 'board', 'desk-calendar.tsx'), 'utf8')
+    expect(src).not.toContain('currency(')
+    expect(src).not.toContain('estimatedValue')
+    expect(src).not.toContain('$0')
+  })
+
+  it('clients list uses listedMoney instead of currency($0)', () => {
+    const src = readFileSync(path.join(APP_DIR, 'clients', 'page.tsx'), 'utf8')
+    expect(src).toContain('listedMoney')
+    expect(src).not.toContain('currency(')
+  })
+
+  it('Board, Clients, Queue, and Pipeline loaders hide non-SCS clients', () => {
+    const files = [
+      readFileSync(path.join(APP_DIR, 'clients', 'page.tsx'), 'utf8'),
+      readFileSync(path.join(APP_DIR, 'board', 'pipeline-board.tsx'), 'utf8'),
+      readFileSync(path.resolve(__dirname, 'daily-desk-data.ts'), 'utf8'),
+      readFileSync(path.resolve(__dirname, 'daily-desk-queue-data.ts'), 'utf8'),
+    ]
+    for (const src of files) {
+      expect(src).toContain('deskVisibleClientWhere')
+    }
+  })
+
+  it('Clients, Engine, Document lab, and CYS use Daily Desk chrome, not PageHeader', () => {
+    for (const rel of ['clients/page.tsx', 'engine/page.tsx', 'documents/page.tsx', 'submissions/page.tsx']) {
+      const src = readFileSync(path.join(APP_DIR, rel), 'utf8')
+      expect(src, rel).toMatch(/desk-page|DeskChrome|DocumentLabView/)
+      expect(src, rel).not.toContain('PageHeader')
+      expect(src, rel).not.toContain('bg-surface-sunk')
+      expect(src, rel).not.toContain('Call')
+    }
+  })
+
+  it('document lab Quick look uses the case-file viewer and never invents a preview', () => {
+    const ui = readFileSync(path.join(APP_DIR, 'documents', 'desk-documents.tsx'), 'utf8')
+    expect(ui).toContain('DeskQuickLook')
+    const look = readFileSync(path.resolve(__dirname, '../components/desk/desk-quick-look.tsx'), 'utf8')
+    expect(look).toContain('Not on file')
+    expect(look).toContain('No preview is invented')
+    expect(look).toContain('desk-lookbox')
+  })
+
+  it('CYS generateCysPackage stays JSON-only with no HTTP push', () => {
+    const src = readFileSync(path.resolve(__dirname, 'cys/data.ts'), 'utf8')
+    expect(src).toContain('packageJson')
+    expect(src).not.toMatch(/\bfetch\s*\(/)
+    const page = readFileSync(path.join(APP_DIR, 'submissions', '[submissionId]', 'page.tsx'), 'utf8')
+    expect(page).toContain('CysTab')
+    const tab = readFileSync(path.resolve(__dirname, '../components/client/cys-tab.tsx'), 'utf8')
+    expect(tab).toContain('GeneratePackageButton')
+    expect(tab).toContain('FieldActions')
+  })
+
+  it('client profile is the Daily Desk case file, not CRM tabs or Call', () => {
+    const src = readFileSync(path.join(APP_DIR, 'clients', '[clientId]', 'page.tsx'), 'utf8')
+    expect(src).toContain('CaseFileView')
+    expect(src).not.toContain('LogCallButton')
+    expect(src).not.toContain('TAB_KEYS')
+    const ui = readFileSync(path.join(APP_DIR, 'clients', '[clientId]', 'case-file-client.tsx'), 'utf8')
+    expect(ui).toContain('applyCloserAction')
+    expect(ui).not.toContain('Call')
+  })
+
+  it('keeps Sales, Marketing, Inbox, Attorney, Reports, Agency, and Users off the rail', () => {
+    const everything = fixtureUser({
+      isOwner: true,
+      organizationKind: 'AGENCY',
+      permissions: ALL_PERMISSIONS,
+    })
+    for (const href of OFF_RAIL) {
+      expect(hrefsOf(everything), href).not.toContain(href)
+    }
+  })
+
+  it('shows /agency in the palette to an agency-home user holding users:manage', () => {
     const user = fixtureUser({ organizationKind: 'AGENCY' })
-    expect(hrefsOf(user)).toContain('/agency')
+    expect(paletteHrefs(user)).toContain('/agency')
+    expect(hrefsOf(user)).not.toContain('/agency')
   })
 
   it('hides /agency from a client-org user even with users:manage', () => {
     const user = fixtureUser({ organizationKind: 'CLIENT' })
-    expect(hrefsOf(user)).not.toContain('/agency')
+    expect(paletteHrefs(user)).not.toContain('/agency')
   })
 
   it('hides /agency when organizationKind is absent (legacy fixtures = CLIENT)', () => {
     const user = fixtureUser({ organizationKind: undefined })
-    expect(hrefsOf(user)).not.toContain('/agency')
+    expect(paletteHrefs(user)).not.toContain('/agency')
   })
 
   it('hides /agency from an agency user without users:manage', () => {
@@ -97,14 +214,26 @@ describe('navigationFor', () => {
       organizationKind: 'AGENCY',
       permissions: new Set<PermissionKey>(['users:read']),
     })
-    expect(hrefsOf(user)).not.toContain('/agency')
+    expect(paletteHrefs(user)).not.toContain('/agency')
   })
 
   it('agencyOnly stacks on top of permissions like ownerOnly does', () => {
     // Same permissions, only the home-org kind differs — the flag is the gate.
     const agency = fixtureUser({ organizationKind: 'AGENCY' })
     const client = fixtureUser({ organizationKind: 'CLIENT' })
-    expect(hrefsOf(agency)).toContain('/agency')
-    expect(hrefsOf(client)).not.toContain('/agency')
+    expect(paletteHrefs(agency)).toContain('/agency')
+    expect(paletteHrefs(client)).not.toContain('/agency')
+  })
+})
+
+describe('homeFor', () => {
+  it('lands Admin / Operations / Closer on Board', () => {
+    expect(homeFor({ role: 'ADMIN' })).toBe('/board')
+    expect(homeFor({ role: 'SUPER_ADMIN' })).toBe('/board')
+    expect(homeFor({ role: 'CLOSER' })).toBe('/board')
+  })
+
+  it('keeps a per-user landingPath override', () => {
+    expect(homeFor({ role: 'ADMIN', landingPath: '/survey' })).toBe('/survey')
   })
 })

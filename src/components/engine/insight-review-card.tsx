@@ -58,7 +58,7 @@ export function InsightReviewCard({ insight }: { insight: PendingInsightView }) 
   )
 
   return (
-    <article className="bg-card shadow-e1 motion-safe:hover:shadow-e2 flex h-full flex-col rounded-xl border transition-shadow">
+    <article className="desk-card flex h-full flex-col">
       <div className="flex-1 p-4">
         <div className="flex items-center gap-2">
           <span

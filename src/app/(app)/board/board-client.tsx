@@ -288,6 +288,7 @@ export function Board({
 
   return (
     <DndContext
+      id="pipeline-board"
       sensors={sensors}
       collisionDetection={pointerWithin}
       onDragStart={onDragStart}
