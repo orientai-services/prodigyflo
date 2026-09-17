@@ -174,8 +174,14 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     if (kind && !reqByKind.has(kind.key)) reqByKind.set(kind.key, r)
   }
 
+  const orderedDocs = [...docs].sort((a, b) => {
+    const ta = a.receivedAt?.getTime() ?? 0
+    const tb = b.receivedAt?.getTime() ?? 0
+    return ta - tb
+  })
   const docsByKind = new Map<string, (typeof docs)[number]>()
-  for (const d of docs) {
+  const usedDocIds = new Set<string>()
+  for (const d of orderedDocs) {
     const kind =
       matchDocKind(d.requirement?.key) ||
       matchDocKind(d.extractions[0]?.detectedTypeKey) ||
@@ -188,6 +194,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
   const tiles: CaseDocTile[] = []
   for (const kind of CASE_DOC_KINDS) {
     const doc = docsByKind.get(kind.key)
+    if (doc) usedDocIds.add(doc.id)
     const req = reqByKind.get(kind.key)
     const extraction = doc?.extractions[0]
     const fields = extraction?.fields ?? []
@@ -216,6 +223,39 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
           ? {
               kicker: extraction?.detectedTypeKey ?? kind.label,
               title: kind.label,
+              fields: extractFields,
+              note: verified === fields.length && fields.length > 0 ? 'Verified extract.' : 'Unverified extract.',
+            }
+          : null,
+    })
+  }
+
+  for (const d of orderedDocs) {
+    if (usedDocIds.has(d.id) || !d.storageKey) continue
+    const extraction = d.extractions[0]
+    const fields = extraction?.fields ?? []
+    const verified = fields.filter((f) => f.verification === 'VERIFIED' || f.verification === 'CORRECTED').length
+    const extractFields = fields
+      .map((f) => ({ label: f.label || f.key, value: str(f.correctedValue) || str(f.value) }))
+      .filter((f) => f.value)
+    tiles.push({
+      key: `extra:${d.id}`,
+      label: d.fileName || d.label || d.requirement?.name || 'Document',
+      state: tileState({
+        hasFile: true,
+        extractionStatus: extraction?.status ?? null,
+        fieldCount: fields.length,
+        verifiedCount: verified,
+      }),
+      requirementId: d.requirement?.id ?? null,
+      documentId: d.id,
+      fileUrl: await signedDocumentFileUrl(d),
+      mimeType: d.mimeType,
+      extract:
+        extractFields.length > 0
+          ? {
+              kicker: extraction?.detectedTypeKey ?? 'Document',
+              title: d.fileName || d.label || 'Document',
               fields: extractFields,
               note: verified === fields.length && fields.length > 0 ? 'Verified extract.' : 'Unverified extract.',
             }

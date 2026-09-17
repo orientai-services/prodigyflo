@@ -3,6 +3,7 @@ import { sha256 } from '@/lib/extraction/sniff'
 
 const mocks = vi.hoisted(() => ({
   clientDocumentCreate: vi.fn(),
+  clientDocumentFindFirst: vi.fn(),
   importFindMany: vi.fn(),
   importFindFirst: vi.fn(),
   importFindUnique: vi.fn(),
@@ -20,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
-    clientDocument: { create: mocks.clientDocumentCreate },
+    clientDocument: { create: mocks.clientDocumentCreate, findFirst: mocks.clientDocumentFindFirst },
     externalDocumentImport: {
       findMany: mocks.importFindMany,
       findFirst: mocks.importFindFirst,
@@ -71,6 +72,7 @@ describe('runPendingScsDocumentImports', () => {
     mocks.importUpdateMany.mockResolvedValue({ count: 1 })
     mocks.importFindUnique.mockResolvedValue(row)
     mocks.clientDocumentCreate.mockImplementation((args) => transactionOperation('document', args))
+    mocks.clientDocumentFindFirst.mockResolvedValue(null)
     mocks.importUpdate.mockImplementation((args) => transactionOperation('import', args))
     mocks.auditEventCreate.mockImplementation((args) => transactionOperation('audit', args))
     mocks.transaction.mockImplementation(async fn => fn(db))
@@ -213,6 +215,32 @@ describe('runPendingScsDocumentImports', () => {
     }))
     expect(mocks.runExtraction).toHaveBeenNthCalledWith(1, 'document_1')
     expect(mocks.runExtraction).toHaveBeenNthCalledWith(2, 'document_2')
+  })
+
+  it('persists a second agreement when the solar_contract slot is already filled', async () => {
+    mocks.clientDocumentFindFirst.mockResolvedValueOnce({ id: 'existing-agreement' })
+    mocks.importFindUnique.mockResolvedValue({
+      ...row,
+      id: 'import_amendment',
+      sourceDocumentId: 'scs_document_amendment',
+      sourceFileName: 'Agreement Amendment.pdf',
+    })
+    ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(bytes, {
+      headers: {
+        'content-type': 'application/pdf',
+        'content-length': String(bytes.length),
+        'x-scs-document-id': 'scs_document_amendment',
+        'x-scs-lead-id': row.sourceLeadId,
+        'x-scs-sha256': checksum,
+      },
+    }))
+
+    await expect(runPendingScsDocumentImports()).resolves.toEqual({ attempted: 1, imported: 1, failed: 0, skipped: 0 })
+
+    expect(mocks.clientDocumentCreate).toHaveBeenCalledOnce()
+    expect(mocks.clientDocumentCreate.mock.calls[0][0].data.requirementId).toBeNull()
+    expect(mocks.clientDocumentCreate.mock.calls[0][0].data.fileName).toBe('Agreement Amendment.pdf')
+    expect(mocks.clientDocumentCreate.mock.calls[0][0].data.label).toBe('Agreement Amendment.pdf')
   })
 
   it('does not queue the same durable SCS source document twice', async () => {
