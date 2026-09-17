@@ -20,10 +20,13 @@ export function DeskQuickLook({
 }) {
   return (
     <Dialog open={look !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="desk desk-lookbox sm:max-w-3xl" showCloseButton={false}>
+      <DialogContent
+        className="desk desk-lookbox flex h-[92vh] w-[96vw] max-w-[96vw] flex-col gap-3 p-4 sm:max-w-[96vw]"
+        showCloseButton={false}
+      >
         {look && (
           <>
-            <div className="desk-lookhead">
+            <div className="desk-lookhead shrink-0">
               <div>
                 <div
                   className="desk-muted"
@@ -39,12 +42,12 @@ export function DeskQuickLook({
               </button>
             </div>
             {look.fileUrl ? (
-              <div className="desk-paper">
+              <div className="desk-paper min-h-0 flex-1">
                 {look.mimeType?.startsWith('image/') ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={look.fileUrl} alt={look.label} />
+                  <img src={look.fileUrl} alt={look.label} style={{ maxHeight: '100%', width: '100%', objectFit: 'contain' }} />
                 ) : (
-                  <iframe title={look.label} src={look.fileUrl} />
+                  <iframe title={look.label} src={look.fileUrl} style={{ width: '100%', height: '100%', minHeight: '78vh', border: 0 }} />
                 )}
               </div>
             ) : (
