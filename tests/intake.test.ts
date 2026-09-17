@@ -393,6 +393,47 @@ describe('intake apply pipeline (db)', () => {
     expect(await db.client.count({ where: { organizationId: org.id, id: firstJson.clientId } })).toBe(1)
   })
 
+  it('creates a new SCS client when contact matches an existing similar name instead of NEEDS_MAPPING', async () => {
+    const email = `casey.similar.${suffix}@example.test`
+    const existing = await db.client.create({
+      data: {
+        organizationId: org.id,
+        pipelineId: pipeline.id,
+        currentStageId: stage.id,
+        firstName: 'Casey',
+        lastName: 'Similar',
+        email,
+        phone: '702-555-0400',
+      },
+    })
+    const leadId = '22222222-2222-4222-8222-222222222222'
+    const packet = {
+      id: `delivery-similar-${suffix}`,
+      lead_id: leadId,
+      event_type: 'lead.received',
+      first_name: 'Casey',
+      last_name: 'Similar',
+      email,
+      phone: '702-555-0400',
+      data: {
+        schema_version: 'schema_42.v1',
+        stage1_answers: {
+          first_name: 'Casey',
+          last_name: 'Similar',
+          email,
+          phone: '702-555-0400',
+        },
+        documents: { files: [] },
+      },
+    }
+    const { submission } = await processInbound(scsSource, `scs:${leadId}`, packet)
+    expect(submission.status).toBe('APPLIED')
+    expect(submission.createdClient).toBe(true)
+    expect(submission.clientId).toBeTruthy()
+    expect(submission.clientId).not.toBe(existing.id)
+    expect(await db.client.count({ where: { organizationId: org.id, email } })).toBe(2)
+  })
+
   it('syncs sheet rows through the same pipeline, advances the cursor, and re-syncs as a no-op', async () => {
     const first = await runSheetSync(sheetSource)
     expect(first.ok).toBe(true)
