@@ -5,6 +5,7 @@ import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
 import { refreshCysMirror } from '@/lib/cys/data'
 import { SCHEMA_VERSION, asRecord, str, type DocumentRef } from '@/lib/packet/schema'
 import { queueScsDocumentImports } from './scs-document-import'
+import { quotedFinanceFromPacket } from './scs-finance'
 
 export function isSchema42Payload(raw: unknown): boolean {
   const top = asRecord(raw)
@@ -48,18 +49,20 @@ export async function ingestScsPacket(opts: {
   rawPayload: unknown
 }, store: Prisma.TransactionClient = db): Promise<void> {
   const raw = asRecord(opts.rawPayload)
-  const answers = stage1From(raw)
-  if (Object.keys(answers).length === 0 && documentsFrom(raw).length === 0) return
+  const incoming = { ...stage1From(raw), ...quotedFinanceFromPacket(raw) }
+  if (Object.keys(incoming).length === 0 && documentsFrom(raw).length === 0) return
 
   const survey = await store.survey.findFirst({
     where: { organizationId: opts.organizationId, name: INTAKE_SURVEY_NAME },
     select: { id: true },
   })
-  if (survey && Object.keys(answers).length) {
+  let answers = incoming
+  if (survey && Object.keys(incoming).length) {
     const existing = await store.surveyResponse.findFirst({
       where: { clientId: opts.clientId, surveyId: survey.id },
       orderBy: { updatedAt: 'desc' },
     })
+    if (existing) answers = { ...asRecord(existing.answers), ...incoming }
     const identity =
       str(answers.first_name) &&
       str(answers.last_name) &&

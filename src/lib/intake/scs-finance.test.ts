@@ -13,7 +13,7 @@ describe('quotedFinanceFromPacket', () => {
           first_payment_date: '2026-10-01',
           remaining: 18000,
         },
-        money: { monthly_solar_payment: 344 },
+        money: { monthly_solar_payment: 154.8 },
         stage1_answers: { monthly_guess: 344, lender_guess: 'GoodLeap' },
       },
     })
@@ -23,8 +23,8 @@ describe('quotedFinanceFromPacket', () => {
       interest_rate: '5.99',
       dealer_fee: '1240',
       first_payment_date: '2026-10-01',
+      monthly_payment: '154.8',
     })
-    expect(out.monthly_payment).toBeUndefined()
     expect(out.monthly_guess).toBeUndefined()
     expect(out.lender_guess).toBeUndefined()
   })

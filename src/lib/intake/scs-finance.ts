@@ -15,16 +15,19 @@ export function quotedFinanceFromPacket(raw: unknown): Record<string, string> {
   const top = asRecord(raw)
   const data = asRecord(top.data)
   const finance = asRecord(data.finance)
+  const money = asRecord(data.money)
   const out: Record<string, string> = {}
   const amount = quoted(finance.amount_financed)
   const term = quoted(finance.term_months)
   const rate = quoted(finance.rate)
   const dealer = quoted(finance.dealer_fee)
   const firstPay = quoted(finance.first_payment_date)
+  const monthly = quoted(money.monthly_solar_payment)
   if (amount) out.amount_financed = amount
   if (term) out.term_months = term
   if (rate) out.interest_rate = rate
   if (dealer) out.dealer_fee = dealer
   if (firstPay) out.first_payment_date = firstPay
+  if (monthly) out.monthly_payment = monthly
   return out
 }
