@@ -7,7 +7,7 @@ import { asRecord, str } from '@/lib/packet/schema'
 import { resolveForClient } from '@/lib/cys/data'
 import { listBriefViews } from '@/lib/ai/closeops-ai'
 import { DESK_TIMEZONE, timeLabel } from '@/lib/daily-desk'
-import { CASE_DOC_KINDS, matchDocKind, tileState } from '@/lib/daily-desk-docs'
+import { CASE_DOC_KINDS, classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { amortize, sourceMoney, sourcePercent, sourceText } from '@/lib/daily-desk-finance'
 import type { CaseCell, CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 
@@ -41,6 +41,10 @@ function stringifyAnswer(value: unknown): string {
   if (Array.isArray(value)) return value.map((v) => stringifyAnswer(v)).filter(Boolean).join(', ')
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+function nestedStr(answers: Record<string, unknown>, group: string, key: string): string {
+  return str(asRecord(answers[group])[key])
 }
 
 export async function loadCaseFile(user: SessionUser, clientId: string): Promise<CaseFileData | null> {
@@ -106,24 +110,27 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
   const addr = client.addresses[0]
   const docs = client.documents
   const amt = extracted(docs, 'finance_agreement', 'amount_financed')
-  const apr = extracted(docs, 'finance_agreement', 'apr')
-  const term =
-    extracted(docs, 'finance_agreement', 'term_months') ||
-    extracted(docs, 'solar_contract', 'term_months') ||
-    str(answers.termMonths)
-  const pay =
-    extracted(docs, 'finance_agreement', 'monthly_payment') ||
-    extracted(docs, 'solar_contract', 'monthly_payment') ||
-    str(answers.monthlyAmount) ||
-    str(answers.monthly_guess)
+  const apr =
+    extracted(docs, 'finance_agreement', 'apr') || extracted(docs, 'finance_agreement', 'interest_rate')
+  const term = extracted(docs, 'finance_agreement', 'term_months')
+  const pay = extracted(docs, 'finance_agreement', 'monthly_payment')
   const firstPay = extracted(docs, 'finance_agreement', 'first_payment_date')
   const dealerFee = extracted(docs, 'finance_agreement', 'dealer_fee')
-  const lender = extracted(docs, 'finance_agreement', 'lender_name') || str(answers.lender_confirmed) || str(answers.lender_guess)
+  const lender =
+    extracted(docs, 'finance_agreement', 'lender_name') || str(answers.lender_confirmed) || str(answers.lender_guess)
   const product =
     str(answers.product_confirmed) || str(client.contracts[0]?.productType) || str(answers.product_type_guess)
   const installer = extracted(docs, 'solar_contract', 'installer_name') || str(answers.installer_guess) || str(answers.counterparty)
   const kw = extracted(docs, 'solar_contract', 'system_size_kw') || extracted(docs, 'production_report', 'system_size_kw')
-  const creditRaw = str(answers.credit_score) || str(answers.creditScore) || str(answers.credit)
+  const creditBand =
+    str(answers.credit_band) ||
+    nestedStr(answers, 'screening', 'credit_band') ||
+    nestedStr(answers, 'stage1_answers', 'credit_band') ||
+    nestedStr(answers, 'solar', 'credit_band')
+  const creditRaw =
+    creditBand || str(answers.credit_score) || str(answers.creditScore) || str(answers.credit)
+  const bankruptcy =
+    str(answers.active_bankruptcy) || nestedStr(answers, 'screening', 'active_bankruptcy')
   const amort = amortize({ firstPayDate: firstPay, termMonths: term, aprPercent: apr, monthlyPayment: pay })
   const termNum = Number(String(term).replace(/[^0-9.]/g, ''))
   const termYears = Number.isFinite(termNum) && termNum > 0 ? { kind: 'value' as const, display: (termNum / 12).toFixed(termNum % 12 === 0 ? 0 : 1) } : { kind: 'missing' as const }
@@ -158,9 +165,13 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     { label: 'Agreement type', cell: sourceText(product) },
     { label: 'Installer', cell: sourceText(installer) },
     {
-      label: 'Credit score',
+      label: creditBand ? 'Credit range' : 'Credit score',
       cell: creditRaw ? { kind: 'value', display: creditRaw } : { kind: 'missing' },
-      hint: 'SCS intake only · not a bureau pull',
+      hint: 'From the solar form · not a bureau pull',
+    },
+    {
+      label: 'Bankruptcy',
+      cell: bankruptcy ? { kind: 'value', display: bankruptcy } : { kind: 'missing' },
     },
     { label: 'System size', cell: kw ? { kind: 'value', display: `${kw} kW` } : { kind: 'missing' } },
     { label: 'Utility', cell: sourceText(utility) },
@@ -170,7 +181,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
 
   const reqByKind = new Map<string, { id: string; key: string }>()
   for (const r of requirements) {
-    const kind = matchDocKind(r.key)
+    const kind = classifyDeskKind({ requirementKey: r.key })
     if (kind && !reqByKind.has(kind.key)) reqByKind.set(kind.key, r)
   }
 
@@ -180,21 +191,32 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     return ta - tb
   })
   const docsByKind = new Map<string, (typeof docs)[number]>()
-  const usedDocIds = new Set<string>()
+  const extrasByKind = new Map<string, string[]>()
   for (const d of orderedDocs) {
-    const kind =
-      matchDocKind(d.requirement?.key) ||
-      matchDocKind(d.extractions[0]?.detectedTypeKey) ||
-      matchDocKind(d.label)
+    const kind = classifyDeskKind({
+      requirementKey: d.requirement?.key,
+      detectedType: d.extractions[0]?.detectedTypeKey,
+      label: d.label,
+      fileName: d.fileName,
+    })
     if (!kind) continue
     const prev = docsByKind.get(kind.key)
-    if (!prev || (d.storageKey && !prev.storageKey)) docsByKind.set(kind.key, d)
+    if (!prev) {
+      docsByKind.set(kind.key, d)
+      continue
+    }
+    if (d.storageKey && !prev.storageKey) {
+      extrasByKind.set(kind.key, [...(extrasByKind.get(kind.key) ?? []), prev.fileName || prev.label || 'Document'])
+      docsByKind.set(kind.key, d)
+      continue
+    }
+    extrasByKind.set(kind.key, [...(extrasByKind.get(kind.key) ?? []), d.fileName || d.label || 'Document'])
   }
 
   const tiles: CaseDocTile[] = []
   for (const kind of CASE_DOC_KINDS) {
     const doc = docsByKind.get(kind.key)
-    if (doc) usedDocIds.add(doc.id)
+    const extras = extrasByKind.get(kind.key) ?? []
     const req = reqByKind.get(kind.key)
     const extraction = doc?.extractions[0]
     const fields = extraction?.fields ?? []
@@ -210,6 +232,8 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     const extractFields = fields
       .map((f) => ({ label: f.label || f.key, value: str(f.correctedValue) || str(f.value) }))
       .filter((f) => f.value)
+    const extraNote = extras.length > 0 ? `Also on file: ${extras.join(', ')}.` : ''
+    const verifyNote = verified === fields.length && fields.length > 0 ? 'Verified extract.' : extractFields.length > 0 ? 'Unverified extract.' : ''
     tiles.push({
       key: kind.key,
       label: kind.label,
@@ -219,45 +243,12 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
       fileUrl,
       mimeType: doc?.mimeType ?? null,
       extract:
-        extractFields.length > 0
+        extractFields.length > 0 || extraNote
           ? {
               kicker: extraction?.detectedTypeKey ?? kind.label,
               title: kind.label,
               fields: extractFields,
-              note: verified === fields.length && fields.length > 0 ? 'Verified extract.' : 'Unverified extract.',
-            }
-          : null,
-    })
-  }
-
-  for (const d of orderedDocs) {
-    if (usedDocIds.has(d.id) || !d.storageKey) continue
-    const extraction = d.extractions[0]
-    const fields = extraction?.fields ?? []
-    const verified = fields.filter((f) => f.verification === 'VERIFIED' || f.verification === 'CORRECTED').length
-    const extractFields = fields
-      .map((f) => ({ label: f.label || f.key, value: str(f.correctedValue) || str(f.value) }))
-      .filter((f) => f.value)
-    tiles.push({
-      key: `extra:${d.id}`,
-      label: d.fileName || d.label || d.requirement?.name || 'Document',
-      state: tileState({
-        hasFile: true,
-        extractionStatus: extraction?.status ?? null,
-        fieldCount: fields.length,
-        verifiedCount: verified,
-      }),
-      requirementId: d.requirement?.id ?? null,
-      documentId: d.id,
-      fileUrl: await signedDocumentFileUrl(d),
-      mimeType: d.mimeType,
-      extract:
-        extractFields.length > 0
-          ? {
-              kicker: extraction?.detectedTypeKey ?? 'Document',
-              title: d.fileName || d.label || 'Document',
-              fields: extractFields,
-              note: verified === fields.length && fields.length > 0 ? 'Verified extract.' : 'Unverified extract.',
+              note: [verifyNote, extraNote].filter(Boolean).join(' '),
             }
           : null,
     })

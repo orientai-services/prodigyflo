@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CASE_DOC_KINDS, matchDocKind, tileState } from '@/lib/daily-desk-docs'
+import { CASE_DOC_KINDS, classifyDeskKind, matchDocKind, tileState } from '@/lib/daily-desk-docs'
 
 describe('CASE_DOC_KINDS', () => {
   it('is the 12-kind case-file strip', () => {
@@ -28,6 +28,19 @@ describe('matchDocKind', () => {
     expect(matchDocKind('attorney_poa')?.key).toBe('lpoa')
     expect(matchDocKind('lien_filing')?.key).toBe('ucc_lien')
     expect(matchDocKind('ownership')?.key).toBe('home_deed')
+    expect(matchDocKind('loan_or_til')?.key).toBe('finance_agreement')
+    expect(matchDocKind('agreement')?.key).toBe('signed_contract')
+  })
+})
+
+describe('classifyDeskKind', () => {
+  it('puts a lender PDF on finance and a Steele install PDF on solar', () => {
+    expect(classifyDeskKind({ fileName: 'GoodLeap_TIL.pdf' })?.key).toBe('finance_agreement')
+    expect(classifyDeskKind({ fileName: 'Steele_Solar_Agreement.pdf' })?.key).toBe('signed_contract')
+  })
+
+  it('puts an unknown extra file on the solar slot instead of a leftover card', () => {
+    expect(classifyDeskKind({ fileName: 'scan-page-3.jpg', label: 'other' })?.key).toBe('signed_contract')
   })
 })
 
