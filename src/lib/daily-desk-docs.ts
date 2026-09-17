@@ -1,6 +1,6 @@
 /**
- * The 12 case-file document kinds. Empty tile if the org has no matching
- * requirement row — no new table.
+ * Case-file document kinds shown on the desk. Empty tile if the org has no
+ * matching requirement row — no new table.
  */
 
 export type DeskDocKind = {
@@ -13,16 +13,26 @@ export const CASE_DOC_KINDS: DeskDocKind[] = [
   { key: 'finance_agreement', label: 'Finance agreement', aliases: ['finance_agreement', 'loan_or_til', 'til', 'loan_agreement'] },
   { key: 'signed_contract', label: 'Signed contract', aliases: ['signed_contract', 'solar_contract', 'contract', 'agreement', 'ppa', 'lease_agreement'] },
   { key: 'utility_bill', label: 'Utility bill', aliases: ['utility_bill', 'utility-bill', 'power_bill'] },
-  { key: 'gov_id', label: 'Government ID', aliases: ['gov_id', 'photo_id', 'government_id', 'drivers_license', 'id'] },
-  { key: 'proof_of_income', label: 'Proof of income', aliases: ['proof_of_income', 'proof_income'] },
-  { key: 'attorney_retainer', label: 'Attorney retainer', aliases: ['attorney_retainer'] },
-  { key: 'lpoa', label: 'LPOA', aliases: ['lpoa', 'attorney_poa'] },
   { key: 'comm_evidence', label: 'Comm evidence', aliases: ['comm_evidence'] },
   { key: 'ucc_lien', label: 'UCC Fixture / Lien', aliases: ['ucc_lien', 'lien_filing', 'lien'] },
   { key: 'home_deed', label: 'Homeownership Deed', aliases: ['home_deed', 'ownership', 'deed', 'property_record'] },
   { key: 'county_permit', label: 'County Permit Record', aliases: ['county_permit', 'permit', 'permits'] },
   { key: 'production_report', label: 'Solar Production Report', aliases: ['production_report', 'production'] },
 ]
+
+/** Kept off the case-file grid. Still stored on the client. */
+const HIDDEN_DESK_ALIASES = new Set([
+  'gov_id',
+  'photo_id',
+  'government_id',
+  'drivers_license',
+  'id',
+  'proof_of_income',
+  'proof_income',
+  'attorney_retainer',
+  'lpoa',
+  'attorney_poa',
+])
 
 export type DeskDocState = 'missing' | 'uploaded' | 'extracted' | 'unverified' | 'verified' | 'failed'
 
@@ -32,16 +42,31 @@ const FINANCE_NAME =
 const INSTALL_NAME =
   /solar\s+agreement|\binstall(?:ation)?\b|\bppa\b|power\s+purchase|\blease\b|\bsteele\b/i
 
+function normalizeKey(raw: string | null | undefined): string {
+  return (raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+}
+
 export function matchDocKind(raw: string | null | undefined): DeskDocKind | null {
-  const key = (raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const key = normalizeKey(raw)
   if (!key) return null
   return CASE_DOC_KINDS.find((k) => k.key === key || k.aliases.includes(key)) ?? null
 }
 
+function isHiddenDeskKind(input: {
+  requirementKey?: string | null
+  detectedType?: string | null
+  label?: string | null
+  fileName?: string | null
+}): boolean {
+  return [input.requirementKey, input.detectedType, input.label, input.fileName]
+    .map(normalizeKey)
+    .some((key) => key && HIDDEN_DESK_ALIASES.has(key))
+}
+
 /**
- * Put every inbound file on a known tile.
+ * Put inbound files on a known visible tile.
  * Lender names → finance. Install / Steele / unknown parent → signed contract.
- * Never leave an extra leftover card.
+ * Hidden kinds stay off the grid instead of stealing the contract slot.
  */
 export function classifyDeskKind(input: {
   requirementKey?: string | null
@@ -49,6 +74,8 @@ export function classifyDeskKind(input: {
   label?: string | null
   fileName?: string | null
 }): DeskDocKind | null {
+  if (isHiddenDeskKind(input)) return null
+
   const direct =
     matchDocKind(input.requirementKey) ||
     matchDocKind(input.detectedType) ||

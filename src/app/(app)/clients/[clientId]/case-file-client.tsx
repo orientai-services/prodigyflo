@@ -36,6 +36,7 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
   const [pending, setPending] = useState(false)
 
   const loc = [data.city, data.state, data.zip].filter(Boolean).join(', ')
+  const docTotal = data.docs.length
 
   async function runAssign() {
     if (!closerId) return
@@ -123,7 +124,7 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
             </span>
             <span className="desk-tag">{data.appointmentLabel ? `Appt ${data.appointmentLabel}` : 'Not booked'}</span>
             <span className="desk-tag">
-              Docs {data.docsPresent}/12
+              Docs {data.docsPresent}/{docTotal}
             </span>
             <span className={`desk-tag ${data.extractionLabel === 'verified' ? 'ok' : 'warn'}`}>
               Extraction {data.extractionLabel}
@@ -371,7 +372,11 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
       </Dialog>
 
       <Dialog open={look !== null} onOpenChange={(open) => !open && setLook(null)}>
-        <DialogContent className="desk desk-lookbox sm:max-w-3xl" showCloseButton={false}>
+        <DialogContent
+          className="desk desk-lookbox max-w-[96vw] sm:max-w-[96vw] w-[96vw] h-[92vh] p-4"
+          showCloseButton={false}
+          style={{ maxWidth: '96vw', width: '96vw', height: '92vh' }}
+        >
           {look && (
             <>
               <div className="desk-lookhead">
@@ -389,12 +394,12 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
                 </button>
               </div>
               {look.fileUrl ? (
-                <div className="desk-paper">
+                <div className="desk-paper" style={{ height: 'calc(92vh - 96px)', overflow: 'auto' }}>
                   {look.mimeType?.startsWith('image/') ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={look.fileUrl} alt={look.label} />
+                    <img src={look.fileUrl} alt={look.label} style={{ width: '100%', height: 'auto', maxHeight: 'calc(92vh - 110px)', objectFit: 'contain' }} />
                   ) : (
-                    <iframe title={look.label} src={look.fileUrl} />
+                    <iframe title={look.label} src={look.fileUrl} style={{ width: '100%', height: 'calc(92vh - 110px)', border: 0 }} />
                   )}
                   {look.extract && (
                     <div className="desk-kv" style={{ marginTop: 16 }}>
