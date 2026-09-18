@@ -2,7 +2,15 @@ import { str } from '@/lib/packet/schema'
 
 const TYPE_ALIASES: Record<string, string[]> = {
   finance_agreement: ['finance_agreement', 'loan_or_til', 'loan_agreement', 'til'],
-  solar_contract: ['solar_contract', 'signed_contract', 'agreement'],
+  solar_contract: [
+    'solar_contract',
+    'signed_contract',
+    'agreement',
+    'ppa',
+    'lease',
+    'solar_agreement',
+    'power_purchase_agreement',
+  ],
 }
 
 const FIELD_ALIASES: Record<string, string[]> = {
@@ -14,6 +22,10 @@ const FIELD_ALIASES: Record<string, string[]> = {
   lender_name: ['lender_name', 'lender_servicer'],
   installer_name: ['installer_name', 'installer'],
   system_size_kw: ['system_size_kw', 'system_size'],
+  first_payment_date: ['first_payment_date', 'first_pay_date'],
+  escalator_rate: ['escalator_rate', 'annual_escalator'],
+  buyout_terms: ['buyout_terms', 'buyout'],
+  remaining_balance: ['remaining_balance', 'remaining'],
 }
 
 export type ExtractableDoc = {
@@ -42,6 +54,33 @@ export function extracted(
   for (const d of docs) {
     for (const ex of d.extractions) {
       if (!types.has(str(ex.detectedTypeKey))) continue
+      for (const key of fields) {
+        const f = ex.fields.find((x) => x.key === key)
+        const v = str(f?.correctedValue) || str(f?.value)
+        if (v) return v
+      }
+    }
+  }
+  return ''
+}
+
+const CONTRACT_TYPES = new Set([
+  ...TYPE_ALIASES.finance_agreement,
+  ...TYPE_ALIASES.solar_contract,
+])
+
+/**
+ * PPA-safe fields from any contract-shaped file.
+ * Does not read amount_financed / APR / dealer / remaining — those stay on extracted(docs, 'finance_agreement', …).
+ */
+export function extractedFromAnyContract(
+  docs: ExtractableDoc[],
+  fieldKey: string,
+): string {
+  const fields = keysForField(fieldKey)
+  for (const d of docs) {
+    for (const ex of d.extractions) {
+      if (!CONTRACT_TYPES.has(str(ex.detectedTypeKey))) continue
       for (const key of fields) {
         const f = ex.fields.find((x) => x.key === key)
         const v = str(f?.correctedValue) || str(f?.value)
