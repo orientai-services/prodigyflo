@@ -1,7 +1,13 @@
 import type { ComputedCell } from '@/lib/daily-desk-finance'
 import type { DeskDocState } from '@/lib/daily-desk-docs'
 
-export type CaseCell = { label: string; cell: ComputedCell; hint?: string }
+export type CaseCell = {
+  label: string
+  cell: ComputedCell
+  hint?: string
+  /** Printed extract the homeowner has not confirmed. Never set on Missing. */
+  unverified?: boolean
+}
 
 export type CaseDocTile = {
   key: string
