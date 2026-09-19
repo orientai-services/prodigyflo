@@ -534,4 +534,20 @@ describe('database-backed document flows', () => {
       else process.env.SCS_IMPORT_EXECUTION_COHORT = previousCohort
     }
   })
+
+  it('blocks manual extraction of generated record references while keeping their original accessible', async () => {
+    const source = await db.intakeSource.create({ data: { organizationId: orgA, name: 'Reference test', slug: `reference-${run}`, kind: 'WEB_FORM' } })
+    const submission = await db.intakeSubmission.create({ data: { organizationId: orgA, sourceId: source.id, externalId: randomUUID(), clientId } })
+    // Readable known facts would normally extract successfully. Classification,
+    // rather than missing text or provider configuration, must prevent this.
+    const { key } = await new LocalFileStorage(storageDir).put(Buffer.from(BILL_TEXT), { fileName: 'generated-reference.txt', mimeType: 'text/plain', clientId })
+    const doc = await db.clientDocument.create({ data: { clientId, status: 'RECEIVED', storageKey: key, fileName: 'generated-reference.txt', mimeType: 'text/plain' } })
+    await db.externalDocumentImport.create({ data: { organizationId: orgA, intakeSubmissionId: submission.id, clientId, sourceLeadId: randomUUID(), sourceDocumentId: randomUUID(), sourceDocumentType: 'public_record_summary', status: 'IMPORTED', clientDocumentId: doc.id } })
+    const result = await runExtraction(doc.id)
+    expect(result.status).toBe('FAILED')
+    expect(result.error).toMatch(/generated public-record search reference/)
+    expect(await db.extractedField.count({ where: { extraction: { documentId: doc.id } } })).toBe(0)
+    expect((await db.clientDocument.findUniqueOrThrow({ where: { id: doc.id } })).status).toBe('RECEIVED')
+    expect(await new LocalFileStorage(storageDir).get(key)).toEqual(Buffer.from(BILL_TEXT))
+  })
 })

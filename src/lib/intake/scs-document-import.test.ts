@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sha256 } from '@/lib/extraction/sniff'
+import { classifyDeskKind } from '@/lib/daily-desk-docs'
 
 const mocks = vi.hoisted(() => ({
   clientDocumentCreate: vi.fn(),
@@ -232,6 +233,42 @@ describe('runPendingScsDocumentImports', () => {
       redirect: 'error',
     }))
     expect(mocks.storagePut).toHaveBeenCalledOnce()
+  })
+
+  it.each(['Property-Records-Search-Summary.pdf', 'UCC-Fixture-Search-Summary.pdf'])('keeps generated %s visible without fulfilling an actual record module', async (sourceFileName) => {
+    mocks.importFindUnique.mockResolvedValue({ ...row, sourceDocumentType: 'public_record_summary', sourceFileName })
+    expect(await runPendingScsDocumentImports()).toEqual({ attempted: 1, imported: 1, failed: 0, skipped: 0 })
+    const data = mocks.clientDocumentCreate.mock.calls[0][0].data
+    expect(data.requirementId).toBeNull()
+    expect(data.storageKey).toBe('private/client_1/imported.pdf')
+    expect(data.fileName).toBe(sourceFileName)
+    expect(data.status).toBe('RECEIVED')
+    expect(data.internalComment).toContain('Origin: SCS-generated public-record lookup summary')
+    expect(data.internalComment).toContain('not an official deed, UCC filing, lien or permit')
+    // Exercise the same classifier that drives both profile modules and CYS
+    // document presence: a filename containing UCC must still stay in Other.
+    expect(classifyDeskKind({ label: data.label, fileName: data.fileName })?.key).toBe('other')
+    expect(mocks.scsRequirementId).not.toHaveBeenCalled()
+    expect(mocks.auditEventCreate.mock.calls[0][0].data.after.classification).toBe('reference_only')
+  })
+
+  it('continues mapping an actual public permit document to its record requirement', async () => {
+    mocks.importFindUnique.mockResolvedValue({ ...row, sourceDocumentType: 'public_record_permit', sourceFileName: 'County-Permit.pdf' })
+    await runPendingScsDocumentImports()
+    expect(mocks.scsRequirementId).toHaveBeenCalledWith(row.organizationId, 'public_record_permit')
+    expect(mocks.clientDocumentCreate.mock.calls[0][0].data.requirementId).toBe('requirement_1')
+    expect(mocks.auditEventCreate.mock.calls[0][0].data.after.classification).toBe('source_document')
+  })
+
+  it('excludes generated search summaries from live extraction while retaining untyped legacy sources', async () => {
+    mocks.importFindMany.mockResolvedValue([])
+    await runPendingScsDocumentExtractions()
+    expect(mocks.importFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        AND: [{}, { OR: [{ sourceDocumentType: null }, { sourceDocumentType: { not: 'public_record_summary' } }] }],
+      }),
+    }))
+    expect(mocks.runExtraction).not.toHaveBeenCalled()
   })
 
   it('does not run an extraction already claimed by another worker', async () => {

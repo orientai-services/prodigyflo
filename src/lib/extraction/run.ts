@@ -41,6 +41,7 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
     where: { id: documentId },
     include: {
       requirement: { select: { key: true, category: true } },
+      externalImport: { select: { sourceDocumentType: true } },
       client: {
         select: {
           firstName: true,
@@ -63,6 +64,9 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
   const statusBefore = doc.status
 
   try {
+    if (doc.externalImport?.sourceDocumentType === 'public_record_summary') {
+      throw new Error('This file is a generated public-record search reference, not an official record. Fact extraction is disabled; open the reference or upload the actual source document for review.')
+    }
     await db.clientDocument.update({ where: { id: doc.id }, data: { status: 'PROCESSING' } })
     await db.documentExtraction.update({
       where: { id: extraction.id },
