@@ -92,3 +92,16 @@ describe('extracted aliases', () => {
     expect(extractedFromAnyContract(docs, 'lender_name')).toBe('Sunrun')
   })
 })
+
+
+describe('re-extraction clears unsupported suggestions', () => {
+  it('does not resurrect an older installer after the new run explicitly leaves it unknown', () => {
+    const docs = [{ extractions: [
+      { detectedTypeKey: 'solar_contract', status: 'COMPLETED', fields: [{ key: 'installer_name', value: null, correctedValue: null, verification: 'UNVERIFIED' }] },
+      { detectedTypeKey: 'solar_contract', status: 'COMPLETED', fields: [{ key: 'installer_name', value: 'Conditional subcontractor', correctedValue: null, verification: 'UNVERIFIED' }] },
+    ] }]
+    expect(extractedFact(docs, 'solar_contract', 'installer_name')).toBeNull()
+    docs[0].extractions[1].fields[0].verification = 'VERIFIED'
+    expect(extractedFact(docs, 'solar_contract', 'installer_name')?.verified).toBe(true)
+  })
+})

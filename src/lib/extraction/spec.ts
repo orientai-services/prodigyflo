@@ -65,7 +65,8 @@ export const DOC_TYPE_SPECS: DocTypeSpec[] = [
     keywords: ['solar', 'photovoltaic', 'power purchase agreement', 'installer', 'system size', 'escalator', 'lease agreement'],
     fields: [
       { key: 'product_type', label: 'Agreement product type (loan, lease, PPA, or cash), only when supported by the document', required: false, kind: 'text' },
-      { key: 'installer_name', label: 'Installer', required: true, kind: 'text' },
+      { key: 'contract_counterparty', label: 'Legal contract counterparty / solar provider', required: false, kind: 'text' },
+      { key: 'installer_name', label: 'Actual installer, only if unconditionally identified', required: false, kind: 'text' },
       { key: 'contract_date', label: 'Contract effective date (not proposal or customer signature date)', required: true, kind: 'date' },
       { key: 'customer_signed_date', label: 'Customer signature date', required: false, kind: 'date' },
       { key: 'in_service_date', label: 'Actual utility in-service date, only if dated', required: false, kind: 'date' },
@@ -79,6 +80,7 @@ export const DOC_TYPE_SPECS: DocTypeSpec[] = [
       { key: 'escalator_pct', label: 'Annual escalator (%)', required: false, kind: 'percent' },
     ],
     requiredAlternatives: [
+      { keys: ['contract_counterparty', 'installer_name'], label: 'Agreement provider' },
       { keys: ['monthly_payment', 'first_year_monthly_payment'], label: 'Contract payment' },
       { keys: ['term_months', 'term_years'], label: 'Contract term' },
     ],

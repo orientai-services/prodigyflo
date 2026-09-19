@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeTextPdf } from './fixtures/pdf'
-import { extractPdfText, hasReadablePdfText } from '@/lib/extraction/pdf-text'
+import { extractPdfText, hasReadablePdfText, hasSignedFormLayout } from '@/lib/extraction/pdf-text'
 import { extractFieldsFromText } from '@/lib/extraction/parse'
 import { canApproveDocument, computeMissingFieldKeys, specForType } from '@/lib/extraction/spec'
 
@@ -50,5 +50,21 @@ describe('literal PPA terms and review requirements', () => {
     const fields = values.map((field) => ({ ...field, label: field.key, correctedValue: null, verification: 'VERIFIED' as const }))
     expect(canApproveDocument(spec, fields).ok).toBe(true)
     expect(canApproveDocument(spec, fields.filter((field) => field.key !== 'term_years')).ok).toBe(false)
+  })
+})
+
+
+describe('signed-form PDF routing', () => {
+  it('requests original vision even when every page has a readable text layer', async () => {
+    const pdf = makeTextPdf(['Synthetic contract with readable terms, effective date placeholder, and DocuSign Envelope ID: test-envelope.'])
+    const result = await extractPdfText(pdf)
+    expect(result.needsVision).toBe(true)
+    expect(result.warnings.join(' ')).toContain('Signed-form layout')
+  })
+
+  it('keeps ordinary text PDFs on text extraction and recognizes signature placeholders', async () => {
+    const result = await extractPdfText(makeTextPdf(['Synthetic contract with readable terms and no form overlays or scanned inserts.']))
+    expect(result.needsVision).toBe(false)
+    expect(hasSignedFormLayout(String.raw`Effective as of \od\____; customer signed \d1\___`)).toBe(true)
   })
 })

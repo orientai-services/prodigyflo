@@ -50,7 +50,8 @@ describe('CYS field resolution', () => {
   it('maps a PPA provider, escalation and derived term without fabricating loan or service-date facts', () => {
     const record = sources({ documentFields: [
       docField({ key: 'product_type', value: 'Power Purchase Agreement' }),
-      docField({ key: 'installer_name', value: 'Example Energy LLC' }),
+      docField({ key: 'contract_counterparty', value: 'Example Energy LLC' }),
+      docField({ key: 'installer_name', value: 'Example Installation Team' }),
       docField({ key: 'escalator_pct', value: '1.9' }),
       docField({ key: 'term_years', value: '20 years', sourcePage: 8 }),
       docField({ key: 'contract_date', value: '2018-05-30' }),
@@ -320,5 +321,16 @@ describe('package generation', () => {
     })
     expect(pkg.documents).toHaveLength(1)
     expect(pkg.documents[0].checksum).toBe('abc123')
+  })
+})
+
+
+describe('PPA counterparty boundary', () => {
+  it('does not use an installer as the counterparty when no party evidence exists', () => {
+    const record = sources({ documentFields: [
+      docField({ key: 'product_type', value: 'PPA' }),
+      docField({ key: 'installer_name', value: 'Other Installer LLC', verification: 'VERIFIED' }),
+    ] })
+    expect(resolveField(def({ key: 'lender_confirmed', sourcePath: 'document.finance_agreement.lender_name' }), record).status).toBe('MISSING')
   })
 })

@@ -84,8 +84,8 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
     // base64 content block (the mock still refuses to read it). Unsupported or
     // oversized images keep the honest no-OCR behavior with a reason attached.
     const vision = visionImageFor(buf, doc.mimeType)
-    // Text-layer PDFs are cheaper and more precise as text. Only scans travel
-    // to the model as a PDF vision document.
+    // Scans and signed-form overlays need the original PDF so filled values
+    // remain associated with their labels instead of detached text-layer order.
     const pdf = text.needsVision || !joined.trim() ? visionPdfFor(buf, doc.mimeType) : null
     const visionUsed = (vision.image !== null || pdf !== null) && provider.name !== 'mock'
 

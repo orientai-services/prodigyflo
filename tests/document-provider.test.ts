@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ parse: vi.fn() }))
 vi.mock('@anthropic-ai/sdk', () => ({ default: class { messages = { parse: mocks.parse } } }))
 import { getFieldExtractor, MAX_DOCUMENT_TEXT_CHARS, numberDocumentPages } from '@/lib/ai/extraction-provider'
+import { specForType } from '@/lib/extraction/spec'
 import type { DocTypeSpec } from '@/lib/extraction/spec'
 
 const spec: DocTypeSpec = { key: 'solar_contract', label: 'Solar contract', requirementKeys: [], keywords: [], fields: [{ key: 'product_type', label: 'Product', required: false, kind: 'text' }] }
@@ -44,5 +45,57 @@ describe('live document extraction boundary', () => {
 
   it('rejects oversized text without silently losing the last pages', () => {
     expect(() => numberDocumentPages(['x'.repeat(MAX_DOCUMENT_TEXT_CHARS)])).toThrow(/no pages were silently omitted/)
+  })
+})
+
+
+describe('signed contract evidence and party identity', () => {
+  const solar = specForType('solar_contract')
+  async function extract(pages: string[], fields: unknown[], pdf?: { mediaType: 'application/pdf'; base64: string }) {
+    vi.stubEnv('AI_PROVIDER', 'anthropic')
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-no-network')
+    mocks.parse.mockResolvedValue({ stop_reason: 'end_turn', parsed_output: { summary: 'Synthetic fixture', fields }, usage: { input_tokens: 1, output_tokens: 1 } })
+    return getFieldExtractor().extractFields({ docType: solar, pages, fileName: 'fixture.pdf', pdf })
+  }
+
+  it('keeps the legal counterparty separate from a conditional subcontractor', async () => {
+    const pages = ['This agreement is between Sample Customer and Example Energy LLC.', 'If not installed by Example Energy LLC, the subcontractor will be Other Installer LLC.']
+    const result = await extract(pages, [
+      { key: 'contract_counterparty', value: 'Example Energy LLC', confidence: 95, sourcePage: 1, sourceSnippet: pages[0] },
+      { key: 'installer_name', value: 'Other Installer LLC', confidence: 95, sourcePage: 2, sourceSnippet: pages[1] },
+    ])
+    expect(result.fields.find(field => field.key === 'contract_counterparty')?.value).toBe('Example Energy LLC')
+    expect(result.fields.find(field => field.key === 'installer_name')?.value).toBeNull()
+    expect(result.warnings?.join(' ')).toContain('conditional installation')
+  })
+
+  it('grounds literal year numerals and wrapped hyphens without converting units', async () => {
+    const pages = ['Term is twenty-five (25) years from the “In-\nService Date”.']
+    const result = await extract(pages, [
+      { key: 'term_years', value: '25', confidence: 95, sourcePage: 1, sourceSnippet: 'twenty-five (25) years' },
+      { key: 'term_start_basis', value: 'In-Service Date', confidence: 95, sourcePage: 1, sourceSnippet: 'the "In-Service Date".' },
+    ])
+    expect(result.fields.find(field => field.key === 'term_years')?.value).toBe('25')
+    expect(result.fields.find(field => field.key === 'term_start_basis')?.value).toBe('In-Service Date')
+    expect(result.fields.find(field => field.key === 'term_months')?.value).toBeNull()
+  })
+
+  it('rejects stitched text quotes and nonexistent pages', async () => {
+    const result = await extract(['Customer signature date: 6/14/2020. Other text intervenes.'], [
+      { key: 'customer_signed_date', value: '6/14/2020', confidence: 95, sourcePage: 1, sourceSnippet: 'Customer ... 6/14/2020' },
+      { key: 'contract_date', value: '6/14/2020', confidence: 95, sourcePage: 2, sourceSnippet: '6/14/2020' },
+    ])
+    expect(result.fields.find(field => field.key === 'customer_signed_date')?.value).toBeNull()
+    expect(result.fields.find(field => field.key === 'contract_date')?.value).toBeNull()
+  })
+
+  it('sends the whole original plus all numbered pages for detached filled dates', async () => {
+    const pages = ['Effective date: template placeholder; filled value is positioned separately.']
+    const result = await extract(pages, [{ key: 'contract_date', value: '6/16/2020', confidence: 92, sourcePage: 1, sourceSnippet: '6/16/2020' }], { mediaType: 'application/pdf', base64: 'synthetic-pdf-no-network' })
+    const request = mocks.parse.mock.calls[0][0]
+    expect(request.messages[0].content[0]).toMatchObject({ type: 'document', source: { data: 'synthetic-pdf-no-network' } })
+    expect(request.messages[0].content[1].text).toContain('--- page 1 ---')
+    expect(request.messages[0].content[1].text).toContain('original layout')
+    expect(result.fields.find(field => field.key === 'contract_date')).toMatchObject({ value: '6/16/2020', sourcePage: 1 })
   })
 })

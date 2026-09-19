@@ -117,7 +117,9 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
   const startFact = fact('solar_contract', 'term_start_basis')
   const escalationFact = fact('solar_contract', 'escalator_pct', isPpaOrLease ? 'apr_or_escalator' : undefined)
   const installerFact = fact('solar_contract', 'installer_name', undefined, 'installer_guess')
-  const providerFact = fact(type, 'lender_name', 'lender_confirmed', 'lender_confirmed') ?? (isPpaOrLease ? installerFact : null)
+  const providerFact = isPpaOrLease
+    ? fact('solar_contract', 'contract_counterparty', 'lender_confirmed')
+    : fact(type, 'lender_name', 'lender_confirmed', 'lender_confirmed')
   const kwFact = fact('solar_contract', 'system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
   const kw = kwFact?.value || ''
   const creditBand =
@@ -183,7 +185,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
 
   const solar: CaseCell[] = [
     sourcedCell('Agreement type', productFact ? { ...productFact, value: product } : product ? { value: product, verified: false, note: 'Intake / contract record · not document verified' } : null),
-    sourcedCell('Installer / contract counterparty', installerFact),
+    sourcedCell('Actual installer', installerFact),
     {
       label: creditBand ? 'Credit range' : 'Credit score',
       cell: creditRaw ? { kind: 'value', display: creditRaw } : { kind: 'missing' },

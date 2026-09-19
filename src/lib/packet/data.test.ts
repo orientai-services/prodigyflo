@@ -16,7 +16,7 @@ function client(verification = 'UNVERIFIED') {
     cysFieldValues: [] as { fieldKey: string; value: string }[],
     documents: [{ id: 'document-test', requirement: { key: 'signed_contract' }, label: 'Contract', fileName: 'example-ppa.pdf',
       extractions: [{ detectedTypeKey: 'solar_contract', fields: Object.entries({
-        product_type: 'Power Purchase Agreement', installer_name: 'Example Energy LLC', first_year_monthly_payment: '57.97',
+        product_type: 'Power Purchase Agreement', contract_counterparty: 'Example Energy LLC', installer_name: 'Example Installation Team', first_year_monthly_payment: '57.97',
         term_years: '20 years', escalator_pct: '1.9', customer_signed_date: '2018-05-28', contract_date: '2018-05-30',
         term_start_basis: 'Utility in-service date', payment_basis: 'First year with automatic payments',
       }).map(([key, value]) => ({ key, value, correctedValue: null, verification, sourcePage: 3 })) }],

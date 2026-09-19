@@ -1,4 +1,5 @@
 import 'server-only'
+import { currentExtractionFields } from '@/lib/desk-extract'
 import { cache } from 'react'
 import { randomUUID } from 'node:crypto'
 import { type CysReadiness, Prisma } from '@prisma/client'
@@ -104,7 +105,7 @@ export async function loadSourcesForClients(clientIds: string[]): Promise<Map<st
     const documents = docsByClient.get(clientId) ?? []
     const documentFields: DocumentFieldInput[] = []
     for (const doc of documents) {
-      for (const extraction of doc.extractions) for (const field of extraction.fields) documentFields.push({
+      for (const { extraction, field } of currentExtractionFields(doc.extractions)) documentFields.push({
         key: field.key, documentTypeKey: extraction.detectedTypeKey, value: field.value,
         correctedValue: field.correctedValue, verification: field.verification, confidence: field.confidence,
         documentId: doc.id, extractedFieldId: field.id, documentLabel: doc.label ?? doc.fileName ?? doc.requirement?.name ?? 'Document', sourcePage: field.sourcePage,

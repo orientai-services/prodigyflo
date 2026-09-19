@@ -55,7 +55,9 @@ export async function assemblePacket(clientId: string) {
   const isPpaOrLease = product === 'ppa' || product === 'lease'
   const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
   const installer = extracted(docs, 'solar_contract', 'installer_name')
-  const lender = confirmed('lender_confirmed') || extracted(docs, type, 'lender_name') || (isPpaOrLease ? installer : extracted(docs, 'lender_statement', 'lender_name'))
+  const lender = confirmed('lender_confirmed') || (isPpaOrLease
+    ? extracted(docs, 'solar_contract', 'contract_counterparty')
+    : extracted(docs, type, 'lender_name') || extracted(docs, 'lender_statement', 'lender_name'))
   const monthly = extracted(docs, 'lender_statement', 'monthly_payment') || extracted(docs, type, 'monthly_payment') || confirmed('monthly_guess') || str(answers.monthly_guess)
   const firstYearMonthly = isPpaOrLease ? extracted(docs, 'solar_contract', 'first_year_monthly_payment') : ''
   const statedYears = extracted(docs, type, 'term_years')

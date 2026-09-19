@@ -11,7 +11,7 @@ vi.mock('@/lib/ai/closeops-ai', () => ({ listBriefViews: async () => [] }))
 import { loadCaseFile } from './daily-desk-case'
 
 const user = { role: 'SUPER_ADMIN', organizationId: 'org-test' } as SessionUser
-const fields = { product_type: 'PPA', installer_name: 'Example Energy LLC', first_year_monthly_payment: '57.97', escalator_pct: '1.9', term_years: '20 years', contract_date: '2018-05-30', customer_signed_date: '2018-05-28', term_start_basis: 'Actual utility in-service date', system_size_kw: '3.71' }
+const fields = { product_type: 'PPA', contract_counterparty: 'Example Energy LLC', installer_name: 'Example Installation Team', first_year_monthly_payment: '57.97', escalator_pct: '1.9', term_years: '20 years', contract_date: '2018-05-30', customer_signed_date: '2018-05-28', term_start_basis: 'Actual utility in-service date', system_size_kw: '3.71' }
 const fixture = () => ({
   id: 'client-test', firstName: 'Sample', lastName: 'Homeowner', organization: { timezone: 'America/Los_Angeles' },
   currentStage: { name: 'New client' }, owner: null, leadSource: { name: 'SCS' }, addresses: [], appointments: [], contracts: [],
@@ -31,6 +31,8 @@ describe('PPA client profile population', () => {
 
   it('shows sourced PPA suggestions, separate dates, and derived term without a loan balance', async () => {
     const profile = await loadCaseFile(user, 'client-test')
+    expect(profile?.finance.find(cell => cell.label === 'Contract counterparty')?.cell).toMatchObject({ display: 'Example Energy LLC' })
+    expect(profile?.solar.find(cell => cell.label === 'Actual installer')?.cell).toMatchObject({ display: 'Example Installation Team' })
     expect(profile?.finance.find(cell => cell.label === 'First-year monthly payment')).toMatchObject({ cell: { kind: 'value', amount: 57.97 }, unverified: true })
     expect(profile?.finance.find(cell => cell.label === 'Term months')).toMatchObject({ cell: { display: '240' }, unverified: true })
     expect(profile?.finance.find(cell => cell.label === 'Term months')?.hint).toContain('Derived months')

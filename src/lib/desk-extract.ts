@@ -57,12 +57,34 @@ export function extracted(
 
 export type ExtractedFact = { value: string; verified: boolean; note: string }
 
+/** Extractions are newest first. A newer blank clears an old suggestion, while
+ * reviewed readings remain available across reruns for correction protection. */
+export function currentExtractionFields<E extends {
+  detectedTypeKey: string | null
+  status?: string
+  fields: { key: string; verification?: string }[]
+}>(extractions: E[]): { extraction: E; field: E['fields'][number] }[] {
+  const seen = new Set<string>()
+  const rows: { extraction: E; field: E['fields'][number] }[] = []
+  for (const extraction of extractions) {
+    if (extraction.status && extraction.status !== 'COMPLETED') continue
+    for (const field of extraction.fields) {
+      const identity = `${extraction.detectedTypeKey}:${field.key}`
+      const reviewed = ['VERIFIED', 'CORRECTED'].includes(field.verification ?? '')
+      if (!seen.has(identity) || reviewed) rows.push({ extraction, field })
+      seen.add(identity)
+    }
+  }
+  return rows
+}
+
 /** Rejected readings never populate a profile; reviewed values survive later re-extraction. */
 export function extractedFact(docs: ExtractableDoc[], typeKey: string, fieldKey: string): ExtractedFact | null {
   const types = new Set(keysForType(typeKey))
   const keys = keysForField(fieldKey)
-  const candidates = docs.flatMap(doc => doc.extractions.filter(ex => (!ex.status || ex.status === 'COMPLETED') && types.has(str(ex.detectedTypeKey)))
-    .flatMap(ex => keys.flatMap(key => ex.fields.filter(field => field.key === key))))
+  const candidates = docs.flatMap(doc => currentExtractionFields(doc.extractions)
+    .filter(({ extraction, field }) => types.has(str(extraction.detectedTypeKey)) && keys.includes(field.key))
+    .map(({ field }) => field))
     .filter(field => field.verification !== 'REJECTED' && (str(field.correctedValue) || str(field.value)))
   const reviewed = candidates.filter(field => ['VERIFIED', 'CORRECTED'].includes(field.verification ?? ''))
   const field = reviewed[0] ?? candidates[0]

@@ -144,8 +144,7 @@ function resolveDocumentField(def: CysDefinitionInput, sources: SourceRecord): R
   // Keep the schema-42 keys and support existing stored definitions. Product-aware
   // selection prevents a PPA escalation from turning into a loan interest rate.
   if (def.key === 'lender_confirmed' && isPpaOrLease) {
-    const namedProvider = at('solar_contract', 'lender_name').filter(field => !isBlank(effectiveValue(field)))
-    candidates = namedProvider.length ? namedProvider : at('solar_contract', 'installer_name')
+    candidates = at('solar_contract', 'contract_counterparty')
     derivation = 'PPA / lease contract counterparty; this is not a loan lender.'
   } else if (def.key === 'apr_or_escalator' && isPpaOrLease) {
     candidates = at('solar_contract', 'escalator_pct')
