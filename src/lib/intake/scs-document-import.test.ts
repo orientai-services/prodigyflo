@@ -4,12 +4,14 @@ import { sha256 } from '@/lib/extraction/sniff'
 const mocks = vi.hoisted(() => ({
   clientDocumentCreate: vi.fn(),
   clientDocumentFindFirst: vi.fn(),
+  clientDocumentUpdateMany: vi.fn(),
   importFindMany: vi.fn(),
   importFindFirst: vi.fn(),
   importFindUnique: vi.fn(),
   importUpdate: vi.fn(),
   importUpdateMany: vi.fn(),
   extractionUpdateMany: vi.fn(),
+  extractionGroupBy: vi.fn(),
   auditEventCreate: vi.fn(),
   transaction: vi.fn(),
   storagePut: vi.fn(),
@@ -21,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
-    clientDocument: { create: mocks.clientDocumentCreate, findFirst: mocks.clientDocumentFindFirst },
+    clientDocument: { create: mocks.clientDocumentCreate, findFirst: mocks.clientDocumentFindFirst, updateMany: mocks.clientDocumentUpdateMany },
     externalDocumentImport: {
       findMany: mocks.importFindMany,
       findFirst: mocks.importFindFirst,
@@ -29,7 +31,7 @@ vi.mock('@/lib/db', () => ({
       update: mocks.importUpdate,
       updateMany: mocks.importUpdateMany,
     },
-    documentExtraction: { updateMany: mocks.extractionUpdateMany },
+    documentExtraction: { updateMany: mocks.extractionUpdateMany, groupBy: mocks.extractionGroupBy },
     auditEvent: { create: mocks.auditEventCreate },
     $transaction: mocks.transaction,
     $queryRaw: mocks.queryRaw,
@@ -65,6 +67,7 @@ function transactionOperation(kind: string, args: unknown) {
 describe('runPendingScsDocumentImports', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubEnv('AI_PROVIDER', 'anthropic')
     process.env.SCS_DOCUMENT_EXPORT_BASE_URL = 'https://scs.example.test'
     process.env.SCS_DOCUMENT_EXPORT_TOKEN = 'test-token'
     mocks.importFindMany.mockResolvedValue([{ id: row.id }])
@@ -82,6 +85,8 @@ describe('runPendingScsDocumentImports', () => {
     mocks.runExtraction.mockResolvedValue(undefined)
     mocks.scsRequirementId.mockResolvedValue('requirement_1')
     mocks.extractionUpdateMany.mockResolvedValue({ count: 0 })
+    mocks.extractionGroupBy.mockResolvedValue([])
+    mocks.clientDocumentUpdateMany.mockResolvedValue({ count: 1 })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(bytes, {
       headers: {
         'content-type': 'application/pdf',
@@ -95,11 +100,13 @@ describe('runPendingScsDocumentImports', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
     delete process.env.SCS_DOCUMENT_EXPORT_BASE_URL
     delete process.env.SCS_DOCUMENT_EXPORT_TOKEN
     delete process.env.SCS_DOCUMENT_IMPORTS_PAUSED
     delete process.env.SCS_IMPORT_EXECUTION_COHORT
     delete process.env.SCS_IMPORT_REQUIRE_COHORT
+    delete process.env.SCS_VERCEL_PROTECTION_BYPASS
   })
 
   it('atomically persists a document, ledger update, and audit event with one generated ID', async () => {
@@ -200,9 +207,9 @@ describe('runPendingScsDocumentImports', () => {
       where: expect.objectContaining({
         status: 'IMPORTED',
         clientDocument: expect.objectContaining({
-          status: { notIn: ['APPROVED', 'REJECTED'] },
+          status: { notIn: ['APPROVED', 'REJECTED', 'PROCESSING'] },
           AND: expect.arrayContaining([
-            expect.objectContaining({ extractions: { none: { provider: 'anthropic', status: { in: ['COMPLETED', 'RUNNING'] } } } }),
+            expect.objectContaining({ extractions: { none: { provider: 'anthropic', status: 'COMPLETED' } } }),
           ]),
         }),
       }),
@@ -210,11 +217,41 @@ describe('runPendingScsDocumentImports', () => {
       take: 5,
     }))
     expect(mocks.extractionUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ provider: 'anthropic', status: 'RUNNING' }),
+      where: expect.objectContaining({ provider: 'anthropic', OR: expect.arrayContaining([expect.objectContaining({ status: 'RUNNING' })]) }),
       data: expect.objectContaining({ status: 'FAILED' }),
     }))
     expect(mocks.runExtraction).toHaveBeenNthCalledWith(1, 'document_1')
     expect(mocks.runExtraction).toHaveBeenNthCalledWith(2, 'document_2')
+  })
+
+  it('retains application authentication when crossing protected preview middleware', async () => {
+    process.env.SCS_VERCEL_PROTECTION_BYPASS = 'preview-test-secret'
+    await runPendingScsDocumentImports()
+    expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      headers: { 'X-SCS-Export-Token': 'test-token', 'x-vercel-protection-bypass': 'preview-test-secret' },
+      redirect: 'error',
+    }))
+    expect(mocks.storagePut).toHaveBeenCalledOnce()
+  })
+
+  it('does not run an extraction already claimed by another worker', async () => {
+    mocks.importFindMany.mockResolvedValue([{ clientDocumentId: 'document_1' }])
+    mocks.clientDocumentUpdateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 0 })
+    expect(await runPendingScsDocumentExtractions()).toEqual({ attempted: 1, completed: 0, failed: 0, skipped: 1 })
+    expect(mocks.runExtraction).not.toHaveBeenCalled()
+  })
+
+  it('honors the import pause for the extraction worker too', async () => {
+    process.env.SCS_DOCUMENT_IMPORTS_PAUSED = 'true'
+    expect(await runPendingScsDocumentExtractions()).toEqual({ attempted: 0, completed: 0, failed: 0, skipped: 0 })
+    expect(mocks.extractionUpdateMany).not.toHaveBeenCalled()
+    expect(mocks.runExtraction).not.toHaveBeenCalled()
+  })
+
+  it('does not silently use the mock in the automated live extraction worker', async () => {
+    vi.stubEnv('AI_PROVIDER', 'mock')
+    expect(await runPendingScsDocumentExtractions()).toMatchObject({ attempted: 0, blockedReason: expect.stringMatching(/live Anthropic/) })
+    expect(mocks.runExtraction).not.toHaveBeenCalled()
   })
 
   it('persists a second agreement when the solar_contract slot is already filled', async () => {

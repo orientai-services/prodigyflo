@@ -11,6 +11,7 @@ import { scsRequirementId } from './scs-document-requirements'
 
 const MAX_IMPORT_MB = 25
 const MAX_ATTEMPTS = 8
+const MAX_EXTRACTION_ATTEMPTS = 3
 
 function value(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null
@@ -135,7 +136,12 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
 
     stage = 'fetching the authenticated SCS export'
     const response = await fetch(exportUrl(row.sourceDocumentId), {
-      headers: { 'X-SCS-Export-Token': exportToken() },
+      headers: {
+        'X-SCS-Export-Token': exportToken(),
+        ...(process.env.SCS_VERCEL_PROTECTION_BYPASS ? { 'x-vercel-protection-bypass': process.env.SCS_VERCEL_PROTECTION_BYPASS } : {}),
+      },
+      // Never forward either credential to a redirected destination.
+      redirect: 'error',
       cache: 'no-store',
       signal: AbortSignal.timeout(55_000),
     })
@@ -296,14 +302,28 @@ export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: 
  * the original mock result for audit.
  */
 export async function runPendingScsDocumentExtractions(limit = 5) {
+  const empty = { attempted: 0, completed: 0, failed: 0, skipped: 0 }
+  const cohort = selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true')
+  if (process.env.SCS_IMPORT_REQUIRE_COHORT === 'true' && cohort === undefined) throw Error('Execution cohort required')
+  if (cohort === null) return empty
+  if (cohort && (!cohort.organizationId || !cohort.sourceId)) throw Error('Organization and source required')
+  const scope: Prisma.ExternalDocumentImportWhereInput = cohort ? {
+    organizationId: cohort.organizationId,
+    intakeSubmission: { sourceId: cohort.sourceId },
+    OR: cohort.cases.map((item) => ({ sourceLeadId: item.leadId, sourceDocumentId: { in: item.documentIds } })),
+  } : {}
+  if (process.env.AI_PROVIDER !== 'anthropic') return { ...empty, blockedReason: 'SCS document extraction requires the live Anthropic provider; mock processing is not an end-to-end test.' }
   const staleBefore = new Date(Date.now() - 5 * 60_000)
   // A serverless invocation can end after the model call was started. Release
   // that durable claim so the document is not stranded in RUNNING forever.
   await db.documentExtraction.updateMany({
     where: {
       provider: 'anthropic',
-      status: 'RUNNING',
-      startedAt: { lt: staleBefore },
+      document: { externalImport: { is: { ...scope, status: 'IMPORTED' } } },
+      OR: [
+        { status: 'RUNNING', startedAt: { lt: staleBefore } },
+        { status: 'PENDING', createdAt: { lt: staleBefore } },
+      ],
     },
     data: {
       status: 'FAILED',
@@ -312,28 +332,40 @@ export async function runPendingScsDocumentExtractions(limit = 5) {
     },
   })
 
+  // Includes a worker interrupted after claiming the document but before
+  // creating its extraction row. Never release a still-active attempt.
+  await db.clientDocument.updateMany({
+    where: {
+      externalImport: { is: { ...scope, status: 'IMPORTED' } },
+      status: 'PROCESSING', updatedAt: { lt: staleBefore },
+      extractions: { none: { status: { in: ['PENDING', 'RUNNING'] } } },
+    },
+    data: { status: 'RECEIVED' },
+  })
+  const exhausted = await db.documentExtraction.groupBy({
+    by: ['documentId'],
+    where: { provider: 'anthropic', status: 'FAILED', document: { externalImport: { is: { ...scope, status: 'IMPORTED' } } } },
+    having: { id: { _count: { gte: MAX_EXTRACTION_ATTEMPTS } } },
+  })
+  const eligible: Prisma.ClientDocumentWhereInput = {
+    id: { notIn: exhausted.map((row) => row.documentId) },
+    status: { notIn: ['APPROVED', 'REJECTED', 'PROCESSING'] },
+    AND: [
+      { extractions: { none: { provider: 'anthropic', status: 'COMPLETED' } } },
+      { extractions: { none: { status: { in: ['PENDING', 'RUNNING'] } } } },
+    ],
+  }
+
   const rows = await db.externalDocumentImport.findMany({
     where: {
+      ...scope,
       status: 'IMPORTED',
       clientDocumentId: { not: null },
-      clientDocument: {
-        status: { notIn: ['APPROVED', 'REJECTED'] },
-        AND: [
-          // A failed run is retryable; completed and currently-running runs
-          // are not. The stale-run sweep above releases abandoned claims.
-          { extractions: { none: { provider: 'anthropic', status: { in: ['COMPLETED', 'RUNNING'] } } } },
-          {
-            OR: [
-              { extractions: { none: {} } },
-              { extractions: { some: { provider: 'mock' } } },
-            ],
-          },
-        ],
-      },
+      clientDocument: eligible,
     },
     // A fresh upload should never wait behind an old mock-only backlog.
     orderBy: { createdAt: 'desc' },
-    take: limit,
+    take: Math.min(Math.max(limit, 1), 5),
     select: { clientDocumentId: true },
   })
 
@@ -344,6 +376,12 @@ export async function runPendingScsDocumentExtractions(limit = 5) {
       continue
     }
     try {
+      if (selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true') === null) break
+      const claim = await db.clientDocument.updateMany({
+        where: { ...eligible, id: row.clientDocumentId, externalImport: { is: { ...scope, status: 'IMPORTED' } } },
+        data: { status: 'PROCESSING' },
+      })
+      if (claim.count !== 1) { result.skipped++; continue }
       const extraction = await runExtraction(row.clientDocumentId)
       if (extraction.status === 'COMPLETED') result.completed++
       else result.failed++

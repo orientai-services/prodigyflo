@@ -20,6 +20,7 @@ import { cellDisplay } from '@/lib/daily-desk-finance'
 import type { CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 import { bookAppointmentAction } from '@/app/(app)/board/actions'
 import { UploadButton } from '@/app/(app)/documents/upload-button'
+import { PdfPreview } from '@/components/client/pdf-preview'
 import { requestDocuments } from '@/app/(app)/documents/actions'
 import { applyCloserAction } from './assignment-actions'
 import { approveBriefAction, editBriefAction } from './closeops-actions'
@@ -181,6 +182,7 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
               <div key={row.label} className="desk-cell">
                 <label>{row.label}</label>
                 <div className={`desk-v ${row.cell.kind !== 'value' ? 'miss' : ''}`}>{cellDisplay(row.cell)}</div>
+                {row.unverified && <small>Extracted · needs review</small>}
                 {row.hint && <small>{row.hint}</small>}
                 {row.cell.kind === 'cannot_compute' && !row.hint && (
                   <small>Needs {row.cell.missing.join(', ')}</small>
@@ -198,6 +200,7 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
                 <div className={`desk-v ${row.cell.kind !== 'value' ? 'miss' : ''}`} style={{ fontSize: 16 }}>
                   {row.label === 'Credit score' && row.cell.kind !== 'value' ? 'Not on file' : cellDisplay(row.cell)}
                 </div>
+                {row.unverified && <small>Extracted · needs review</small>}
                 {row.hint && <small>{row.hint}</small>}
               </div>
             ))}
@@ -379,7 +382,7 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
         <DialogContent
           className="desk desk-lookbox max-w-[96vw] sm:max-w-[96vw] w-[96vw] h-[92vh] p-4"
           showCloseButton={false}
-          style={{ maxWidth: '96vw', width: '96vw', height: '92vh' }}
+          style={{ maxWidth: '96vw', width: '96vw', height: '92vh', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
           {look && (
             <>
@@ -388,7 +391,7 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
                   <div className="desk-muted" style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
                     Quick look
                   </div>
-                  <h3>{look.label}</h3>
+                  <DialogTitle>{look.label}</DialogTitle>
                   <div className="desk-muted">
                     {data.firstName} {data.lastName} · {look.state.replace('_', ' ')}
                   </div>
@@ -400,30 +403,39 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
               {look.files.length > 0 && (
                 <NativeSelect aria-label="Choose document file" value={look.documentId ?? look.files[0]?.id} onChange={(event) => {
                   const file = look.files.find((entry) => entry.id === event.target.value)
-                  if (file) setLook({ ...look, documentId: file.id, fileUrl: file.fileUrl, mimeType: file.mimeType, extract: file.id === look.documentId ? look.extract : null })
+                  const originalTile = data.docs.find((tile) => tile.key === look.key)
+                  if (file) setLook({ ...look, documentId: file.id, fileUrl: file.fileUrl, mimeType: file.mimeType, extract: file.id === originalTile?.documentId ? originalTile.extract : null })
                 }}>
                   {look.files.map((file) => <option key={file.id} value={file.id}>{file.label} · v{file.version} · {file.status.toLowerCase().replaceAll('_', ' ')}</option>)}
                 </NativeSelect>
               )}
               {data.canUpload && <UploadButton clientId={data.id} requirementId={look.requirementId ?? undefined} label={look.label} buttonLabel="Add document" />}
+              {look.fileUrl && <div className="flex flex-wrap gap-4">
+                <a className="underline" href={look.fileUrl} target="_blank" rel="noopener noreferrer">Open original</a>
+                <a className="underline" href={`${look.fileUrl}${look.fileUrl.includes('?') ? '&' : '?'}download=1`}>Download</a>
+              </div>}
               {look.fileUrl ? (
-                <div className="desk-paper" style={{ height: 'calc(92vh - 96px)', overflow: 'auto' }}>
+                <div className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
+                  <div className="desk-paper" style={{ margin: 0 }}>
+                    {look.extract ? <>
+                      <div className="desk-muted">{look.extract.kicker}</div>
+                      <h4 className="mb-3 text-lg">{look.extract.title}</h4>
+                      <p className="desk-muted mb-4">{look.extract.note}</p>
+                      <div className="desk-kv" style={{ gridTemplateColumns: '1fr' }}>
+                        {look.extract.fields.map((f) => <div key={f.label}><b>{f.label}</b>{f.value}</div>)}
+                      </div>
+                    </> : <p className="desk-muted">No extraction result is available for this document version. The original file is available for review.</p>}
+                  </div>
+                  <div className="desk-paper" style={{ margin: 0, minWidth: 0 }}>
                   {look.mimeType?.startsWith('image/') ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={look.fileUrl} alt={look.label} style={{ width: '100%', height: 'auto', maxHeight: 'calc(92vh - 110px)', objectFit: 'contain' }} />
+                  ) : look.mimeType === 'application/pdf' ? (
+                    <PdfPreview key={look.fileUrl} url={look.fileUrl} title={look.label} />
                   ) : (
-                    <iframe title={look.label} src={look.fileUrl} style={{ width: '100%', height: 'calc(92vh - 110px)', border: 0 }} />
+                    <iframe title={look.label} src={look.fileUrl} style={{ width: '100%', height: '60vh', border: 0 }} />
                   )}
-                  {look.extract && (
-                    <div className="desk-kv" style={{ marginTop: 16 }}>
-                      {look.extract.fields.map((f) => (
-                        <div key={f.label}>
-                          <b>{f.label}</b>
-                          {f.value}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  </div>
                 </div>
               ) : look.extract ? (
                 <div className="desk-paper">

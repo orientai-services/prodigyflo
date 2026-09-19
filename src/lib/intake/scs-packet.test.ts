@@ -14,7 +14,7 @@ vi.mock('@/lib/db', () => ({
 vi.mock('@/lib/cys/data', () => ({ refreshCysMirror: mocks.refresh }))
 vi.mock('./scs-document-import', () => ({ queueScsDocumentImports: mocks.queue }))
 
-import { ingestScsPacket, scsLeadId } from './scs-packet'
+import { ingestScsPacket, scsLeadId, intakeAnswersFromPacket } from './scs-packet'
 
 const documentRef = {
   id: 'scs_doc_1',
@@ -27,6 +27,22 @@ const documentRef = {
 }
 
 describe('ingestScsPacket document import queue', () => {
+  it('preserves homeowner and reviewed answers without presenting extraction as a survey answer', () => {
+    const answers = intakeAnswersFromPacket({ data: {
+      stage1_answers: { first_name: 'Example', product_confirmed: 'ppa', term_months: '240', monthly_guess: '120' },
+      stage1_provenance: {
+        first_name: { source: 'homeowner' },
+        product_confirmed: { source: 'document_review' },
+        term_months: { source: 'document_extraction' },
+        monthly_guess: { source: 'homeowner' },
+      },
+      finance: { amount_financed: 9000, term_months: 240 },
+    } })
+    expect(answers).toMatchObject({ first_name: 'Example', product_confirmed: 'ppa', monthly_guess: '120' })
+    expect(answers.term_months).toBeUndefined()
+    expect(answers.amount_financed).toBeUndefined()
+    expect(answers._scs_answer_provenance).toMatchObject({ product_confirmed: { source: 'document_review' } })
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.refresh.mockResolvedValue(undefined)

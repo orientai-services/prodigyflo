@@ -1,8 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { deflateSync } from 'node:zlib'
+import { makeTextPdf } from './fixtures/pdf'
 
 import { DEFAULT_ALLOWED_MIME_TYPES, sha256, sniffMimeType, validateUpload } from '@/lib/extraction/sniff'
 import { planUpload } from '@/lib/extraction/versioning'
@@ -170,24 +171,19 @@ describe('local storage driver', () => {
 })
 
 describe('pdf text extraction', () => {
-  it('reads Tj text out of a FlateDecode stream', () => {
-    const content = 'BT /F1 12 Tf 72 700 Td (Account number: DSP-1) Tj T* (Amount due: $10.00) Tj ET'
-    const deflated = deflateSync(Buffer.from(content, 'latin1'))
-    const pdf = Buffer.concat([
-      Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Page >>\nendobj\n2 0 obj\n<< /Filter /FlateDecode >>\nstream\n'),
-      deflated,
-      Buffer.from('\nendstream\nendobj\n%%EOF'),
-    ])
-    const { pages, pageCount } = extractPdfText(pdf)
+  it('reads hex-encoded text out of a valid compressed PDF', async () => {
+    const pdf = makeTextPdf(['Account number: DSP-1. Amount due: $10.00 for the billing period.'])
+    const { pages, pageCount } = await extractPdfText(pdf)
     expect(pageCount).toBe(1)
     expect(pages.join('\n')).toContain('Account number: DSP-1')
     expect(pages.join('\n')).toContain('Amount due: $10.00')
   })
 
-  it('honestly reports a text-free PDF instead of inventing content', () => {
-    const { pages, warnings } = extractPdfText(Buffer.from('%PDF-1.4\n<< /Type /Page >>\n%%EOF'))
-    expect(pages).toHaveLength(0)
-    expect(warnings.join(' ')).toMatch(/no extractable text/i)
+  it('preserves a text-free physical page and requires vision instead of inventing content', async () => {
+    const { pages, warnings, needsVision } = await extractPdfText(makeTextPdf(['']))
+    expect(pages).toEqual([''])
+    expect(needsVision).toBe(true)
+    expect(warnings.join(' ')).toMatch(/vision is required/i)
   })
 })
 
@@ -474,5 +470,68 @@ describe('database-backed document flows', () => {
     const extraction = await db.documentExtraction.findUniqueOrThrow({ where: { id: result.extractionId } })
     expect(extraction.status).toBe('FAILED')
     expect(extraction.error).toBeTruthy()
+  })
+
+  it('records zero-yield processing as a failure and preserves its original and each attempt', async () => {
+    const source = Buffer.from('Unrelated text with no supported document facts.')
+    const { key } = await new LocalFileStorage(storageDir).put(source, { fileName: 'unknown.txt', mimeType: 'text/plain', clientId })
+    const doc = await db.clientDocument.create({ data: { clientId, status: 'RECEIVED', storageKey: key, fileName: 'unknown.txt', mimeType: 'text/plain' } })
+    const first = await runExtraction(doc.id)
+    const second = await runExtraction(doc.id)
+    expect(first.status).toBe('FAILED')
+    expect(second.status).toBe('FAILED')
+    expect(first.error).toMatch(/no supported fields/)
+    expect(await db.documentExtraction.count({ where: { documentId: doc.id } })).toBe(2)
+    expect((await db.documentExtraction.findUniqueOrThrow({ where: { id: first.extractionId } })).rawText).toBe(source.toString())
+    expect(await new LocalFileStorage(storageDir).get(key)).toEqual(source)
+  })
+
+  it('records a missing live credential failure without overwriting a previous successful extraction', async () => {
+    const previousKey = process.env.ANTHROPIC_API_KEY
+    process.env.AI_PROVIDER = 'anthropic'
+    delete process.env.ANTHROPIC_API_KEY
+    try {
+      const result = await runExtraction(documentId)
+      expect(result.status).toBe('FAILED')
+      expect(result.error).toMatch(/not configured/)
+      const attempt = await db.documentExtraction.findUniqueOrThrow({ where: { id: result.extractionId } })
+      expect(attempt.provider).toBe('anthropic')
+      expect(attempt.rawText).toBe(BILL_TEXT.trim())
+      expect(await db.documentExtraction.count({ where: { documentId, status: 'COMPLETED' } })).toBe(1)
+    } finally {
+      process.env.AI_PROVIDER = 'mock'
+      if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = previousKey
+    }
+  })
+
+  it('retries a failed real-only SCS extraction and stops automatically after three failed attempts', async () => {
+    const { runPendingScsDocumentExtractions } = await import('@/lib/intake/scs-document-import')
+    const sourceLeadId = randomUUID()
+    const sourceDocumentId = randomUUID()
+    const source = await db.intakeSource.create({ data: { organizationId: orgA, name: 'Retry test', slug: `retry-${run}`, kind: 'WEB_FORM' } })
+    const submission = await db.intakeSubmission.create({ data: { organizationId: orgA, sourceId: source.id, externalId: sourceLeadId, clientId } })
+    const { key } = await new LocalFileStorage(storageDir).put(Buffer.from(BILL_TEXT), { fileName: 'retry.txt', mimeType: 'text/plain', clientId })
+    const doc = await db.clientDocument.create({ data: { clientId, status: 'RECEIVED', storageKey: key, fileName: 'retry.txt', mimeType: 'text/plain', label: 'utility_bill' } })
+    await db.externalDocumentImport.create({ data: { organizationId: orgA, intakeSubmissionId: submission.id, clientId, sourceLeadId, sourceDocumentId, status: 'IMPORTED', clientDocumentId: doc.id } })
+    const previousKey = process.env.ANTHROPIC_API_KEY
+    const previousCohort = process.env.SCS_IMPORT_EXECUTION_COHORT
+    process.env.AI_PROVIDER = 'anthropic'
+    delete process.env.ANTHROPIC_API_KEY
+    process.env.SCS_IMPORT_EXECUTION_COHORT = JSON.stringify({ mode: 'resume', expiresAt: new Date(Date.now() + 60_000).toISOString(), organizationId: orgA, sourceId: source.id, cases: [{ leadId: sourceLeadId, documentIds: [sourceDocumentId] }] })
+    try {
+      // First real attempt fails without a mock run existing in the history.
+      for (let attempt = 0; attempt < 3; attempt++) expect(await runPendingScsDocumentExtractions(1)).toEqual({ attempted: 1, completed: 0, failed: 1, skipped: 0 })
+      expect(await runPendingScsDocumentExtractions(1)).toEqual({ attempted: 0, completed: 0, failed: 0, skipped: 0 })
+      expect(await db.documentExtraction.count({ where: { documentId: doc.id, provider: 'anthropic', status: 'FAILED' } })).toBe(3)
+      expect(await db.clientDocument.count({ where: { id: doc.id } })).toBe(1)
+      expect(await new LocalFileStorage(storageDir).get(key)).toEqual(Buffer.from(BILL_TEXT))
+    } finally {
+      process.env.AI_PROVIDER = 'mock'
+      if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = previousKey
+      if (previousCohort === undefined) delete process.env.SCS_IMPORT_EXECUTION_COHORT
+      else process.env.SCS_IMPORT_EXECUTION_COHORT = previousCohort
+    }
   })
 })

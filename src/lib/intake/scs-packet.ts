@@ -5,7 +5,6 @@ import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
 import { refreshCysMirror } from '@/lib/cys/data'
 import { SCHEMA_VERSION, asRecord, str, type DocumentRef } from '@/lib/packet/schema'
 import { queueScsDocumentImports } from './scs-document-import'
-import { quotedFinanceFromPacket } from './scs-finance'
 
 export function isSchema42Payload(raw: unknown): boolean {
   const top = asRecord(raw)
@@ -27,11 +26,15 @@ export function scsLeadId(raw: unknown): string | null {
   return str(asRecord(raw).lead_id) || null
 }
 
-function stage1From(raw: Record<string, unknown>) {
+export function intakeAnswersFromPacket(raw: Record<string, unknown>): Record<string, unknown> {
   const data = asRecord(raw.data)
   const answers = asRecord(raw.stage1_answers)
   const nested = asRecord(data.stage1_answers)
-  return Object.keys(answers).length ? answers : nested
+  const stage1 = Object.keys(answers).length ? answers : nested
+  const provenance = asRecord(data.stage1_provenance ?? raw.stage1_provenance)
+  const humanAnswers = Object.fromEntries(Object.entries(stage1).filter(([key]) => !key.startsWith('_') && str(asRecord(provenance[key]).source) !== 'document_extraction'))
+  const answerProvenance = Object.fromEntries(Object.keys(humanAnswers).filter(key => provenance[key]).map(key => [key, provenance[key]]))
+  return Object.keys(answerProvenance).length ? { ...humanAnswers, _scs_answer_provenance: answerProvenance } : humanAnswers
 }
 
 function documentsFrom(raw: Record<string, unknown>): DocumentRef[] {
@@ -49,7 +52,9 @@ export async function ingestScsPacket(opts: {
   rawPayload: unknown
 }, store: Prisma.TransactionClient = db): Promise<void> {
   const raw = asRecord(opts.rawPayload)
-  const incoming = { ...stage1From(raw), ...quotedFinanceFromPacket(raw) }
+  // Extract-backed finance stays in the immutable submission payload and in
+  // document review. It must not masquerade as a homeowner's survey answer.
+  const incoming = intakeAnswersFromPacket(raw)
   if (Object.keys(incoming).length === 0 && documentsFrom(raw).length === 0) return
 
   const survey = await store.survey.findFirst({
@@ -62,7 +67,11 @@ export async function ingestScsPacket(opts: {
       where: { clientId: opts.clientId, surveyId: survey.id },
       orderBy: { updatedAt: 'desc' },
     })
-    if (existing) answers = { ...asRecord(existing.answers), ...incoming }
+    if (existing) {
+      const prior = asRecord(existing.answers)
+      answers = { ...prior, ...incoming }
+      if (prior._scs_answer_provenance || incoming._scs_answer_provenance) answers._scs_answer_provenance = { ...asRecord(prior._scs_answer_provenance), ...asRecord(incoming._scs_answer_provenance) }
+    }
     const identity =
       str(answers.first_name) &&
       str(answers.last_name) &&

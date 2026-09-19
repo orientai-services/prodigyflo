@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { extracted, extractedFromAnyContract } from '@/lib/desk-extract'
+import { extracted, extractedFromAnyContract, extractedFact, normalizeProduct, termMonthsFromYears } from '@/lib/desk-extract'
 
 describe('extracted aliases', () => {
+  it('keeps a reviewed correction ahead of a later automatic reading and excludes rejection', () => {
+    const docs = [{ extractions: [
+      { detectedTypeKey: 'solar_contract', fields: [{ key: 'installer_name', value: 'New wrong reading', correctedValue: null, verification: 'UNVERIFIED' }] },
+      { detectedTypeKey: 'solar_contract', fields: [{ key: 'installer_name', value: 'Old reading', correctedValue: 'Reviewed provider', verification: 'CORRECTED', sourcePage: 3 }] },
+    ] }]
+    expect(extractedFact(docs, 'solar_contract', 'installer_name')).toEqual({ value: 'Reviewed provider', verified: true, note: 'Reviewed document · p. 3' })
+    expect(extracted([{ extractions: [{ detectedTypeKey: 'solar_contract', fields: [{ key: 'installer_name', value: 'Rejected provider', correctedValue: null, verification: 'REJECTED' }] }] }], 'solar_contract', 'installer_name')).toBe('')
+  })
+
+  it('marks disagreeing reviewed versions for review', () => {
+    const docs = [{ extractions: [{ detectedTypeKey: 'solar_contract', fields: [
+      { key: 'installer_name', value: 'Provider A', correctedValue: null, verification: 'VERIFIED' },
+      { key: 'installer_name', value: 'Provider B', correctedValue: null, verification: 'VERIFIED' },
+    ] }] }]
+    expect(extractedFact(docs, 'solar_contract', 'installer_name')?.verified).toBe(false)
+  })
+
+  it('normalizes product classification and converts only explicit year counts', () => {
+    expect(normalizeProduct('Power Purchase Agreement')).toBe('ppa')
+    expect(termMonthsFromYears('20 years')).toBe('240')
+    expect(termMonthsFromYears('from 2018')).toBe('')
+    expect(termMonthsFromYears('20 years from 2018')).toBe('')
+  })
   it('reads SCS loan_or_til + total_financed as finance amount', () => {
     const docs = [{
       extractions: [{

@@ -34,6 +34,15 @@ const strange = {
 }
 
 describe('composeCloserWinBrief', () => {
+  it('keeps PPA economics and dates separate and avoids a loan exit narrative', () => {
+    const brief = composeCloserWinBrief({ ...strange, product: 'ppa', lender: 'Example Energy LLC', monthly: '', firstYearMonthly: '57.97', escalation: '1.9', effectiveDate: '2018-05-30', signedDate: '2018-05-28', termMonths: '240', termNote: 'Derived from 20 years × 12.', apr: '', contractValue: '', path: 'scs_closer' })
+    expect(brief.fileFacts.join(' ')).toMatch(/First-year monthly payment: \$57\.97/)
+    expect(brief.fileFacts.join(' ')).toMatch(/Annual payment escalation: 1\.9%/)
+    expect(brief.fileFacts.join(' ')).toMatch(/Customer signature: 2018-05-28\. Contract effective date: 2018-05-30/)
+    expect(brief.outcomeCeiling).not.toMatch(/debt exit|principal reduction|credit repair/)
+    expect(brief.cancelPath.join(' ')).not.toMatch(/TILA|Holder/)
+    expect(brief.redline.join(' ')).toMatch(/not loan APR/)
+  })
   it('opens from packet facts and treats the 3-day as gone on a 2023 signing', () => {
     const b = composeCloserWinBrief(strange)
     expect(b.situation).toMatch(/Eric Strange/)

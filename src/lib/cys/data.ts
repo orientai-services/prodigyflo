@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { type CysReadiness, Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { classifyDeskKind } from '@/lib/daily-desk-docs'
+import { asRecord, str } from '@/lib/packet/schema'
 import { recordAudit } from '@/lib/audit'
 import { ForbiddenError, findClientInScope, type SessionUser } from '@/lib/rbac'
 import {
@@ -81,7 +82,6 @@ export async function loadSourcesForClients(clientIds: string[]): Promise<Map<st
         extractions: {
           where: { status: 'COMPLETED' },
           orderBy: { createdAt: 'desc' },
-          take: 1,
           select: { detectedTypeKey: true, fields: true },
         },
       },
@@ -104,9 +104,7 @@ export async function loadSourcesForClients(clientIds: string[]): Promise<Map<st
     const documents = docsByClient.get(clientId) ?? []
     const documentFields: DocumentFieldInput[] = []
     for (const doc of documents) {
-      const extraction = doc.extractions[0]
-      if (!extraction) continue
-      for (const field of extraction.fields) documentFields.push({
+      for (const extraction of doc.extractions) for (const field of extraction.fields) documentFields.push({
         key: field.key, documentTypeKey: extraction.detectedTypeKey, value: field.value,
         correctedValue: field.correctedValue, verification: field.verification, confidence: field.confidence,
         documentId: doc.id, extractedFieldId: field.id, documentLabel: doc.label ?? doc.fileName ?? doc.requirement?.name ?? 'Document', sourcePage: field.sourcePage,
@@ -116,6 +114,7 @@ export async function loadSourcesForClients(clientIds: string[]): Promise<Map<st
       client: client ? flattenClient(client) : {},
       address: client ? flattenAddress(client.addresses[0] ?? null) : null,
       survey: flattenSurveyAnswers(surveyByClient.get(clientId)?.answers), documentFields,
+      surveyProvenance: Object.fromEntries(Object.entries(asRecord(asRecord(surveyByClient.get(clientId)?.answers)._scs_answer_provenance)).map(([key, value]) => [key, { source: str(asRecord(value).source) }])),
       documents: documents.filter(doc => Boolean(doc.storageKey)).map(doc => ({
         id: doc.id, kind: classifyDeskKind({ requirementKey: doc.requirement?.key, detectedType: doc.extractions[0]?.detectedTypeKey, label: doc.label, fileName: doc.fileName })?.key ?? 'other',
         label: doc.label || doc.fileName || 'Document', approved: doc.status === 'APPROVED',
@@ -253,8 +252,9 @@ export async function generateCysPackage(user: SessionUser, clientId: string) {
   const documents = await manifestDocuments(clientId, citedIds)
 
   const now = new Date()
+  const confirmed = (key: string) => values.find(value => value.fieldKey === key && value.status === 'VERIFIED')?.value || ''
   const pkg = buildPackageDocument({
-    client,
+    client: { ...client, firstName: confirmed('first_name') || client.firstName, lastName: confirmed('last_name') || client.lastName, email: confirmed('email') || client.email },
     generatedBy: { id: user.id, name: user.name },
     generatedAt: now,
     appVersion: APP_VERSION,
@@ -276,6 +276,7 @@ export async function generateCysPackage(user: SessionUser, clientId: string) {
       sourcePage: v.sourceField?.sourcePage ?? null,
       verifiedByName: v.verifiedBy?.name ?? null,
       verifiedAt: v.verifiedAt,
+      note: v.note,
     })),
     documents,
   })

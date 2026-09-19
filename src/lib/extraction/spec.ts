@@ -22,6 +22,8 @@ export type DocTypeSpec = {
   /** Case-insensitive phrases that identify this type in extracted text. */
   keywords: string[]
   fields: DocFieldSpec[]
+  /** At least one member of each group must be present/reviewed. */
+  requiredAlternatives?: { keys: string[]; label: string }[]
 }
 
 /** Below this confidence an extracted value does not count as present. */
@@ -64,11 +66,21 @@ export const DOC_TYPE_SPECS: DocTypeSpec[] = [
     fields: [
       { key: 'product_type', label: 'Agreement product type (loan, lease, PPA, or cash), only when supported by the document', required: false, kind: 'text' },
       { key: 'installer_name', label: 'Installer', required: true, kind: 'text' },
-      { key: 'contract_date', label: 'Contract date', required: true, kind: 'date' },
+      { key: 'contract_date', label: 'Contract effective date (not proposal or customer signature date)', required: true, kind: 'date' },
+      { key: 'customer_signed_date', label: 'Customer signature date', required: false, kind: 'date' },
+      { key: 'in_service_date', label: 'Actual utility in-service date, only if dated', required: false, kind: 'date' },
       { key: 'system_size_kw', label: 'System size (kW)', required: false, kind: 'number' },
-      { key: 'monthly_payment', label: 'Monthly payment', required: true, kind: 'money' },
-      { key: 'term_months', label: 'Term (months)', required: true, kind: 'number' },
+      { key: 'monthly_payment', label: 'Explicitly current monthly payment (not initial or first-year pricing)', required: false, kind: 'money' },
+      { key: 'first_year_monthly_payment', label: 'Initial / first-year monthly payment', required: false, kind: 'money' },
+      { key: 'payment_basis', label: 'Payment period, taxes and discount conditions (literal wording)', required: false, kind: 'text' },
+      { key: 'term_months', label: 'Term in months, only if stated in months', required: false, kind: 'number' },
+      { key: 'term_years', label: 'Term in years, only if stated in years', required: false, kind: 'number' },
+      { key: 'term_start_basis', label: 'Event that starts the term (literal wording, not an inferred date)', required: false, kind: 'text' },
       { key: 'escalator_pct', label: 'Annual escalator (%)', required: false, kind: 'percent' },
+    ],
+    requiredAlternatives: [
+      { keys: ['monthly_payment', 'first_year_monthly_payment'], label: 'Contract payment' },
+      { keys: ['term_months', 'term_years'], label: 'Contract term' },
     ],
   },
   {
@@ -251,13 +263,20 @@ export type FieldLike = {
  */
 export function computeMissingFieldKeys(spec: DocTypeSpec, fields: FieldLike[]): string[] {
   const byKey = new Map(fields.map((f) => [f.key, f]))
-  return spec.fields
+  const missing = spec.fields
     .filter((f) => f.required)
     .filter((f) => {
       const got = byKey.get(f.key)
       return !got || !got.value?.trim() || got.confidence < CONFIDENCE_FLOOR
     })
     .map((f) => f.key)
+  for (const group of spec.requiredAlternatives ?? []) {
+    if (!group.keys.some((key) => {
+      const field = byKey.get(key)
+      return field?.value?.trim() && field.confidence >= CONFIDENCE_FLOOR
+    })) missing.push(group.keys[0])
+  }
+  return missing
 }
 
 export function documentStatusAfterExtraction(missingFieldKeys: string[]): 'MISSING_INFORMATION' | 'UNDER_REVIEW' {
@@ -353,6 +372,12 @@ export function canApproveDocument(spec: DocTypeSpec, fields: ReviewableField[])
     } else if (!effectiveFieldValue(field)?.trim()) {
       blocking.push({ key: req.key, label: req.label, reason: 'has no value' })
     }
+  }
+  for (const group of spec.requiredAlternatives ?? []) {
+    if (!group.keys.some((key) => {
+      const field = byKey.get(key)
+      return field && ['VERIFIED', 'CORRECTED'].includes(field.verification) && effectiveFieldValue(field)?.trim()
+    })) blocking.push({ key: group.keys[0], label: group.label, reason: 'requires a reviewed value in at least one supported unit or payment period' })
   }
   return { ok: blocking.length === 0, blocking }
 }

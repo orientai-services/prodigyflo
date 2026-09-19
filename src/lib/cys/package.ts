@@ -31,6 +31,7 @@ export type PackageFieldInput = {
   sourcePage: number | null
   verifiedByName: string | null
   verifiedAt: Date | null
+  note?: string | null
 }
 
 export type PackageManifestDocument = {
@@ -97,6 +98,7 @@ export function buildPackageDocument(args: {
           confidence: v?.confidence ?? null,
           verifiedBy: v?.verifiedByName ?? null,
           verifiedAt: v?.verifiedAt?.toISOString() ?? null,
+          note: v?.note ?? null,
         },
       }
     }),
