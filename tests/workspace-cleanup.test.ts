@@ -8,6 +8,8 @@ import { can, ForbiddenError, findClientInScope, type SessionUser } from '@/lib/
 import { SCHEMA_42_FIELDS } from '../prisma/seeds/cys'
 import { resolveForClient, refreshCysMirror, generateCysPackage } from '@/lib/cys/data'
 import { verifyCysFieldAction, approveCysReadinessAction } from '@/lib/cys/actions'
+import { createClientRecord } from '@/lib/clients'
+import { updateOverviewAction } from '@/app/(app)/clients/[clientId]/actions'
 import { applyAssignment } from '@/lib/assignment'
 import { loadDeskBoard } from '@/lib/daily-desk-data'
 import { findDocumentInScope } from '@/lib/storage/access'
@@ -125,6 +127,14 @@ it('allows CYS finalization with optional blanks, but blocks it when shared perm
   expect(await generateCysPackage(b, client)).toBeTruthy()
   state.actor = { ...b, permissions: new Set(CLOSER_PERMISSIONS.filter(p=>p !== 'submissions:approve')) }
   expect(await approveCysReadinessAction({ clientId: client })).toMatchObject({ ok: false })
+})
+it('refuses legacy owner-edit bypasses and non-Closer owners on manual/CSV creation', async () => {
+  state.actor = admin
+  const before = await db.client.findUniqueOrThrow({ where: { id: client } })
+  const result = await updateOverviewAction({ clientId: client, firstName: before.firstName, lastName: before.lastName, email: before.email, phone: before.phone, ownerId: a.id })
+  expect(result).toHaveProperty('error')
+  expect((await db.client.findUniqueOrThrow({ where: { id: client } })).ownerId).toBe(b.id)
+  await expect(createClientRecord(admin, { firstName: 'Invalid', lastName: 'Owner', email: 'synthetic@example.test', phone: '7025550100', ownerId: admin.id })).rejects.toThrow(ForbiddenError)
 })
 it('protects the final Super Admin and deactivation unassigns upcoming work', async () => {
   state.actor = admin

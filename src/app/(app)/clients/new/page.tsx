@@ -10,7 +10,7 @@ export default async function NewClientPage() {
 
   const [owners, leadSources] = await Promise.all([
     db.user.findMany({
-      where: { ...userScope(user), isActive: true, role: { key: { notIn: ['CLIENT'] } } },
+      where: { ...userScope(user), isActive: true, role: { key: 'CLOSER' } },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),

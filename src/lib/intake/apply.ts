@@ -235,6 +235,10 @@ export async function applyToCrm(
         })
       : null
 
+    const defaultCloser = source.defaultOwnerId
+      ? await store.user.findFirst({ where: { id: source.defaultOwnerId, organizationId: source.organizationId, isActive: true, deletedAt: null, role: { key: 'CLOSER' } }, select: { id: true } })
+      : null
+
     const pipeline =
       (await store.pipeline.findFirst({
         where: { organizationId: source.organizationId, isDefault: true },
@@ -259,7 +263,7 @@ export async function applyToCrm(
         email: mapped.email ?? '',
         phone: mapped.phone ?? '',
         preferredLanguage: mapped.preferredLanguage?.toLowerCase().slice(0, 2) || 'en',
-        ownerId: source.defaultOwnerId,
+        ownerId: defaultCloser?.id ?? null,
         teamId: defaultTeam?.id ?? null,
         leadSourceId: source.defaultLeadSourceId,
         utmSource: mapped.utmSource ?? null,
