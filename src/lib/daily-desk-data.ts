@@ -1,6 +1,7 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { matchDocKind } from '@/lib/daily-desk-docs'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
 import { DESK_TIMEZONE, civilDate, monthGrid, monthTitle, parseMonth, timeLabel, zonedDate, type DeskBoard, type DeskChip } from '@/lib/daily-desk'
 
@@ -24,10 +25,10 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
   const clientSelect = {
     id: true, firstName: true, lastName: true, email: true, phone: true,
     owner: { select: { name: true } },
-    documents: { where: { requirement: { isRequired: true, package: { isDefault: true } }, status: { notIn: ['REJECTED', 'EXPIRED'] }, NOT: { storageKey: null } }, select: { requirementId: true } },
+    documents: { where: { status: { notIn: ['REJECTED', 'EXPIRED'] }, NOT: { storageKey: null } }, select: { requirement: { select: { key: true } } } },
   } satisfies Prisma.ClientSelect
-  const [requiredCount, closers, appointments, unscheduledRows, unassignedCount] = await Promise.all([
-    db.documentRequirement.count({ where: { isRequired: true, package: { organizationId: user.organizationId, isDefault: true } } }),
+  const [requirements, closers, appointments, unscheduledRows, unassignedCount] = await Promise.all([
+    db.documentRequirement.findMany({ where: { isRequired: true, package: { organizationId: user.organizationId, isDefault: true } }, select: { key: true } }),
     canAssign ? db.user.findMany({ where: { organizationId: user.organizationId, role: { key: 'CLOSER' }, deletedAt: null, isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : Promise.resolve([]),
     db.appointment.findMany({
       where: { client: scope, startsAt: { gte: rangeStart, lt: rangeEnd }, ...(user.role === 'CLOSER' ? { ownerId: user.id } : {}) },
@@ -40,10 +41,12 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
     }),
     canAssign ? db.client.count({ where: { AND: [scope, { ownerId: null, status: 'ACTIVE' }] } }) : Promise.resolve(0),
   ])
+  const canonicalKey = (key: string) => matchDocKind(key)?.key ?? key
+  const requiredKeys = new Set(requirements.map(requirement => canonicalKey(requirement.key)))
   const lead = (row: (typeof unscheduledRows)[number]) => ({
     clientId: row.id, firstName: row.firstName, lastName: row.lastName, email: row.email, phone: row.phone,
     ownerName: row.owner?.name ?? null,
-    missingDocs: Math.max(0, requiredCount - new Set(row.documents.map((doc) => doc.requirementId)).size),
+    missingDocs: Math.max(0, requiredKeys.size - new Set(row.documents.map(doc => doc.requirement?.key ? canonicalKey(doc.requirement.key) : null).filter((key): key is string => Boolean(key && requiredKeys.has(key)))).size),
   })
   const chipsByDay = new Map<string, DeskChip[]>()
   for (const appointment of appointments) {
