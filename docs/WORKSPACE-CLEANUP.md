@@ -37,9 +37,24 @@ Implemented on `codex/prodigy-workspace-01a0b8f2`:
 
 Local verification: 974 unit/integration tests passed across 85 files; 3 browser scenarios passed (actual staff login, scoped calendars, all 42 fields, saving/reloading a missing answer, direct-route denial, inactive-login denial). Typecheck, lint, canonical-source check, and production build passed. Browser server logs contain cancelled-stream messages during rapid navigation; assertions completed successfully. This is not a live latency benchmark.
 
-The migration tests prove transaction rollback, collision refusal, preservation of separate clients sharing contact details, historical authorship, immutable document rows, manual CYS corrections, inactive legacy users, two active roles, one team, and preservation of the target connector configuration. A local synthetic database backup was restored into a separate empty database; all 79 public tables matched by row count and content digest. The backup and evidence are held outside Git. **Production-data rehearsal and isolated Vercel Preview are not yet complete.**
+The migration tests prove transaction rollback, collision refusal, preservation of separate clients sharing contact details, historical authorship, immutable document rows, manual CYS corrections, inactive legacy users, two active roles, one team, and preservation of the target connector configuration. A local synthetic database backup was restored into a separate empty database; all 79 public tables matched by row count and content digest. The backup and evidence are held outside Git. The production-copy rehearsal below also passed. **Isolated Vercel Preview and live cutover are not yet complete.**
 
 The `Workspace checks` GitHub workflow runs migrations, typecheck, lint, all tests, production build, and the browser suite against disposable PostgreSQL. It does not contain production credentials. Branch protection must require this workflow before release; adding the workflow alone does not configure that GitHub setting.
+
+## Approved production-copy rehearsal — 2026-09-19
+
+The user explicitly approved the full production database export, including client data, password hashes, and encrypted connector credentials, to the private local backup path and authorized local rehearsal only. This superseded the earlier approval-review rejection. No live records, production configuration, storage objects, or deployments were changed.
+
+- Code tested: `0bc8b88ffdeaec70f0fbe7ef9596b4a7dc84363c`; GitHub Workspace checks also passed on this exact code revision (974 tests and 3 browser scenarios).
+- Full logical database archive: 2,303,008 bytes; SHA-256 `f2c13152656d9d8b0e7c0ce1b2357cd7b1ff5d2d5341d2f88631dbdc48a04002`. It remains outside Git in the explicitly approved private directory, with owner-only permissions.
+- A consistent read-only production snapshot contained 78 public application tables and 21,332 rows. The initial local restore matched every table by row count and content digest, including sequence values.
+- Both additive Prisma migrations applied successfully. The complete merge dry run rolled back with all table fingerprints unchanged. The subsequent committed merge occurred only in the isolated local copy.
+- All 339 client IDs and 1,063 document records survived; document rows remained unchanged. The merge archived 5,311 original rows and retained 34 legacy users as inactive historical identities.
+- Exact preservation checks passed for addresses, documents, extraction records, CYS values/readiness, survey responses, credit pulls, communications, notes, historical appointments, target connector configuration/credentials, and target intake source configuration. All 42 active CYS keys remained; future appointment ownership matched client ownership.
+- The result had one organization, one team, and two roles. Three existing Team Prodigy staff remained active Super Admins. **There were no active Closers in the production snapshot after legacy logins were disabled**; intended Closers must be invited or explicitly selected and assigned before operational handoff. The rehearsal did not reactivate legacy accounts or invent a staff mapping.
+- A second fresh local database restored the original backup and again matched all 78 application tables and sequence values, proving recovery of the pre-merge application data. The isolated PostgreSQL cluster used an owner-only Unix socket, had no TCP listener, ran no application/jobs, and was stopped after verification at `2026-09-19T13:51:21Z`.
+
+The full archive includes managed platform schemas; the local restoration and migration checks cover the public application schema, not a recreation of Supabase's managed auth/storage services. This rehearsal preserves and checks document metadata; it does not constitute a new backup or content check of every external file object. Private source manifests, restore evidence, and migration reports remain beside the backup, outside Git. The backup is rehearsal evidence, not a substitute for a fresh snapshot at cutover.
 
 ## Migration operator procedure
 
@@ -83,6 +98,6 @@ The Records Worker/analyzer remains a candidate, not an adopted replacement. Its
 
 Automatic deployment is disabled **only for this implementation branch** using Vercel's documented [branch deployment configuration](https://vercel.com/docs/project-configuration/git-configuration#gitdeploymentenabled). Re-enable it after isolated Preview dependencies are configured. This setting does not change main or another branch.
 
-## Current release blocker
+## Remaining release gates
 
-Automatic approval review rejected exporting the full production database locally because the payload includes client data, password hashes, and encrypted connector credentials, and explicit approval of that payload and destination was missing. The rejected export was not retried or performed through another mechanism. All current migration and restore tests use synthetic local data. Obtain approval for the exact backup destination before production-data rehearsal; production migration, Preview verification, physical table removal, and live release remain outstanding.
+The approved production-copy rehearsal is complete. Protected Vercel Preview still needs isolated database, storage, and provider settings, followed by end-to-end delivery and staff workflow verification. Require the passing GitHub workflow before release, finalize active Closer staffing/assignment, and prepare the controlled cutover with a fresh backup and tested rollback. The backup/local-rehearsal approval does not authorize changing live data. Production migration/deployment and the later physical retirement of obsolete tables remain outstanding.
