@@ -14,7 +14,7 @@ export const metadata = { title: 'Deploy' }
  */
 export default async function DeployPage() {
   const user = await requireUser()
-  if (!user.isOwner) redirect('/forbidden')
+  if (user.role !== 'SUPER_ADMIN') redirect('/forbidden')
 
   return (
     <>

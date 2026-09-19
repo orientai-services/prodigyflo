@@ -31,7 +31,13 @@ export type DocumentFieldInput = {
   sourcePage: number | null
 }
 
+export const CYS_DOCUMENT_KINDS: Record<string, string> = {
+  doc_contract: 'signed_contract', doc_finance: 'finance_agreement', doc_proposal: 'proposal',
+  doc_statement: 'lender_statement', doc_payoff: 'payoff_letter', doc_utility_bill: 'utility_bill', doc_photo_id: 'gov_id',
+}
+
 export type SourceRecord = {
+  documents?: { id: string; kind: string; label: string; approved: boolean }[]
   client: Record<string, string | null | undefined>
   address: Record<string, string | null | undefined> | null
   survey: Record<string, string | null | undefined>
@@ -202,6 +208,12 @@ function resolveDocumentField(def: CysDefinitionInput, sources: SourceRecord): R
 }
 
 export function resolveField(def: CysDefinitionInput, sources: SourceRecord): ResolvedValue {
+  const documentKind = CYS_DOCUMENT_KINDS[def.key]
+  if (documentKind && sources.documents) {
+    const docs = sources.documents.filter((doc) => doc.kind === documentKind)
+    const doc = docs.find((candidate) => candidate.approved) ?? docs[0]
+    return doc ? { ...missing(def.key), value: 'On file', status: doc.approved ? 'VERIFIED' : 'SUGGESTED', sourceDocumentId: doc.id, sourceLabel: doc.label, note: doc.approved ? 'Document approved.' : 'File received; document review is still needed.' } : missing(def.key)
+  }
   switch (def.sourceType) {
     case 'CLIENT_FIELD':
       return resolveRecordField(def, sources.client, 'client', 'CRM')

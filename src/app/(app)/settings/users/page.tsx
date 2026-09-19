@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/page-header'
 import { Badge } from '@/components/ui/badge'
 import { InviteDialog } from './invite-dialog'
 import { InviteRowActions, UserRowControls } from './row-controls'
-import { AccountRecoveryDialog } from './account-recovery-dialog'
+import { CloserPermissions } from './closer-permissions'
 
 export const metadata = { title: 'Users & access' }
 
@@ -16,7 +16,7 @@ export default async function UsersPage() {
   const canManage = can(user, 'users:manage')
   const grantable = assignableRoles(user)
 
-  const [users, invites, teams] = await Promise.all([
+  const [users, invites, teams, closerRole] = await Promise.all([
     db.user.findMany({
       where: { organizationId: user.organizationId, deletedAt: null, role: { key: { not: 'CLIENT' } } },
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
@@ -28,6 +28,7 @@ export default async function UsersPage() {
       include: { role: true, invitedBy: { select: { name: true } } },
     }),
     db.team.findMany({ where: { organizationId: user.organizationId }, orderBy: { name: 'asc' } }),
+    db.role.findFirst({ where: { organizationId: user.organizationId, key: 'CLOSER' }, include: { permissions: { include: { permission: true } } } }),
   ])
 
   const now = new Date()
@@ -36,16 +37,16 @@ export default async function UsersPage() {
     <div>
       <PageHeader
         title="Users & access"
-        description="Staff accounts, roles, and invitations. You can only grant roles below your own."
+        description="Super Admins manage the workspace. Closers work only with assigned clients."
         actions={canManage ? (
           <div className="flex items-center gap-2">
-            {user.isOwner && <AccountRecoveryDialog />}
             <InviteDialog roles={grantable} teams={teams} />
           </div>
         ) : undefined}
       />
 
       <div className="space-y-8 p-4 sm:p-6">
+        {canManage && <CloserPermissions selected={closerRole?.permissions.map((row) => row.permission.key) ?? []} />}
         {invites.length > 0 && (
           <section>
             <h2 className="mb-3 text-sm font-semibold">Pending invites</h2>

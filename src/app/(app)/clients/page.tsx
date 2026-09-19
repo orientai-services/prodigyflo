@@ -14,7 +14,6 @@ import { fullName, relativeTime } from '@/lib/format'
 import { listedMoney } from '@/lib/daily-desk-finance'
 import { DEFAULT_STAGES } from '@/lib/pipeline'
 import { scsReadiness, scsReadinessLabel } from '@/lib/intake/scs-readiness'
-import { deskVisibleClientWhere } from '@/lib/intake/scs-desk'
 
 export const metadata = { title: 'Clients' }
 
@@ -43,7 +42,7 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
   const sort = (str(params.sort) as SortKey) ?? 'recent'
   const page = Math.max(1, Number(str(params.page) ?? 1) || 1)
 
-  const filters: Prisma.ClientWhereInput[] = [clientScope(user), deskVisibleClientWhere()]
+  const filters: Prisma.ClientWhereInput[] = [clientScope(user)]
   if (q) {
     filters.push({
       OR: [

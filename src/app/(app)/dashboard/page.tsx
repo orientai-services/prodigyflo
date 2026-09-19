@@ -13,7 +13,6 @@ import {
 import { getAttentionItems } from '@/lib/attention'
 import { PageHeader } from '@/components/page-header'
 import { AttentionCard } from '@/components/dashboard/attention-card'
-import { InsightsCard } from '@/components/dashboard/insights-card'
 import { StatGrid, StatTile } from '@/components/stat-tile'
 import { FunnelChart } from '@/components/charts/funnel-chart'
 import { TrendChart } from '@/components/charts/trend-chart'
@@ -95,7 +94,6 @@ export default async function DashboardPage() {
           <AttentionCard user={user} items={attention} hideHeader />
         </CollapsibleSection>
 
-        <InsightsCard user={user} />
 
         <CollapsibleSection
           title="Funnel & trend"

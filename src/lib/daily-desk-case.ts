@@ -6,7 +6,7 @@ import { assemblePacket } from '@/lib/packet/data'
 import { asRecord, str } from '@/lib/packet/schema'
 import { resolveForClient } from '@/lib/cys/data'
 import { listBriefViews } from '@/lib/ai/closeops-ai'
-import { DESK_TIMEZONE, timeLabel } from '@/lib/daily-desk'
+import { DESK_TIMEZONE, civilDate, timeLabel } from '@/lib/daily-desk'
 import { CASE_DOC_KINDS, classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { amortize, sourceMoney, sourcePercent, sourceText } from '@/lib/daily-desk-finance'
 import { extracted } from '@/lib/desk-extract'
@@ -30,6 +30,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
   const client = await db.client.findFirst({
     where: { AND: [clientScope(user), { id: clientId }] },
     include: {
+      organization: { select: { timezone: true } },
       currentStage: { select: { name: true } },
       owner: { select: { name: true } },
       leadSource: { select: { name: true } },
@@ -40,12 +41,12 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
         include: { survey: { select: { schema: true } } },
       },
       appointments: {
-        where: { status: { in: ['SCHEDULED', 'CONFIRMED'] } },
+        where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, startsAt: { gte: new Date() } },
         orderBy: { startsAt: 'asc' },
         take: 1,
       },
       documents: {
-        where: { status: { notIn: ['REJECTED', 'EXPIRED'] } },
+        where: can(user, 'documents:read') ? {} : { id: '__none__' },
         include: {
           requirement: { select: { id: true, key: true, name: true } },
           extractions: {
@@ -75,19 +76,21 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
       where: { package: { organizationId: user.organizationId } },
       select: { id: true, key: true, name: true },
     }),
-    db.user.findMany({
+    user.role === 'SUPER_ADMIN' ? db.user.findMany({
       where: { organizationId: user.organizationId, role: { key: 'CLOSER' }, deletedAt: null, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
-    }),
+    }) : Promise.resolve([]),
     assemblePacket(clientId),
     resolveForClient(user, clientId).catch(() => null),
     can(user, 'ai:run') || can(user, 'ai:review') ? listBriefViews(user, clientId, 1) : Promise.resolve([]),
   ])
 
+  const confirmed = (key: string) => cys?.values.find((value) => value.fieldKey === key && value.status === 'VERIFIED')?.value || ''
+  const timezone = client.organization.timezone || DESK_TIMEZONE
   const answers = asRecord(client.surveyResponses[0]?.answers)
   const addr = client.addresses[0]
-  const docs = client.documents
+  const docs = client.documents.filter((doc) => !['REJECTED', 'EXPIRED'].includes(doc.status))
   const amt = extracted(docs, 'finance_agreement', 'amount_financed') || str(answers.amount_financed)
   const apr =
     extracted(docs, 'finance_agreement', 'apr') ||
@@ -173,7 +176,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
   const orderedDocs = [...docs].sort((a, b) => {
     const ta = a.receivedAt?.getTime() ?? 0
     const tb = b.receivedAt?.getTime() ?? 0
-    return ta - tb
+    return tb - ta
   })
   const docsByKind = new Map<string, (typeof docs)[number]>()
   const extrasByKind = new Map<string, string[]>()
@@ -214,13 +217,16 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
       verifiedCount: verified,
     })
     const fileUrl = doc ? await signedDocumentFileUrl(doc) : null
-    const extractFields = fields
+    const extractFields = fields.filter((field) => field.verification !== 'REJECTED')
       .map((f) => ({ label: f.label || f.key, value: str(f.correctedValue) || str(f.value) }))
       .filter((f) => f.value)
     const extraNote = extras.length > 0 ? `Also on file: ${extras.join(', ')}.` : ''
     const verifyNote = verified === fields.length && fields.length > 0 ? 'Verified extract.' : extractFields.length > 0 ? 'Unverified extract.' : ''
     tiles.push({
       key: kind.key,
+      files: await Promise.all(client.documents.filter((file) => Boolean(file.storageKey) && classifyDeskKind({ requirementKey: file.requirement?.key, detectedType: file.extractions[0]?.detectedTypeKey, label: file.label, fileName: file.fileName })?.key === kind.key)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map(async (file) => ({ id: file.id, label: file.fileName || file.label || kind.label, version: file.version, status: file.status, fileUrl: await signedDocumentFileUrl(file), mimeType: file.mimeType }))),
       label: kind.label,
       state,
       requirementId: req?.id ?? doc?.requirement?.id ?? null,
@@ -251,7 +257,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
 
   const appt = client.appointments[0]
   const appointmentLabel = appt
-    ? `${appt.startsAt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${timeLabel(appt.startsAt, appt.timezone || DESK_TIMEZONE)}`
+    ? `${appt.startsAt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: timezone })} · ${timeLabel(appt.startsAt, timezone)}`
     : null
 
   const win = packet?.closerWin
@@ -266,11 +272,11 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
 
   return {
     id: client.id,
-    firstName: client.firstName,
-    lastName: client.lastName,
-    city: str(answers.city) || addr?.city || '',
-    state: str(answers.state) || addr?.state || '',
-    zip: str(answers.zip) || addr?.postalCode || '',
+    firstName: confirmed('first_name') || client.firstName,
+    lastName: confirmed('last_name') || client.lastName,
+    city: confirmed('city') || str(answers.city) || addr?.city || '',
+    state: confirmed('state') || str(answers.state) || addr?.state || '',
+    zip: confirmed('zip') || str(answers.zip) || addr?.postalCode || '',
     source: client.leadSource?.name ?? 'Unknown source',
     stage: client.currentStage.name,
     ownerName: client.owner?.name ?? null,
@@ -302,10 +308,13 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     closers,
     canAssign: can(user, 'clients:reassign'),
     canBook: can(user, 'appointments:manage'),
+    canUpload: can(user, 'documents:upload'),
+    appointmentId: appt?.id ?? null,
+    timezone: client.organization.timezone,
     canRequest: can(user, 'documents:request'),
     canBrief: can(user, 'ai:run') || can(user, 'ai:review'),
-    bookDate: appt ? appt.startsAt.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-    bookTime: appt ? timeLabel(appt.startsAt, appt.timezone || DESK_TIMEZONE) : '10:00',
+    bookDate: civilDate(appt?.startsAt ?? new Date(), timezone),
+    bookTime: appt ? timeLabel(appt.startsAt, timezone) : '10:00',
   }
 }
 

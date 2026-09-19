@@ -19,8 +19,9 @@
     "reports": "node reports/build.mjs",
     "reports:fast": "node reports/build.mjs --skip-tests",
     "check:canonical": "bash scripts/check-canonical.sh pf",
-    "e2e": "playwright test",
-    "e2e:headed": "playwright test --headed"
+    "e2e": "playwright test --config=playwright.workspace.config.ts",
+    "e2e:headed": "playwright test --config=playwright.workspace.config.ts --headed",
+    "workspace:merge": "tsx scripts/merge-workspaces.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

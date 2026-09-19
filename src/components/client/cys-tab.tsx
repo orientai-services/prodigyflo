@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Circle, Download, FileWarning } from 'luci
 import { db } from '@/lib/db'
 import { can, canAny, findClientInScope, requireUser } from '@/lib/rbac'
 import { resolveForClient, type CysValueRow } from '@/lib/cys/data'
-import type { CysDefinitionInput } from '@/lib/cys/resolve'
+import { CYS_DOCUMENT_KINDS, type CysDefinitionInput } from '@/lib/cys/resolve'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/empty-state'
 import { dateTime, relativeTime } from '@/lib/format'
@@ -104,7 +104,7 @@ export async function CysTab({ clientId }: { clientId: string }) {
       <section className="desk-card desk-block">
         <div className="desk-cal-head" style={{ padding: 0 }}>
           <h2 className="font-heading" style={{ fontSize: 24 }}>
-            CYS workspace
+            CYS checklist · {definitions.length} items
           </h2>
           <span className={`desk-tag ${approved ? 'ok' : 'warn'}`}>
             {approved ? 'CYS ready' : 'CYS not ready'}
@@ -112,7 +112,7 @@ export async function CysTab({ clientId }: { clientId: string }) {
         </div>
         <p className="desk-muted">
           {completion.requiredVerified} of {completion.requiredTotal} required fields verified.
-          Packet READY is a separate gate on the case file. generateCysPackage writes a JSON draft only — no HTTP push.
+          Missing answers remain available below. Optional items do not block approval. The approved package is downloaded for handover.
         </p>
         {approved && (
           <p className="desk-muted">
@@ -227,9 +227,7 @@ export async function CysTab({ clientId }: { clientId: string }) {
                             *
                           </span>
                         )}
-                        <div className="desk-muted" style={{ marginBottom: 0 }}>
-                          {def.key}
-                        </div>
+
                       </td>
                       <td>
                         {v?.value ? (
@@ -256,7 +254,9 @@ export async function CysTab({ clientId }: { clientId: string }) {
                       </td>
                       {canPrepare && (
                         <td>
-                          <FieldActions
+                          {CYS_DOCUMENT_KINDS[def.key] ? (
+                            <a className="text-sm underline" href={`#document-${CYS_DOCUMENT_KINDS[def.key]}`}>Open document module</a>
+                          ) : <FieldActions
                             clientId={clientId}
                             fieldKey={def.key}
                             label={def.label}
@@ -264,7 +264,7 @@ export async function CysTab({ clientId }: { clientId: string }) {
                             value={v?.value ?? null}
                             conflictValue={v?.conflictValue ?? null}
                             dataType={def.dataType}
-                          />
+                          />}
                         </td>
                       )}
                     </tr>

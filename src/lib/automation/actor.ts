@@ -1,7 +1,7 @@
 import 'server-only'
 import { db } from '@/lib/db'
 import type { SessionUser } from '@/lib/rbac'
-import type { PermissionKey } from '@/lib/permissions'
+import { effectivePermissions, isStaffRole, type PermissionKey } from '@/lib/permissions'
 
 /**
  * Builds a SessionUser for background work (the job runner has no session).
@@ -21,7 +21,7 @@ export async function loadActor(userId: string | null | undefined): Promise<Sess
       clientPortalLink: { select: { id: true } },
     },
   })
-  if (!user) return null
+  if (!user || !isStaffRole(user.role.key)) return null
 
   return {
     id: user.id,
@@ -32,13 +32,13 @@ export async function loadActor(userId: string | null | undefined): Promise<Sess
     roleId: user.roleId,
     role: user.role.key,
     roleName: user.role.name,
-    isOwner: user.isOwner,
+    isOwner: user.role.key === 'SUPER_ADMIN',
     regionId: user.regionId,
     teamId: user.teamId,
     managerId: user.managerId,
     avatarUrl: user.avatarUrl,
     title: user.title,
-    permissions: new Set(user.role.permissions.map((rp) => rp.permission.key as PermissionKey)),
+    permissions: effectivePermissions(user.role.key, user.role.permissions.map((rp) => rp.permission.key as PermissionKey)),
     portalClientId: user.clientPortalLink?.id ?? null,
   }
 }

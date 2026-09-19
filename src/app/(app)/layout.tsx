@@ -1,10 +1,9 @@
+import { notificationScope } from '@/lib/notification-scope'
 import type { Metadata } from 'next'
-import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
 import { getSessionUser, requireUser } from '@/lib/rbac'
 import { brandFor } from '@/components/brand/org-brand'
 import { navigationFor, subroutesFor } from '@/lib/navigation'
-import { ROLE_HOME } from '@/lib/permissions'
 import { AppShell } from '@/components/layout/app-shell'
 
 /**
@@ -41,48 +40,16 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const user = await requireUser()
 
-  // Clients never see the staff shell. The portal itself is deferred (P3), so
-  // for now a portal account is told plainly that it has nowhere to go here.
-  if (user.role === 'CLIENT') redirect(ROLE_HOME.CLIENT)
-
-  // A pinned user (landingPath set — e.g. a Lead Recovery Flow demo account)
-  // is confined to their own app: reaching any ProdigyFlo staff route bounces
-  // them back, so they never see the full app behind the branded shell.
-  if (user.landingPath && !user.landingPath.startsWith('/dashboard')) redirect(user.landingPath)
-
   const unreadCount = await db.notification.count({
-    where: { userId: user.id, readAt: null },
+    where: { ...await notificationScope(user), readAt: null },
   })
-
-  // Agency users may switch between their home account and its direct,
-  // non-deleted children — computed server-side so the shell only ever sees
-  // a serializable list. Everyone else gets an empty list and the static
-  // org name in the sidebar footer, exactly as before.
-  let switchableOrgs: { id: string; name: string; kind: string; slug: string }[] = []
-  if (user.organizationKind === 'AGENCY') {
-    const homeOrganizationId = user.homeOrganizationId ?? user.organizationId
-    const rows = await db.organization.findMany({
-      where: {
-        deletedAt: null,
-        OR: [{ id: homeOrganizationId }, { parentOrganizationId: homeOrganizationId }],
-      },
-      orderBy: { name: 'asc' },
-      // `slug` is the branding key the switcher renders an account's own mark from.
-      select: { id: true, name: true, kind: true, slug: true },
-    })
-    // Home first, children A→Z after it.
-    switchableOrgs = [
-      ...rows.filter((o) => o.id === homeOrganizationId),
-      ...rows.filter((o) => o.id !== homeOrganizationId),
-    ]
-  }
 
   return (
     <AppShell
       sections={navigationFor(user)}
       subroutes={subroutesFor(user)}
       unreadCount={unreadCount}
-      switchableOrgs={switchableOrgs}
+      switchableOrgs={[]}
       activeOrgId={user.organizationId}
       activeOrgSlug={user.organizationSlug}
       user={{

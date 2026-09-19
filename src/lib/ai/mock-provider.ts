@@ -12,10 +12,6 @@ import type {
   CloserBriefContent,
   DiscrepanciesResult,
   DocumentSummaryResult,
-  GenerateInsightsInput,
-  GenerateInsightsResult,
-  InsightCitation,
-  InsightProposal,
   LeadSummaryResult,
   MessageDraftResult,
   NextActionSuggestion,
@@ -27,7 +23,6 @@ import type {
 } from './provider'
 import { assignmentConfidence, scoreCandidates } from './scoring'
 import { composeCloserBrief, computeCloseScore } from './close-scoring'
-import { insightDedupeKey } from '@/lib/engine/insight-rules'
 
 const money = (n: number | null | undefined) =>
   n === null || n === undefined ? null : `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -583,116 +578,6 @@ export class MockAIProvider implements AIProvider {
     return composeCloserBrief(context)
   }
 
-  // ── Insight engine (Prodigy Engine) ────────────────────────────────────────
-
-  /**
-   * Deterministic insight proposals: fixed thresholds over the supplied KPIs
-   * and snippets — no clock, no RNG, so the same input always yields the same
-   * insights. The learning loop is honored the same way the real model is
-   * asked to: anything the org previously DISMISSED (same kind + title) is
-   * never proposed again.
-   */
-  async generateInsights(input: GenerateInsightsInput): Promise<GenerateInsightsResult> {
-    const { kpis, snippets, priorFeedback } = input
-
-    /** Finite number at `key`, looked up flat then under kpis.core / kpis.marketing. */
-    const metric = (key: string): number | null => {
-      for (const scope of [kpis, kpis.core, kpis.marketing]) {
-        if (scope && typeof scope === 'object') {
-          const v = (scope as Record<string, unknown>)[key]
-          if (typeof v === 'number' && Number.isFinite(v)) return v
-        }
-      }
-      return null
-    }
-    /** Up to two citations from the named sources, falling back to any snippet. */
-    const cite = (...sources: string[]): InsightCitation[] => {
-      const hits = snippets.filter((s) => sources.includes(s.source)).slice(0, 2)
-      return hits.length > 0 ? hits : snippets.slice(0, 1)
-    }
-    const clampScore = (n: number) => Math.max(5, Math.min(95, Math.round(n)))
-
-    const proposals: InsightProposal[] = []
-
-    const closeRate = metric('closeRate')
-    const won = metric('won')
-    const lost = metric('lost')
-    if (closeRate !== null && closeRate < 25) {
-      proposals.push({
-        kind: 'pipeline',
-        title: 'Close rate is below 25%',
-        body: `The close rate is ${closeRate}%${won !== null && lost !== null ? ` (${won} won vs ${lost} lost)` : ''}. Review the loss reasons on file and the stages where files stall to find the biggest recoverable segment.`,
-        evidence: cite('clients', 'pastInsights'),
-        score: clampScore(80 - closeRate),
-      })
-    }
-
-    const speed = metric('medianSpeedToContactHours')
-    if (speed !== null && speed > 24) {
-      proposals.push({
-        kind: 'engagement',
-        title: 'Speed-to-contact exceeds 24 hours',
-        body: `Median time from lead creation to first contact is ${Math.round(speed)} hours. Leads contacted within a day convert measurably better — tighten first-touch assignment and follow-up tasks.`,
-        evidence: cite('clients', 'communications'),
-        score: clampScore(40 + Math.min(40, speed / 4)),
-      })
-    }
-
-    if (won !== null && lost !== null && lost > won && lost > 0) {
-      proposals.push({
-        kind: 'pipeline',
-        title: 'Losses are outpacing wins',
-        body: `${lost} files closed lost against ${won} won in this snapshot. The recorded loss reasons point at where intervention pays off first.`,
-        evidence: cite('clients'),
-        score: clampScore(50 + (lost - won) * 5),
-      })
-    }
-
-    const costPerLead = metric('costPerLead')
-    if (costPerLead !== null && costPerLead > 100) {
-      proposals.push({
-        kind: 'marketing',
-        title: 'Cost per lead is above $100',
-        body: `Paid campaigns are averaging $${costPerLead.toFixed(2)} per lead over the last 30 days. Compare per-campaign cost efficiency and shift budget toward the campaigns producing qualified files, not just clicks.`,
-        evidence: cite('metrics'),
-        score: clampScore(40 + Math.min(45, costPerLead / 10)),
-      })
-    }
-
-    const atRisk = snippets.filter((s) => s.source === 'clients' && s.ref.startsWith('client:'))
-    if (atRisk.length > 0) {
-      proposals.push({
-        kind: 'risk',
-        title: `${atRisk.length} file${atRisk.length === 1 ? ' is' : 's are'} over stage SLA`,
-        body: `${atRisk.length} active file${atRisk.length === 1 ? '' : 's'} sit${atRisk.length === 1 ? 's' : ''} past the configured stage SLA. Each cited file names the stage, the overage, and the owner to nudge.`,
-        evidence: atRisk.slice(0, 3),
-        score: clampScore(45 + atRisk.length * 8),
-      })
-    }
-
-    if (proposals.length === 0 && snippets.length > 0) {
-      proposals.push({
-        kind: 'operations',
-        title: 'No KPI anomalies in this scan',
-        body: 'Every monitored KPI is inside its threshold in this snapshot. The cited evidence summarizes the current pipeline state for reference.',
-        evidence: snippets.slice(0, 2),
-        score: 10,
-      })
-    }
-
-    // The learning loop, deterministically: a previously dismissed (kind, title)
-    // is never proposed again.
-    const dismissed = new Set(
-      priorFeedback
-        .filter((f) => f.status === 'DISMISSED')
-        .map((f) => insightDedupeKey(f.kind, f.title)),
-    )
-    return {
-      insights: proposals
-        .filter((p) => !dismissed.has(insightDedupeKey(p.kind, p.title)))
-        .slice(0, 8),
-    }
-  }
 }
 
 /** Small deterministic hash so mock phrasing varies by input but never by run. */

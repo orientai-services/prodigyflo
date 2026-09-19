@@ -34,10 +34,9 @@ const SECTIONS: NavSection[] = [
     title: 'Desk',
     items: [
       { href: '/board', label: 'Board', icon: 'LayoutDashboard', anyOf: CLIENT_READ },
-      { href: '/pipeline', label: 'Pipeline', icon: 'Columns3', anyOf: CLIENT_READ },
+      { href: '/pipeline', label: 'Pipeline', icon: 'Columns3', roles: ['SUPER_ADMIN'] },
       { href: '/clients', label: 'Clients', icon: 'Users', anyOf: CLIENT_READ },
       { href: '/queue', label: 'Queue', icon: 'ListTodo', anyOf: CLIENT_READ },
-      { href: '/engine', label: 'Engine', icon: 'Sparkles', anyOf: ['ai:review'] },
       { href: '/documents', label: 'Document lab', icon: 'FileText', anyOf: ['documents:review'] },
       { href: '/submissions', label: 'CYS', icon: 'Send', anyOf: ['submissions:read'] },
     ],
@@ -105,7 +104,7 @@ function visibleTo(user: SessionUser, item: NavItem): boolean {
 
 export function navigationFor(user: SessionUser): NavSection[] {
   // The client portal is deferred (P3); CLIENT accounts have no staff-app nav.
-  if (user.role === 'CLIENT') return []
+  if (user.role !== 'SUPER_ADMIN' && user.role !== 'CLOSER') return []
 
   return SECTIONS.map((section) => ({
     title: section.title,
@@ -115,6 +114,6 @@ export function navigationFor(user: SessionUser): NavSection[] {
 
 /** SUBROUTES the user may actually open — the palette's "Go deeper" group. */
 export function subroutesFor(user: SessionUser): NavItem[] {
-  if (user.role === 'CLIENT') return []
-  return SUBROUTES.filter((item) => visibleTo(user, item))
+  if (user.role !== 'SUPER_ADMIN' && user.role !== 'CLOSER') return []
+  return user.role === 'SUPER_ADMIN' ? SUBROUTES.filter((item) => !item.agencyOnly && visibleTo(user, item)) : []
 }

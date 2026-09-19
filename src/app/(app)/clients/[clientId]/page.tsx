@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/rbac'
 import { DuplicateBanner } from '@/components/client/duplicate-banner'
 import { loadCaseFile } from '@/lib/daily-desk-case'
 import { CaseFileView } from './case-file-client'
+import { CysTab } from '@/components/client/cys-tab'
 import { CloserBriefSection } from './closeops-section'
 
 export const metadata = { title: 'Client' }
@@ -16,7 +17,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ c
   return (
     <>
       <DuplicateBanner clientId={clientId} />
-      <CaseFileView data={data}>{data.canBrief ? <CloserBriefSection clientId={clientId} /> : null}</CaseFileView>
+      <CaseFileView data={data} cys={<CysTab clientId={clientId} />}>{data.canBrief ? <CloserBriefSection clientId={clientId} /> : null}</CaseFileView>
     </>
   )
 }

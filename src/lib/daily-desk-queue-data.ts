@@ -1,8 +1,8 @@
 import 'server-only'
 import { db } from '@/lib/db'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
-import { deskVisibleClientWhere } from '@/lib/intake/scs-desk'
-import { loadDefinitions } from '@/lib/cys/data'
+import { resolveAll } from '@/lib/cys/resolve'
+import { loadDefinitions, loadSourcesForClients } from '@/lib/cys/data'
 import { approvalBlockers } from '@/lib/cys/readiness'
 import { CASE_DOC_KINDS, matchDocKind } from '@/lib/daily-desk-docs'
 import {
@@ -45,9 +45,8 @@ export async function loadDeskQueue(user: SessionUser): Promise<DeskQueue> {
   const now = new Date()
   const [clients, requirements, definitions, closers] = await Promise.all([
     db.client.findMany({
-      where: { AND: [clientScope(user), deskVisibleClientWhere(), { status: 'ACTIVE', deletedAt: null }] },
+      where: { AND: [clientScope(user), { status: 'ACTIVE', deletedAt: null }] },
       orderBy: { lastActivityAt: 'desc' },
-      take: 400,
       select: {
         id: true,
         firstName: true,
@@ -68,7 +67,7 @@ export async function loadDeskQueue(user: SessionUser): Promise<DeskQueue> {
             extractions: { orderBy: { createdAt: 'desc' }, take: 1, select: { detectedTypeKey: true } },
           },
         },
-        cysFieldValues: { select: { fieldKey: true, status: true } },
+        cysFieldValues: { select: { fieldKey: true, status: true, verifiedById: true } },
       },
     }),
     db.documentRequirement.findMany({
@@ -76,13 +75,14 @@ export async function loadDeskQueue(user: SessionUser): Promise<DeskQueue> {
       select: { id: true, key: true },
     }),
     loadDefinitions(user.organizationId),
-    db.user.findMany({
+    user.role === 'SUPER_ADMIN' ? db.user.findMany({
       where: { organizationId: user.organizationId, role: { key: 'CLOSER' }, deletedAt: null, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
-    }),
+    }) : Promise.resolve([]),
   ])
 
+  const sources = await loadSourcesForClients(clients.map(client => client.id))
   const reqByKind = new Map<string, string>()
   for (const r of requirements) {
     const kind = matchDocKind(r.key)
@@ -125,7 +125,7 @@ export async function loadDeskQueue(user: SessionUser): Promise<DeskQueue> {
     const missingKeys = CASE_DOC_KINDS.filter((k) => missingLabels.includes(k.label)).map((k) => k.key)
     const missingRequirementIds = missingKeys.map((k) => reqByKind.get(k)).filter((id): id is string => Boolean(id))
     const blockers = cysDefs.length
-      ? approvalBlockers(cysDefs, row.cysFieldValues.map((v) => ({ fieldKey: v.fieldKey, status: v.status })))
+      ? approvalBlockers(cysDefs, resolveAll(cysDefs, sources.get(row.id)!).map(value => row.cysFieldValues.find(saved => saved.fieldKey === value.fieldKey && saved.status === 'VERIFIED' && saved.verifiedById) ?? value))
       : []
     const reasons = queueReasons({
       ownerId: row.ownerId,

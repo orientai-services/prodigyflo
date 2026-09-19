@@ -4,5 +4,10 @@
       "path": "/api/jobs/run",
       "schedule": "*/5 * * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "codex/prodigy-workspace-01a0b8f2": false
+    }
+  }
 }

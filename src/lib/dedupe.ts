@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 // Duplicate detection and merge rules. Pure where possible so the intake slice
 // and unit tests can reuse them without a database.
 
@@ -65,7 +66,7 @@ export async function findDuplicates(
   db: DedupeDb,
   organizationId: string,
   input: DuplicateQuery,
-  opts: { excludeClientId?: string } = {},
+  opts: { excludeClientId?: string; scope?: Prisma.ClientWhereInput } = {},
 ): Promise<DuplicateResult> {
   const email = normaliseEmail(input.email)
   const phone = normalisePhone(input.phone)
@@ -91,6 +92,7 @@ export async function findDuplicates(
       deletedAt: null,
       ...(opts.excludeClientId ? { id: { not: opts.excludeClientId } } : {}),
       OR: or,
+      ...(opts.scope ? { AND: [opts.scope] } : {}),
     },
     select: {
       id: true,

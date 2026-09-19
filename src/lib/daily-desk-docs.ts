@@ -15,24 +15,15 @@ export const CASE_DOC_KINDS: DeskDocKind[] = [
   { key: 'utility_bill', label: 'Utility bill', aliases: ['utility_bill', 'utility-bill', 'power_bill'] },
   { key: 'comm_evidence', label: 'Comm evidence', aliases: ['comm_evidence'] },
   { key: 'ucc_lien', label: 'UCC Fixture / Lien', aliases: ['ucc_lien', 'lien_filing', 'lien', 'fixture'] },
-  { key: 'home_deed', label: 'Homeownership Deed', aliases: ['home_deed', 'ownership', 'deed', 'property_record', 'homeownership', 'parcel'] },
-  { key: 'county_permit', label: 'County Permit Record', aliases: ['county_permit', 'permit', 'permits'] },
+  { key: 'home_deed', label: 'Homeownership Deed', aliases: ['home_deed', 'ownership', 'deed', 'property_record', 'homeownership', 'parcel', 'property_ownership'] },
+  { key: 'county_permit', label: 'County Permit Record', aliases: ['county_permit', 'permit', 'permits', 'permit_records'] },
+  { key: 'proposal', label: 'Proposal / savings estimate', aliases: ['proposal', 'savings_estimate'] },
+  { key: 'lender_statement', label: 'Current lender statement', aliases: ['lender_statement', 'loan_statement'] },
+  { key: 'payoff_letter', label: 'Payoff quote', aliases: ['payoff', 'payoff_letter'] },
+  { key: 'gov_id', label: 'Photo ID', aliases: ['government_id', 'photo_id', 'drivers_license', 'id'] },
+  { key: 'other', label: 'Other documents', aliases: ['other'] },
   { key: 'production_report', label: 'Solar Production Report', aliases: ['production_report', 'production'] },
 ]
-
-/** Kept off the case-file grid. Still stored on the client. */
-const HIDDEN_DESK_ALIASES = new Set([
-  'gov_id',
-  'photo_id',
-  'government_id',
-  'drivers_license',
-  'id',
-  'proof_of_income',
-  'proof_income',
-  'attorney_retainer',
-  'lpoa',
-  'attorney_poa',
-])
 
 export type DeskDocState = 'missing' | 'uploaded' | 'extracted' | 'unverified' | 'verified' | 'failed'
 
@@ -66,23 +57,10 @@ export function matchDocKind(raw: string | null | undefined): DeskDocKind | null
   }) ?? null
 }
 
-function isHiddenDeskKind(input: {
-  requirementKey?: string | null
-  detectedType?: string | null
-  label?: string | null
-  fileName?: string | null
-}): boolean {
-  return [input.requirementKey, input.detectedType, input.label, input.fileName]
-    .map(normalizeKey)
-    .map(stem)
-    .some((key) => key && HIDDEN_DESK_ALIASES.has(key))
-}
-
 /**
  * Put inbound files on a known visible tile.
  * Lender names → finance. Install / Steele → signed contract.
- * Deed / UCC / permit names beat the leftover-contract fallback.
- * Hidden kinds stay off the grid instead of stealing the contract slot.
+ * Unknown files remain accessible in Other documents.
  */
 export function classifyDeskKind(input: {
   requirementKey?: string | null
@@ -90,8 +68,6 @@ export function classifyDeskKind(input: {
   label?: string | null
   fileName?: string | null
 }): DeskDocKind | null {
-  if (isHiddenDeskKind(input)) return null
-
   const direct =
     matchDocKind(input.requirementKey) ||
     matchDocKind(input.detectedType) ||
@@ -108,7 +84,7 @@ export function classifyDeskKind(input: {
   if (UCC_NAME.test(hay)) return CASE_DOC_KINDS.find((k) => k.key === 'ucc_lien') ?? null
   if (PERMIT_NAME.test(hay)) return CASE_DOC_KINDS.find((k) => k.key === 'county_permit') ?? null
   if (INSTALL_NAME.test(hay)) return CASE_DOC_KINDS.find((k) => k.key === 'signed_contract') ?? null
-  return CASE_DOC_KINDS.find((k) => k.key === 'signed_contract') ?? null
+  return CASE_DOC_KINDS.find((k) => k.key === 'other') ?? null
 }
 
 export function tileState(input: {

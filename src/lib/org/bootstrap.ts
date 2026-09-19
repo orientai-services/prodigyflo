@@ -2,7 +2,7 @@
  * Organization bootstrap — the single definition of "a working, empty account".
  *
  * Extracted from prisma/seed.ts so the same structure ships to every new
- * organization: the global permission catalog, the 8 system roles with their
+ * organization: the global permission catalog, the 2 staff roles with their
  * permission grants, the default 25-stage pipeline, the client intake survey,
  * the standard submission package with its 8 requirements, the 5 starter lead
  * sources, and the starter content seeds (message templates, outreach
@@ -15,7 +15,7 @@
  * nothing that an admin may have customized (stages, requirements, sources are
  * create-only after the first run).
  *
- * Deliberately NOT bootstrapped: regions, teams, sequences, demo campaigns —
+ * Deliberately NOT bootstrapped: regions, sequences, demo campaigns —
  * those are demo-optional and stay in prisma/seed.ts.
  */
 import { DocumentCategory, type PrismaClient, type Prisma, type RoleKey } from '@prisma/client'
@@ -23,7 +23,7 @@ import { seedMessaging } from '../../../prisma/seeds/messaging'
 import { seedOutreach } from '../../../prisma/seeds/outreach'
 import { seedCys } from '../../../prisma/seeds/cys'
 import { DEFAULT_STAGES } from '../pipeline'
-import { PERMISSIONS, ROLE_LABELS, ROLE_PERMISSIONS } from '../permissions'
+import { PERMISSIONS, ROLE_LABELS, ROLE_PERMISSIONS, STAFF_ROLES } from '../permissions'
 import { defaultBillingMode } from '../telephony/billing-mode'
 
 export type OrganizationKind = 'AGENCY' | 'CLIENT'
@@ -171,6 +171,10 @@ export async function bootstrapOrganization(
     })
   }
 
+  if (!await db.team.findFirst({ where: { organizationId: org.id, name: 'Team Prodigy' } })) {
+    await db.team.create({ data: { organizationId: org.id, name: 'Team Prodigy' } })
+  }
+
   // ── telephony wallet ───────────────────────────────────────
   // Every account owns one from the moment it exists, so the phone-numbers
   // console never has to render an account without a wallet. The mode is set
@@ -187,20 +191,17 @@ export async function bootstrapOrganization(
 
   // ── roles + role permissions ───────────────────────────────
   const roleIdByKey = new Map<RoleKey, string>()
-  for (const key of Object.keys(ROLE_PERMISSIONS) as RoleKey[]) {
+  for (const key of STAFF_ROLES) {
     const role = await db.role.upsert({
       where: { organizationId_key: { organizationId: org.id, key } },
       update: {},
-      create: { organizationId: org.id, key, name: ROLE_LABELS[key], isSystem: true },
+      create: {
+        organizationId: org.id, key, name: ROLE_LABELS[key], isSystem: true,
+        permissions: { create: ROLE_PERMISSIONS[key].map((pk) => ({ permissionId: permId.get(pk)! })) },
+      },
     })
     roleIdByKey.set(key, role.id)
-    await db.rolePermission.createMany({
-      data: ROLE_PERMISSIONS[key]
-        .map((pk) => permId.get(pk))
-        .filter((id): id is string => Boolean(id))
-        .map((permissionId) => ({ roleId: role.id, permissionId })),
-      skipDuplicates: true,
-    })
+
   }
 
   // ── default pipeline + stages ──────────────────────────────

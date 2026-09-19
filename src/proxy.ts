@@ -46,12 +46,16 @@ const PUBLIC_PREFIXES = [
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+  // Overwrite any caller-supplied value; server authorization reads this path.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-prodigy-path', pathname)
+  const next = () => NextResponse.next({ request: { headers: requestHeaders } })
 
   // Exact operator route has its own fail-closed bearer + cohort authorization.
-  if (pathname === '/api/internal/scs/execute') return NextResponse.next()
+  if (pathname === '/api/internal/scs/execute') return next()
 
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next()
+    return next()
   }
 
   const hasSession =
@@ -64,7 +68,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return NextResponse.next()
+  return next()
 }
 
 export const config = {

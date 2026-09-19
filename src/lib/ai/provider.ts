@@ -121,14 +121,7 @@ export interface AIProvider {
   /** Pre-call Closer Brief: situation, highlights, objections, talking points. */
   generateCloserBrief(context: AssistContext): Promise<CloserBriefContent>
 
-  // Insight engine (Prodigy Engine). Types at the bottom of this file.
-  /**
-   * Org-level insight proposals from KPIs + retrieved evidence, conditioned on
-   * prior human feedback (what was accepted vs dismissed, and why). Every
-   * proposal persists as a PENDING_REVIEW Insight a named human reviews —
-   * nothing acts on its own. Evidence may only cite the supplied snippets.
-   */
-  generateInsights(input: GenerateInsightsInput): Promise<GenerateInsightsResult>
+
 }
 
 export function isAIConfigured(): boolean {
@@ -245,55 +238,6 @@ export type CloseScoreResult = {
 
 export type CloserBriefObjection = { objection: string; response: string }
 
-// ─────────────────────────────────────────────────────────────
-// Insight engine (Prodigy Engine)
-// ─────────────────────────────────────────────────────────────
-
-export const INSIGHT_KINDS = [
-  'pipeline',
-  'marketing',
-  'engagement',
-  'documents',
-  'operations',
-  'risk',
-] as const
-export type InsightKind = (typeof INSIGHT_KINDS)[number]
-
-/** One retrieval citation. Same shape as RetrievalSnippet — it persists on the
- *  Insight row as evidence, so a reviewer can trace every claim to a source. */
-export type InsightCitation = { source: string; ref: string; text: string }
-
-export type InsightProposal = {
-  kind: InsightKind
-  title: string
-  body: string
-  /** Citations copied from the supplied snippets — never invented. */
-  evidence: InsightCitation[]
-  /** 0-100 relative importance for review ordering. Not a decision. */
-  score: number
-}
-
-/** A previously reviewed insight with the human's verdict — the learning loop. */
-export type PriorInsightFeedback = {
-  kind: string
-  title: string
-  status: 'ACCEPTED' | 'DISMISSED'
-  reviewNote: string | null
-  /** Measured after-effects, when the accepted insight has had time to land. */
-  outcome: unknown
-}
-
-export type GenerateInsightsInput = {
-  /** Org KPI snapshot (core pipeline metrics + marketing summary). */
-  kpis: Record<string, unknown>
-  /** Retrieved, cited evidence — the only material insights may cite. */
-  snippets: InsightCitation[]
-  /** What the org accepted vs dismissed before, with notes and outcomes. */
-  priorFeedback: PriorInsightFeedback[]
-}
-
-export type GenerateInsightsResult = { insights: InsightProposal[] }
-
 /** The pre-call brief a closer reads before dialing. */
 export type CloserBriefContent = {
   situation: string
@@ -301,11 +245,8 @@ export type CloserBriefContent = {
   objections: CloserBriefObjection[]
   talkingPoints: string[]
   recommendedNextStep: string
-  /** Internal redline from the packet. Never render to the homeowner. */
   redline?: string[]
-  /** Case-by-case best-probability cancel path. Target, not a promise. */
   cancelPath?: string[]
-  /** Spoken close. Facts only. */
   closeTalk?: string
   outcomeCeiling?: string
 }

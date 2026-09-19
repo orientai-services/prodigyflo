@@ -206,7 +206,7 @@ function sessionUser(permissions: PermissionKey[]): SessionUser {
     organizationName: 'Msg Test Org',
     roleId,
     isOwner: false,
-    role: 'ADMIN',
+    role: 'CLOSER',
     roleName: 'Admin',
     regionId: null,
     teamId: null,
@@ -223,7 +223,7 @@ const CONSENT_BASE = { textVersion: 'v1', text: 'Test consent text', purpose: 't
 beforeAll(async () => {
   const org = await db.organization.create({ data: { name: 'Msg Test Org', slug: stamp } })
   orgId = org.id
-  const role = await db.role.create({ data: { organizationId: orgId, key: 'ADMIN', name: 'Admin' } })
+  const role = await db.role.create({ data: { organizationId: orgId, key: 'CLOSER', name: 'Admin' } })
   roleId = role.id
   const user = await db.user.create({
     data: { organizationId: orgId, roleId, email: `${stamp}@example.com`, passwordHash: 'x', name: 'Test Sender' },
@@ -234,7 +234,7 @@ beforeAll(async () => {
     data: { pipelineId: pipeline.id, key: 'NEW_LEAD', name: 'New lead', category: 'INTAKE', position: 0 },
   })
 
-  const clientBase = { organizationId: orgId, pipelineId: pipeline.id, currentStageId: stage.id }
+  const clientBase = { ownerId: userId, organizationId: orgId, pipelineId: pipeline.id, currentStageId: stage.id }
 
   const ok = await db.client.create({
     data: {
@@ -308,7 +308,7 @@ describe('sendMessage', () => {
   })
 
   it('refuses a client outside the sender scope', async () => {
-    const strangerScope = sessionUser(['communications:send', 'clients:read_assigned'])
+    const strangerScope = { ...sessionUser(['communications:send', 'clients:read_assigned']), id: 'unassigned-closer' }
     await expect(
       sendMessage(strangerScope, { clientId: clientOkId, channel: 'EMAIL', body: 'hi' }),
     ).rejects.toBeInstanceOf(ForbiddenError)

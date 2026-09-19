@@ -1,153 +1,60 @@
 import 'server-only'
-import { AppointmentStatus, DocumentStatus } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
-import { deskVisibleClientWhere } from '@/lib/intake/scs-desk'
-import {
-  DESK_TIMEZONE,
-  civilDate,
-  monthGrid,
-  monthTitle,
-  parseMonth,
-  timeLabel,
-  type DeskBoard,
-  type DeskChip,
-  type DeskLead,
-} from '@/lib/daily-desk'
-
-const LIVE_APPOINTMENTS: AppointmentStatus[] = ['SCHEDULED', 'CONFIRMED']
-
-/** A file is "on the desk" once bytes landed, even if review is still open. */
-const ON_FILE: DocumentStatus[] = [
-  'RECEIVED',
-  'PROCESSING',
-  'UNDER_REVIEW',
-  'MISSING_INFORMATION',
-  'APPROVED',
-]
-
-const CLIENT_READ = [
-  'clients:read_assigned',
-  'clients:read_team',
-  'clients:read_region',
-  'clients:read_all',
-] as const
+import { DESK_TIMEZONE, civilDate, monthGrid, monthTitle, parseMonth, timeLabel, zonedDate, type DeskBoard, type DeskChip } from '@/lib/daily-desk'
 
 export function canReadDesk(user: SessionUser): boolean {
-  return CLIENT_READ.some((p) => user.permissions.has(p))
+  return can(user, 'appointments:read')
 }
 
 export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promise<DeskBoard> {
-  const { year, monthIndex, key } = parseMonth(monthRaw)
+  const organization = await db.organization.findUnique({ where: { id: user.organizationId }, select: { timezone: true } })
+  const timezone = organization?.timezone || DESK_TIMEZONE
+  const now = new Date()
+  const today = civilDate(now, timezone)
+  const { year, monthIndex, key } = parseMonth(monthRaw || today.slice(0, 7))
   const cells = monthGrid(year, monthIndex)
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: DESK_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-
-  const rangeStart = new Date(`${cells[0]!.iso}T00:00:00.000Z`)
-  const last = cells.at(-1)!.iso
-  const rangeEnd = new Date(`${last}T23:59:59.999Z`)
-  // Civil dates are interpreted in the desk zone when chips are placed; the
-  // UTC window above is a wide net so a late-evening PT appointment still lands.
-
-  const [requiredCount, closers, rows] = await Promise.all([
-    countRequiredDocs(user.organizationId),
-    db.user.findMany({
-      where: { organizationId: user.organizationId, role: { key: 'CLOSER' }, deletedAt: null, isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+  const rangeStart = zonedDate(cells[0]!.iso, '00:00', timezone)
+  const lastDay = new Date(`${cells.at(-1)!.iso}T12:00:00Z`)
+  lastDay.setUTCDate(lastDay.getUTCDate() + 1)
+  const rangeEnd = zonedDate(lastDay.toISOString().slice(0, 10), '00:00', timezone)
+  const scope = clientScope(user)
+  const canAssign = user.role === 'SUPER_ADMIN'
+  const clientSelect = {
+    id: true, firstName: true, lastName: true, email: true, phone: true,
+    owner: { select: { name: true } },
+    documents: { where: { requirement: { isRequired: true, package: { isDefault: true } }, status: { notIn: ['REJECTED', 'EXPIRED'] }, NOT: { storageKey: null } }, select: { requirementId: true } },
+  } satisfies Prisma.ClientSelect
+  const [requiredCount, closers, appointments, unscheduledRows, unassignedCount] = await Promise.all([
+    db.documentRequirement.count({ where: { isRequired: true, package: { organizationId: user.organizationId, isDefault: true } } }),
+    canAssign ? db.user.findMany({ where: { organizationId: user.organizationId, role: { key: 'CLOSER' }, deletedAt: null, isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : Promise.resolve([]),
+    db.appointment.findMany({
+      where: { client: scope, startsAt: { gte: rangeStart, lt: rangeEnd }, ...(user.role === 'CLOSER' ? { ownerId: user.id } : {}) },
+      orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, startsAt: true, status: true, owner: { select: { name: true } }, client: { select: clientSelect } },
     }),
     db.client.findMany({
-      where: { AND: [clientScope(user), deskVisibleClientWhere(), { status: 'ACTIVE', deletedAt: null }] },
-      orderBy: { lastActivityAt: 'desc' },
-      take: 600,
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        ownerId: true,
-        owner: { select: { name: true } },
-        appointments: {
-          where: {
-            status: { in: LIVE_APPOINTMENTS },
-            startsAt: { gte: rangeStart, lte: rangeEnd },
-          },
-          orderBy: { startsAt: 'asc' },
-          select: { startsAt: true, timezone: true },
-        },
-        documents: {
-          where: {
-            requirement: { isRequired: true },
-            status: { in: ON_FILE },
-            NOT: { storageKey: null },
-          },
-          select: { requirementId: true },
-        },
-      },
+      where: { AND: [scope, { status: 'ACTIVE', appointments: { none: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, startsAt: { gte: now } } } }] },
+      orderBy: [{ lastActivityAt: 'desc' }, { id: 'asc' }], select: clientSelect,
     }),
+    canAssign ? db.client.count({ where: { AND: [scope, { ownerId: null, status: 'ACTIVE' }] } }) : Promise.resolve(0),
   ])
-
-  const chipsByDay = new Map<string, DeskChip[]>()
-  const unscheduled: DeskLead[] = []
-  let unassignedCount = 0
-
-  for (const row of rows) {
-    if (!row.ownerId) unassignedCount += 1
-    const present = new Set(row.documents.map((d) => d.requirementId).filter(Boolean)).size
-    const missingDocs = Math.max(0, requiredCount - present)
-    const base = {
-      clientId: row.id,
-      firstName: row.firstName,
-      lastName: row.lastName,
-      ownerName: row.owner?.name ?? null,
-      missingDocs,
-      email: row.email,
-      phone: row.phone,
-    }
-
-    if (row.appointments.length === 0) {
-      unscheduled.push(base)
-      continue
-    }
-
-    for (const appt of row.appointments) {
-      const tz = appt.timezone || DESK_TIMEZONE
-      const iso = civilDate(appt.startsAt, tz)
-      const chip: DeskChip = {
-        ...base,
-        timeLabel: timeLabel(appt.startsAt, tz),
-      }
-      const list = chipsByDay.get(iso) ?? []
-      list.push(chip)
-      chipsByDay.set(iso, list)
-    }
-  }
-
-  return {
-    month: key,
-    title: monthTitle(year, monthIndex),
-    today,
-    days: cells.map((cell) => ({
-      ...cell,
-      isToday: cell.iso === today,
-      chips: chipsByDay.get(cell.iso) ?? [],
-    })),
-    unscheduled,
-    closers,
-    unassignedCount,
-    canAssign: can(user, 'clients:reassign'),
-    canBook: can(user, 'appointments:manage'),
-  }
-}
-
-async function countRequiredDocs(organizationId: string): Promise<number> {
-  const n = await db.documentRequirement.count({
-    where: { isRequired: true, package: { organizationId, isDefault: true } },
+  const lead = (row: (typeof unscheduledRows)[number]) => ({
+    clientId: row.id, firstName: row.firstName, lastName: row.lastName, email: row.email, phone: row.phone,
+    ownerName: row.owner?.name ?? null,
+    missingDocs: Math.max(0, requiredCount - new Set(row.documents.map((doc) => doc.requirementId)).size),
   })
-  return n > 0 ? n : 12
+  const chipsByDay = new Map<string, DeskChip[]>()
+  for (const appointment of appointments) {
+    const day = civilDate(appointment.startsAt, timezone)
+    const chip: DeskChip = { ...lead(appointment.client), appointmentId: appointment.id, status: appointment.status,
+      ownerName: appointment.owner?.name ?? null, timeLabel: timeLabel(appointment.startsAt, timezone), startsAt: appointment.startsAt.toISOString() }
+    chipsByDay.set(day, [...(chipsByDay.get(day) ?? []), chip])
+  }
+  return {
+    month: key, title: monthTitle(year, monthIndex), timezone, today,
+    days: cells.map((cell) => ({ ...cell, isToday: cell.iso === today, chips: chipsByDay.get(cell.iso) ?? [] })),
+    unscheduled: unscheduledRows.map(lead), closers, unassignedCount, canAssign, canBook: can(user, 'appointments:manage'),
+  }
 }

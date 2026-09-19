@@ -310,7 +310,7 @@ export async function loadPortalAppointments(clientId: string): Promise<PortalAp
     timezone: a.timezone,
     location: a.location,
     meetingUrl: a.meetingUrl,
-    withName: a.owner.name,
+    withName: a.owner?.name ?? 'Unassigned',
     isConfirmed: a.status === 'CONFIRMED',
   }))
 }

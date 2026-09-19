@@ -19,11 +19,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { cellDisplay } from '@/lib/daily-desk-finance'
 import type { CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 import { bookAppointmentAction } from '@/app/(app)/board/actions'
+import { UploadButton } from '@/app/(app)/documents/upload-button'
 import { requestDocuments } from '@/app/(app)/documents/actions'
 import { applyCloserAction } from './assignment-actions'
 import { approveBriefAction, editBriefAction } from './closeops-actions'
 
-export function CaseFileView({ data, children }: { data: CaseFileData; children?: ReactNode }) {
+export function CaseFileView({ data, children, cys }: { data: CaseFileData; children?: ReactNode; cys?: ReactNode }) {
   const router = useRouter()
   const [assignOpen, setAssignOpen] = useState(false)
   const [bookOpen, setBookOpen] = useState(false)
@@ -54,9 +55,10 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
     setPending(true)
     const result = await bookAppointmentAction({
       clientId: data.id,
+      appointmentId: data.appointmentId ?? undefined,
       date: bookDate,
       time: bookTime || '10:00',
-      timezone: 'America/Los_Angeles',
+      timezone: data.timezone,
     })
     setPending(false)
     if (result.ok) {
@@ -205,25 +207,27 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
 
       <section className="desk-card desk-block">
         <h3>Documents</h3>
-        <p className="desk-muted">Quick look opens the real file when one is on disk. Missing tiles stay empty.</p>
+        <p className="desk-muted">Open existing files or add paperwork received outside the intake form. Earlier files and versions remain available.</p>
         <div className="desk-docs">
           {data.docs.map((doc) => (
-            <button key={doc.key} type="button" className="desk-doc" onClick={() => setLook(doc)}>
-              <div className="desk-doc-top">
-                <span>{doc.label}</span>
-                <span className="desk-look">Quick look</span>
-              </div>
+            <div key={doc.key} id={`document-${doc.key}`} className="desk-doc">
+              <button type="button" className="desk-doc-top w-full text-left" onClick={() => setLook(doc.documentId || !doc.files[0] ? doc : { ...doc, documentId: doc.files[0].id, fileUrl: doc.files[0].fileUrl, mimeType: doc.files[0].mimeType, extract: null })}>
+                <span>{doc.label}</span><span className="desk-look">Quick view</span>
+              </button>
               <div className={`desk-st ${doc.state === 'missing' || doc.state === 'failed' ? 'miss' : 'ok'}`}>
-                {doc.state.replace('_', ' ')}
+                {doc.state.replace('_', ' ')}{doc.files.length > 0 && ` · ${doc.files.length} file${doc.files.length === 1 ? '' : 's'}`}
               </div>
-            </button>
+              {data.canUpload && <UploadButton clientId={data.id} requirementId={doc.requirementId ?? undefined} label={doc.label} buttonLabel={doc.files.length ? 'Add document' : 'Upload document'} />}
+            </div>
           ))}
         </div>
       </section>
 
+      {cys}
+
       <div className="desk-g2">
         <section className="desk-card desk-block">
-          <h3>Intake answers · verbatim</h3>
+          <h3>Original intake answers · verbatim</h3>
           {data.intake.length === 0 ? (
             <p className="desk-muted">No intake answers stored.</p>
           ) : (
@@ -393,6 +397,15 @@ export function CaseFileView({ data, children }: { data: CaseFileData; children?
                   Close
                 </button>
               </div>
+              {look.files.length > 0 && (
+                <NativeSelect aria-label="Choose document file" value={look.documentId ?? look.files[0]?.id} onChange={(event) => {
+                  const file = look.files.find((entry) => entry.id === event.target.value)
+                  if (file) setLook({ ...look, documentId: file.id, fileUrl: file.fileUrl, mimeType: file.mimeType, extract: file.id === look.documentId ? look.extract : null })
+                }}>
+                  {look.files.map((file) => <option key={file.id} value={file.id}>{file.label} · v{file.version} · {file.status.toLowerCase().replaceAll('_', ' ')}</option>)}
+                </NativeSelect>
+              )}
+              {data.canUpload && <UploadButton clientId={data.id} requirementId={look.requirementId ?? undefined} label={look.label} buttonLabel="Add document" />}
               {look.fileUrl ? (
                 <div className="desk-paper" style={{ height: 'calc(92vh - 96px)', overflow: 'auto' }}>
                   {look.mimeType?.startsWith('image/') ? (

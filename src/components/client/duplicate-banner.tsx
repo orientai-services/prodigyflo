@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Users } from 'lucide-react'
 import { db } from '@/lib/db'
 import { findDuplicates } from '@/lib/dedupe'
-import { findClientInScope, requireUser } from '@/lib/rbac'
+import { clientScope, findClientInScope, requireUser } from '@/lib/rbac'
 import { fullName } from '@/lib/format'
 
 /**
@@ -29,7 +29,7 @@ export async function DuplicateBanner({ clientId }: { clientId: string }) {
       lastName: client.lastName,
       postalCode: primaryAddress?.postalCode ?? null,
     },
-    { excludeClientId: client.id },
+    { excludeClientId: client.id, scope: clientScope(user) },
   )
 
   const matches = [...exact, ...possible]

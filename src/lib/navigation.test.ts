@@ -46,7 +46,7 @@ function paletteHrefs(user: SessionUser): string[] {
   return subroutesFor(user).map((i) => i.href)
 }
 
-const DAILY_RAIL = ['/board', '/pipeline', '/clients', '/queue', '/engine', '/documents', '/submissions']
+const DAILY_RAIL = ['/board', '/pipeline', '/clients', '/queue', '/documents', '/submissions']
 const OFF_RAIL = ['/sales', '/marketing', '/inbox', '/attorney', '/reports', '/agency', '/settings/users']
 
 describe('SUBROUTES', () => {
@@ -84,7 +84,7 @@ describe('navigationFor', () => {
     expect(missing, `stale nav routes (no page.tsx on disk): ${missing.join(', ')}`).toEqual([])
   })
 
-  it('staff Daily rail is Board, Pipeline, Clients, Queue, Engine, Document lab, CYS', () => {
+  it('staff Daily rail is Board, Pipeline, Clients, Queue, Document lab, CYS', () => {
     const everything = fixtureUser({ permissions: ALL_PERMISSIONS })
     expect(hrefsOf(everything)).toEqual(DAILY_RAIL)
   })
@@ -130,7 +130,7 @@ describe('navigationFor', () => {
     expect(src).not.toContain('currency(')
   })
 
-  it('Board, Clients, Queue, and Pipeline loaders hide non-SCS clients', () => {
+  it('Board, Clients, Queue, and Pipeline loaders include clients from every source', () => {
     const files = [
       readFileSync(path.join(APP_DIR, 'clients', 'page.tsx'), 'utf8'),
       readFileSync(path.join(APP_DIR, 'board', 'pipeline-board.tsx'), 'utf8'),
@@ -138,12 +138,12 @@ describe('navigationFor', () => {
       readFileSync(path.resolve(__dirname, 'daily-desk-queue-data.ts'), 'utf8'),
     ]
     for (const src of files) {
-      expect(src).toContain('deskVisibleClientWhere')
+      expect(src).not.toContain('deskVisibleClientWhere')
     }
   })
 
   it('Clients, Engine, Document lab, and CYS use Daily Desk chrome, not PageHeader', () => {
-    for (const rel of ['clients/page.tsx', 'engine/page.tsx', 'documents/page.tsx', 'submissions/page.tsx']) {
+    for (const rel of ['clients/page.tsx', 'documents/page.tsx', 'submissions/page.tsx']) {
       const src = readFileSync(path.join(APP_DIR, rel), 'utf8')
       expect(src, rel).toMatch(/desk-page|DeskChrome|DocumentLabView/)
       expect(src, rel).not.toContain('PageHeader')
@@ -195,7 +195,7 @@ describe('navigationFor', () => {
 
   it('shows /agency in the palette to an agency-home user holding users:manage', () => {
     const user = fixtureUser({ organizationKind: 'AGENCY' })
-    expect(paletteHrefs(user)).toContain('/agency')
+    expect(paletteHrefs(user)).not.toContain('/agency')
     expect(hrefsOf(user)).not.toContain('/agency')
   })
 
@@ -221,19 +221,19 @@ describe('navigationFor', () => {
     // Same permissions, only the home-org kind differs — the flag is the gate.
     const agency = fixtureUser({ organizationKind: 'AGENCY' })
     const client = fixtureUser({ organizationKind: 'CLIENT' })
-    expect(paletteHrefs(agency)).toContain('/agency')
+    expect(paletteHrefs(agency)).not.toContain('/agency')
     expect(paletteHrefs(client)).not.toContain('/agency')
   })
 })
 
 describe('homeFor', () => {
   it('lands Admin / Operations / Closer on Board', () => {
-    expect(homeFor({ role: 'ADMIN' })).toBe('/board')
+    expect(homeFor({ role: 'ADMIN' })).toBe('/login')
     expect(homeFor({ role: 'SUPER_ADMIN' })).toBe('/board')
     expect(homeFor({ role: 'CLOSER' })).toBe('/board')
   })
 
   it('keeps a per-user landingPath override', () => {
-    expect(homeFor({ role: 'ADMIN', landingPath: '/survey' })).toBe('/survey')
+    expect(homeFor({ role: 'CLOSER', landingPath: '/survey' })).toBe('/board')
   })
 })

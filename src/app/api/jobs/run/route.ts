@@ -7,8 +7,6 @@ import { clientScope } from '@/lib/rbac'
 import { getAIProvider } from '@/lib/ai'
 import { buildAssistContext } from '@/lib/ai/assists'
 import { sendWeeklyDigests } from '@/lib/digest'
-import { tickEngine } from '@/lib/engine/runner'
-import { scheduleInsightScan } from '@/lib/engine/insights'
 import { renewNumbers } from '@/lib/telephony/renewal'
 import { runPendingScsDocumentExtractions, runPendingScsDocumentImports } from '@/lib/intake/scs-document-import'
 
@@ -123,20 +121,13 @@ async function run(request: NextRequest) {
   // Monday-morning manager digest — the settings.digest.lastSentWeek guard
   // inside makes the 5-minute cadence deliver exactly once per org per week.
   const digest = await sendWeeklyDigests(new Date())
-  // Prodigy Engine: schedule at most one insight scan per org per 24h (guarded
-  // by the latest EngineRun's age), then advance a bounded batch of READY DAG
-  // steps. Steps are claimed atomically (updateMany on READY), mirroring the
-  // batch idiom of the sections above, so overlapping ticks never double-run.
-  const engineScheduled = await scheduleInsightScan(new Date())
-  const engineTick = await tickEngine(new Date())
-  const engine = { ...engineScheduled, ...engineTick }
   // Monthly rent on every phone line. Self-limiting: a number is only picked up
   // once its nextRenewalAt has passed, so the 5-minute cadence charges once a
   // month per line. A wallet that cannot cover it suspends the line (never
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
   const scsDocumentImports = await runPendingScsDocumentImports()
-  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine, telephony, scsDocumentImports, scsDocumentExtractions })
+  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine: { status: 'RETIRED' }, telephony, scsDocumentImports, scsDocumentExtractions })
 }
 
 export const POST = run

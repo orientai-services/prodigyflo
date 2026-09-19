@@ -351,7 +351,7 @@ async function requireOwnerWithVaultStepUp(): Promise<
   { ok: true; user: SessionUser } | { ok: false; error: string; code?: string }
 > {
   const user = await requireUser()
-  if (!user.isOwner) {
+  if (user.role !== 'SUPER_ADMIN') {
     return { ok: false, code: 'OWNER_ONLY', error: 'Only the account owner can change the provisioning passphrase.' }
   }
   try {

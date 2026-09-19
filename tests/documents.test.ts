@@ -342,7 +342,7 @@ describe('database-backed document flows', () => {
   let findDocumentInScope: typeof import('@/lib/storage/access').findDocumentInScope
   let runExtraction: typeof import('@/lib/extraction/run').runExtraction
 
-  const fakeUser = (organizationId: string, permissions: PermissionKey[], role: SessionUser['role'] = 'ADMIN'): SessionUser => ({
+  const fakeUser = (organizationId: string, permissions: PermissionKey[], role: SessionUser['role'] = 'SUPER_ADMIN'): SessionUser => ({
     id: `${run}-user-${role}`,
     name: 'Test User',
     email: `${role.toLowerCase()}@${run}.test`,

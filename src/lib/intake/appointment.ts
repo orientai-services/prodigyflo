@@ -56,7 +56,9 @@ export async function upsertIntakeAppointment(opts: {
 }): Promise<{ id: string } | null> {
   const booking = parseIntakeBooking(opts.rawPayload)
   if (!booking) return null
-  const store = opts.store ?? db
+  if (!opts.store) return db.$transaction((store) => upsertIntakeAppointment({ ...opts, store }))
+  const store = opts.store
+  await store.$queryRaw`SELECT id FROM "Client" WHERE id = ${opts.clientId} FOR UPDATE`
 
   const client = await store.client.findFirst({
     where: { id: opts.clientId, organizationId: opts.source.organizationId, deletedAt: null },
@@ -64,21 +66,7 @@ export async function upsertIntakeAppointment(opts: {
   })
   if (!client) return null
 
-  let ownerId = client.ownerId ?? opts.source.defaultOwnerId
-  if (!ownerId) {
-    const staff = await store.user.findFirst({
-      where: {
-        organizationId: opts.source.organizationId,
-        deletedAt: null,
-        isActive: true,
-        role: { key: { in: ['SUPER_ADMIN', 'ADMIN', 'CLOSER'] } },
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    })
-    ownerId = staff?.id ?? null
-  }
-  if (!ownerId) return null
+  const ownerId = client.ownerId
 
   const existing = booking.externalEventId
     ? await store.appointment.findFirst({
@@ -106,7 +94,8 @@ export async function upsertIntakeAppointment(opts: {
   }
 
   if (existing) {
-    return store.appointment.update({ where: { id: existing.id }, data, select: { id: true } })
+    // A replay must not reopen a completed/cancelled appointment or undo a staff reschedule.
+    return { id: existing.id }
   }
   return store.appointment.create({
     data: { clientId: client.id, ...data },

@@ -218,7 +218,7 @@ export async function buildTimeline(
       at: a.createdAt,
       title: `${humanize(a.type)} appointment ${humanize(a.status).toLowerCase()}`,
       description: `Scheduled for ${when}${a.location ? ` · ${a.location}` : ''}`,
-      actor: a.owner.name,
+      actor: a.owner?.name ?? 'Unassigned',
     })
   }
 

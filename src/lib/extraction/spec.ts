@@ -62,6 +62,7 @@ export const DOC_TYPE_SPECS: DocTypeSpec[] = [
     requirementKeys: ['solar_contract', 'contract', 'agreement', 'ppa', 'lease_agreement'],
     keywords: ['solar', 'photovoltaic', 'power purchase agreement', 'installer', 'system size', 'escalator', 'lease agreement'],
     fields: [
+      { key: 'product_type', label: 'Agreement product type (loan, lease, PPA, or cash), only when supported by the document', required: false, kind: 'text' },
       { key: 'installer_name', label: 'Installer', required: true, kind: 'text' },
       { key: 'contract_date', label: 'Contract date', required: true, kind: 'date' },
       { key: 'system_size_kw', label: 'System size (kW)', required: false, kind: 'number' },
@@ -76,6 +77,7 @@ export const DOC_TYPE_SPECS: DocTypeSpec[] = [
     requirementKeys: ['finance_agreement', 'loan_or_til', 'til', 'loan_agreement'],
     keywords: ['truth in lending', 'amount financed', 'apr', 'dealer fee', 'promissory', 'loan agreement'],
     fields: [
+      { key: 'product_type', label: 'Agreement product type (loan, lease, PPA, or cash), only when supported by the document', required: false, kind: 'text' },
       { key: 'lender_name', label: 'Lender', required: true, kind: 'text' },
       { key: 'account_number', label: 'Account / loan #', required: false, kind: 'text' },
       { key: 'amount_financed', label: 'Amount financed', required: true, kind: 'money' },

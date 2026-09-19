@@ -12,8 +12,6 @@ import type {
   CloserBriefContent,
   DiscrepanciesResult,
   DocumentSummaryResult,
-  GenerateInsightsInput,
-  GenerateInsightsResult,
   LeadSummaryResult,
   MessageDraftResult,
   NextActionsResult,
@@ -21,7 +19,6 @@ import type {
   QualificationInput,
   QualificationSignalsResult,
 } from './provider'
-import { INSIGHT_KINDS } from './provider'
 import { scoreCandidates } from './scoring'
 
 const MODEL = process.env.AI_MODEL || 'claude-opus-5'
@@ -123,22 +120,6 @@ const qualificationSignalsSchema = z.object({
     }),
   ),
   caveat: z.string(),
-})
-
-const insightsSchema = z.object({
-  insights: z
-    .array(
-      z.object({
-        kind: z.enum(INSIGHT_KINDS),
-        title: z.string().min(1).max(120),
-        body: z.string().min(1),
-        evidence: z
-          .array(z.object({ source: z.string(), ref: z.string(), text: z.string() }))
-          .max(6),
-        score: z.number().min(0).max(100),
-      }),
-    )
-    .max(8),
 })
 
 const SYSTEM = `You assist a regulated sales-operations team.
@@ -377,38 +358,4 @@ export class AnthropicAIProvider implements AIProvider {
     }
   }
 
-  // ── Insight engine (Prodigy Engine) ────────────────────────────────────────
-
-  async generateInsights(input: GenerateInsightsInput): Promise<GenerateInsightsResult> {
-    const { parsed } = await this.run(
-      insightsSchema,
-      `Propose up to 8 organization-level insights for the operations team, from the KPI snapshot and the retrieved evidence snippets below. Every insight persists as a recommendation a named human reviews — you decide nothing.
-
-Rules:
-- Evidence entries must be copied from the supplied snippets (same source, ref and text) — cite only what supports the insight, never invent a citation.
-- priorFeedback is what this organization's reviewers already ACCEPTED or DISMISSED, with their notes and any measured outcomes. Never re-propose a DISMISSED insight (same kind and title, or the same substance reworded); lean toward the directions that were ACCEPTED — especially where the measured outcome improved.
-- Each insight: a specific, actionable title; a body grounded in the cited evidence with the concrete numbers; a score (0-100) for review ordering by expected impact.
-- Fewer, well-grounded insights beat many speculative ones. Return an empty list over padding.
-
-${JSON.stringify(input, null, 2)}`,
-    )
-
-    // Grounding: an evidence entry must reference a supplied snippet. Anything
-    // else is dropped rather than persisted as fabricated support.
-    const validRefs = new Set(input.snippets.map((s) => s.ref))
-    const dismissed = new Set(
-      input.priorFeedback
-        .filter((f) => f.status === 'DISMISSED')
-        .map((f) => `${f.kind}|${f.title.trim().toLowerCase().replace(/\s+/g, ' ')}`),
-    )
-    const insights = parsed.insights
-      .filter((i) => !dismissed.has(`${i.kind}|${i.title.trim().toLowerCase().replace(/\s+/g, ' ')}`))
-      .map((i) => ({
-        ...i,
-        score: Math.round(i.score),
-        evidence: i.evidence.filter((e) => validRefs.has(e.ref)),
-      }))
-      .slice(0, 8)
-    return { insights }
-  }
 }
