@@ -1,3 +1,5 @@
+import { finalDeskEnabled } from '@/lib/final-desk/data'
+import { FinalDeskPage } from '@/components/final-desk/page'
 import { db } from '@/lib/db'
 import { can, requirePermissionPage } from '@/lib/rbac'
 import { assignableRoles, canManageUser } from '@/lib/invites'
@@ -12,6 +14,7 @@ import { CloserPermissions } from './closer-permissions'
 export const metadata = { title: 'Users & access' }
 
 export default async function UsersPage() {
+  if (finalDeskEnabled()) return <FinalDeskPage view="users" />
   const user = await requirePermissionPage('users:read')
   const canManage = can(user, 'users:manage')
   const grantable = assignableRoles(user)

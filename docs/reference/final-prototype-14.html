@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProdigyFlo Daily Desk · Full prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --cream:#f3eee4;--paper:#faf7f0;--card:#fffdf8;--ink:#15202b;--muted:#5b6570;
+  --line:#e3dccf;--teal:#0e6b66;--teal2:#e6f3f2;--navy:#12202c;--gold:#c4a574;
+  --amber:#9a4b0f;--amberbg:#fde7c7;--green:#1b5e3b;--greenbg:#dceddc;
+  --shadow:0 12px 32px rgba(18,32,44,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:"IBM Plex Sans",system-ui,sans-serif;background:var(--cream);color:var(--ink)}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+#app{min-height:100%}
+.screen{min-height:100vh}
+
+/* LOGIN */
+.login{display:grid;grid-template-columns:1.1fr .9fr;min-height:100vh}
+.login-left{background:var(--navy);color:#e8efe9;padding:56px 64px;display:flex;flex-direction:column;justify-content:space-between}
+.login-left small{letter-spacing:.18em;font-size:11px;color:#8aa3a1;text-transform:uppercase}
+.login-left h1{font-family:Fraunces,serif;font-weight:500;font-size:52px;line-height:1.05;margin:18px 0 16px}
+.login-left p{max-width:420px;color:#c5d2d0;line-height:1.55}
+.login-right{display:flex;align-items:center;justify-content:center;padding:40px}
+.login-card{width:380px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:var(--shadow)}
+.login-card h2{font-family:Fraunces,serif;font-weight:500;font-size:28px;margin-bottom:6px}
+.field{margin:14px 0}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+.field input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.btn{border:0;background:var(--teal);color:#fff;border-radius:10px;padding:11px 14px;font-weight:600}
+.btn.block{width:100%}
+.btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.linkish{background:none;border:0;color:var(--teal);font-size:13px;margin-top:10px}
+
+/* APP SHELL */
+.shell{display:flex;min-height:100vh}
+.rail{width:228px;background:var(--navy);color:#dbe6e4;padding:22px 14px;flex-shrink:0;display:flex;flex-direction:column}
+.brand small{display:block;letter-spacing:.16em;font-size:10px;color:#8aa3a1;text-transform:uppercase}
+.brand strong{font-family:Fraunces,serif;font-size:24px;font-weight:500}
+.nav{margin-top:22px;display:flex;flex-direction:column;gap:4px}
+.nav button{text-align:left;background:transparent;border:0;color:#c9d4d2;padding:10px 12px;border-radius:10px}
+.nav button.on,.nav button:hover{background:#1d3344;color:#fff}
+.nav .sec{margin:18px 12px 6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#7d9290}
+.rail-foot{margin-top:auto;padding:12px;font-size:12px;color:#8aa3a1}
+.rail-foot b{display:block;color:#e8eeed;font-size:13px;margin-bottom:2px}
+.rail-foot .out{margin-top:10px;width:100%;background:transparent;border:1px solid #3a5566;color:#c9d4d2;border-radius:8px;padding:7px 10px;font-size:12px}
+.col{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--line);background:var(--paper)}
+.top h1{font-size:16px;font-weight:600}
+.muted{color:var(--muted);font-size:13px}
+.main{padding:22px 28px 56px;overflow:auto;flex:1}
+
+.banner{background:#fff7ea;border:1px solid #ead2a8;color:#7a3e10;border-radius:12px;padding:11px 14px;font-size:13px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:1fr 300px;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px}
+.head h2{font-family:Fraunces,serif;font-size:28px;font-weight:500}
+.week,.days{display:grid;grid-template-columns:repeat(7,1fr)}
+.week{padding:6px 10px 0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.days{padding:4px 8px 14px}
+.day{min-height:102px;border-top:1px solid var(--line);padding:8px;font-size:12px;cursor:pointer}
+.day.mute{color:#b7bcc3;cursor:default}
+.day:not(.mute):hover{background:#f6f1e6}
+.day.today .num{background:var(--teal);color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+.agenda{display:grid;grid-template-columns:72px 1fr;position:relative}
+.agenda-hour{min-height:64px;border-top:1px solid var(--line);padding:6px 10px 0 0;text-align:right;font-size:11px;color:var(--muted)}
+.agenda-slot{min-height:64px;border-top:1px solid var(--line);position:relative}
+.agenda-track{position:relative}
+.appt{position:absolute;left:8px;right:12px;border-radius:10px;padding:8px 10px;border:1px solid #c5e0de;background:var(--teal2);cursor:pointer;z-index:2}
+.appt.u{background:#fff6ea;border-color:#f0c9a0}
+.appt b{display:block;font-size:13px}
+.appt span{display:block;font-size:12px;color:var(--muted)}
+.nowline{position:absolute;left:72px;right:0;height:2px;background:#e24;z-index:3;pointer-events:none}
+.nowline:before{content:"";position:absolute;left:-5px;top:-4px;width:10px;height:10px;border-radius:50%;background:#e24}
+.empty-day{padding:28px 18px;color:var(--muted)}
+.chip{margin-top:6px;border-radius:8px;padding:5px 7px;font-size:11px;line-height:1.3;border:1px solid #c5e0de;background:var(--teal2);cursor:pointer}
+.chip.u{background:#fff6ea;border-color:#f0c9a0}
+.chip b{display:block;font-size:12px}
+.chip-time{display:block;font-size:10px;color:var(--muted);letter-spacing:.02em}
+.chip .closer{display:block;font-size:10px;color:var(--muted)}
+.alarm{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:13px;max-width:320px}
+.alarm.hot{border-color:#f0c9a0;background:var(--amberbg);color:#7a3e10;font-weight:600}
+.alarm .bell{display:inline-block;font-size:16px}
+.alarm.hot .bell{animation:ring .45s ease-in-out infinite}
+@keyframes ring{0%,100%{transform:rotate(0)}25%{transform:rotate(14deg)}50%{transform:rotate(-14deg)}75%{transform:rotate(8deg)}}
+.side{padding:16px}
+.side h3{font-size:14px;margin-bottom:4px}
+.lead{border:1px dashed #d6cebf;border-radius:10px;padding:10px;margin:8px 0;background:#fff;cursor:pointer}
+.lead b{display:block}
+.lead span{font-size:12px;color:var(--muted)}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:10px 14px;border-bottom:1px solid var(--line)}
+td{padding:12px 14px;border-bottom:1px solid var(--line)}
+tr.row{cursor:pointer} tr.row:hover{background:#f6f1e6}
+
+.ph{padding:18px 20px;display:flex;justify-content:space-between;gap:16px;margin-bottom:14px}
+.who{font-family:Fraunces,serif;font-size:34px;font-weight:500;margin-top:8px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tag{font-size:11px;padding:4px 8px;border-radius:999px;background:#eee8dc}
+.tag.w{background:var(--amberbg);color:#7a3e10}
+.tag.g{background:var(--greenbg);color:var(--green)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}.actions .btn{height:42px;white-space:nowrap}
+.g2{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-bottom:14px}
+.block{padding:16px 18px 18px}
+.block h3{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.math{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cell{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+.cell label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}
+.v{font-size:18px;font-weight:600}
+.v.m{color:var(--amber);font-size:14px}
+.cell small{display:block;margin-top:3px;color:var(--muted);font-size:10px}
+.docs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.doc{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;font-size:12px;display:flex;flex-direction:column;gap:6px;min-height:92px}
+.doc .doc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.doc-acts{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+.lookbtn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:600;color:var(--teal);white-space:nowrap}
+.lookbtn:hover{background:var(--teal2)}
+.st{font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.st.m{color:var(--amber)} .st.g{color:var(--green)}
+.lookbox{width:min(760px,94vw);max-height:86vh;overflow:auto;background:var(--card);border-radius:18px;padding:0}
+.lookhead{display:flex;justify-content:space-between;gap:16px;padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+.lookhead h3{font-family:Fraunces,serif;font-weight:500;font-size:26px}
+.paper{margin:18px 20px 22px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px 24px;min-height:280px}
+.paper .kicker{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.paper h4{font-family:Fraunces,serif;font-size:22px;font-weight:500;margin-bottom:14px}
+.paper .kv{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:13px}
+.paper .kv b{display:block;font-size:11px;color:var(--muted);font-weight:500}
+.empty-look{padding:40px 24px;text-align:center}
+.empty-look p{color:var(--muted);margin:8px 0 16px}
+.qa{display:grid;gap:8px}
+.qa div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.qa b{display:block;font-size:11px;color:var(--muted);font-weight:500}
+.prose p{font-size:14px;line-height:1.55;margin-bottom:8px}
+.prose ul{padding-left:18px;font-size:13px;line-height:1.45}
+.flag{display:inline-block;margin-top:8px;background:var(--amberbg);color:#7a3e10;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600}
+.menu{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:10px;min-width:196px;box-shadow:var(--shadow);z-index:30;overflow:hidden}
+.menu button{width:100%;text-align:left;border:0;background:#fff;padding:9px 12px}
+.menu button:hover{background:var(--teal2)}
+.modal{display:none;position:fixed;inset:0;background:rgba(18,32,44,.38);z-index:40;align-items:center;justify-content:center}
+.modal.on{display:flex}
+.box{width:380px;background:var(--card);border-radius:16px;padding:18px}
+.box h3{margin-bottom:12px}
+.box input,.box select,.box textarea{width:100%;margin:0 0 10px;padding:9px;border:1px solid var(--line);border-radius:8px}
+.qtab{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;cursor:pointer;margin-bottom:14px}
+.qtab:hover{background:var(--teal2)}
+.qtab .mark{font-size:13px;font-weight:600}
+.qbar{height:6px;background:#e8e2d6;border-radius:99px;overflow:hidden;margin:8px 0 16px}
+.qbar i{display:block;height:100%;background:var(--teal)}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.qopt{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;text-align:left}
+.qopt.on{border-color:var(--teal);background:var(--teal2);font-weight:600}
+.qfield{margin:0 0 16px}
+.qfield label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.qfield input,.qfield textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.qfoot{display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:8px}
+.toast{position:fixed;right:20px;bottom:20px;background:var(--navy);color:#fff;padding:10px 14px;border-radius:10px;display:none;z-index:50}
+.hide{display:none !important}
+@media(max-width:980px){.login,.grid,.g2,.docs,.math{grid-template-columns:1fr}.rail{display:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="menu" id="menu">
+  <button data-act="view">View profile</button>
+  <button data-act="assign">Assign closer</button>
+  <button data-act="book">Reschedule</button>
+  <button data-act="copy">Copy contact</button>
+  <button data-act="noshow">Mark no-show</button>
+</div>
+<div class="modal" id="assign"><div class="box">
+  <h3>Assign closer</h3>
+  <select id="closer"></select>
+  <textarea id="note" rows="3" placeholder="Optional note"></textarea>
+  <div class="actions"><button class="btn" id="okAssign">Confirm</button><button class="btn secondary" id="xAssign">Cancel</button></div>
+</div></div>
+<div class="modal" id="book"><div class="box">
+  <h3>Book / reschedule</h3>
+  <input type="date" id="bdate" value="2026-09-16" />
+  <input type="time" id="btime" value="10:00" />
+  <div class="actions"><button class="btn" id="okBook">Save</button><button class="btn secondary" id="xBook">Cancel</button></div>
+</div></div>
+<div class="modal" id="look"><div class="lookbox">
+  <div class="lookhead">
+    <div>
+      <div class="muted" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px">Quick look</div>
+      <h3 id="lookTitle">Document</h3>
+      <div class="muted" id="lookMeta"></div>
+    </div>
+    <button class="btn secondary" id="xLook">Close</button>
+  </div>
+  <div id="lookBody"></div>
+</div></div>
+<div class="toast" id="toast"></div>
+<script>
+const CLOSERS=[{id:"elena",name:"Elena Voss"},{id:"marcus",name:"Marcus Hill"},{id:"asha",name:"Asha Patel"}];
+const money=n=>n==null?null:n.toLocaleString("en-US",{style:"currency",currency:"USD"});
+const own=id=>CLOSERS.find(c=>c.id===id)?.name||null;
+const miss=(h)=>({v:null,s:"missing",h});
+const num=(v,s="unverified",c=98)=>({v,s,c});
+const cant=m=>({k:"no",m});
+const val=(v,b)=>({k:"yes",v,b});
+function tiles(st){
+  const L={
+    finance_agreement:"Lender Finance Agreement",
+    signed_contract:"Solar Contract Install Agreement",
+    utility_bill:"Utility bill",
+    comm_evidence:"Texts / Email / Ring doorbell evidence",
+    ucc_lien:"UCC Fixture / Lien",
+    home_deed:"Homeownership Deed",
+    county_permit:"County Permit Record",
+    production_report:"Solar Production Report"
+  };
+  return Object.entries(L).map(([k,l])=>({k,l,s:st[k]||"missing"}));
+}
+const PREVIEWS={
+  mira:{
+    finance_agreement:{kicker:"Sunlight Finance · consumer note",title:"Solar Loan Agreement",fields:[["Borrower","Mira Testley"],["Amount financed","$31,860.00"],["APR","5.99% fixed"],["Term","300 months"],["Payment","$205.18"],["Dealer fee","28% · $8,920.80"]],note:"Sample extract from the uploaded finance PDF. First-payment date is not on these pages."},
+    comm_evidence:{kicker:"SCS intake · message capture",title:"Kitchen-table pitch notes",fields:[["Quoted payment","$140–$160"],["Channel","Tablet at home"],["Claim","System pays for itself"],["Utility after install","Bill still arriving"]],note:"Homeowner words from the SCS form, not a recorded call."}
+  },
+  hector:{
+    comm_evidence:{kicker:"SCS intake",title:"Inbound notes",fields:[["Quoted payment","About $180"],["Ask","Plain-language read"],["Docs on file","None"]],note:"No contract pages yet."}
+  },
+  ana:{
+    finance_agreement:{kicker:"GoodLeap · consumer note",title:"Residential Solar Loan",fields:[["Borrower","Ana Ruiz"],["Amount financed","$41,200.00"],["APR","3.99% fixed"],["Term","300 months"],["Payment","$211.40"],["First payment","2024-03-01"]],note:"Verified extract. Remaining balance and interest paid are computed from first-pay date."},
+    signed_contract:{kicker:"Titan Solar · install agreement",title:"Solar Installation Contract",fields:[["Installer","Titan Solar"],["System size","8.2 kW"],["Property","Phoenix, AZ 85021"],["Sign method","Tablet + emailed copies"]],note:"Present on file. Home-solicitation copy not line-read yet."},
+    utility_bill:{kicker:"SRP · service address 85021",title:"Electric bill",fields:[["Account","•••• 4419"],["Period","Aug 2026"],["Usage","812 kWh"],["Amount due","$128.40"]],note:"Used only to compare usage vs the solar pitch. Not a credit document."},
+    comm_evidence:{kicker:"SCS intake",title:"What they were told",fields:[["Dealer fee pitch","No dealer fee"],["Quoted APR","Around 2%"],["Quoted payment","$190"]],note:"Verbatim intake. Page shows 22% fee and 3.99%."},
+    ucc_lien:{kicker:"AZ SOS · UCC-1 fixture filing",title:"UCC Fixture / Lien",fields:[["Debtor","Ana Ruiz"],["Secured party","GoodLeap LLC"],["Filing no","AZ-2024-1883921"],["Filed","2024-03-18"],["Collateral","PV system + related fixtures at 85021"],["Status","Active"]],note:"Fixture filing against the installed system. Confirm against the deed legal description before any packet leaves the desk."},
+    home_deed:{kicker:"Maricopa County Recorder",title:"Homeownership Deed",fields:[["Vested owner","Ana Isabel Ruiz"],["Property","Phoenix, AZ 85021"],["Doc type","Warranty deed"],["Recorded","2019-06-04"],["APN","161-22-318"],["Encumbrances noted","First mortgage · solar fixture UCC"]],note:"Owner name matches the finance borrower. Prototype page only — live desk will render the recorded PDF."},
+    county_permit:{kicker:"City of Phoenix · Development Services",title:"County / City Permit Record",fields:[["Permit","S-24-10944"],["Type","Residential PV"],["Issued","2024-02-11"],["Inspection","Final passed 2024-03-02"],["Contractor","Titan Solar"],["System","8.2 kW roof mount"]],note:"Permit is closed. Useful when a partner asks whether the array was legally installed."},
+    production_report:{kicker:"Titan monitoring export",title:"Solar Production Report",fields:[["Period","Mar 2024 – Aug 2026"],["System size","8.2 kW"],["Lifetime kWh","27,410"],["Last 12 mo","11,080 kWh"],["Est. first-year","11,400 kWh"],["vs pitch","About 3% under first-year estimate"]],note:"Production exists. Do not treat this as a savings guarantee. Compare to the utility bill on file."}
+  },
+  priya:{
+    finance_agreement:{kicker:"Mosaic · consumer note",title:"Solar Loan Agreement",fields:[["Borrower","Priya Denton"],["Amount financed","$27,500.00"],["APR","6.49% fixed"],["Term","240 months"],["Payment","$198.11"],["Dealer fee","30% · $8,250.00"]],note:"Unverified extract. Page is fixed-rate — intake said the rate would drop after two years."},
+    comm_evidence:{kicker:"SCS intake",title:"What they were told",fields:[["Rate story","Drops after two years"],["Quoted payment","$170"],["Sign method","Tablet"]],note:"Conflicts with the fixed 6.49% note."},
+    production_report:{kicker:"Sunrun dealer portal export",title:"Solar Production Report",fields:[["Period","Last 12 months"],["Reported kWh","9,640"],["Pitch year-1","12,200 kWh"],["Delta","~21% under pitch"],["System size","Not on this export"]],note:"Production under the sales estimate. No signed install contract on file to check the guarantee language."}
+  },
+  luis:{
+    comm_evidence:{kicker:"SCS intake",title:"Product-type notes",fields:[["Client believes","PPA"],["Payment","Started ~$160, then rose"],["Installer recalled","Vivint"]],note:"No agreement page to classify loan vs PPA."}
+  }
+};
+const clients=[
+ {id:"mira",fn:"Mira",ln:"Testley",city:"Las Vegas",st:"NV",zip:"89101",src:"SCS Website",stage:"New lead",owner:null,
+  appt:{label:"Tue Sep 16 · 10:00 AM PT",day:16,time:"10:00"},ex:"unverified",
+  fin:{amt:num(31860),bal:cant(["first payment date"]),apr:num(5.99),aprT:"fixed",esc:null,int:cant(["first payment date"]),y:25,mo:300,yr:cant(["first payment date"]),mr:cant(["first payment date"]),pay:num(205.18),feeP:28,feeA:num(8920.8),lender:"Sunlight Finance",fp:null},
+  sol:{type:"Loan",inst:"Summit Solar",credit:718,kw:null},
+  docs:tiles({finance_agreement:"extracted",comm_evidence:"uploaded"}),
+  intake:[["What they were told","Rep said the payment would be less than the electric bill and the system would pay for itself."],["What is happening now","Two bills. Electric did not drop. Solar loan is $205 and the utility bill is still arriving."],["How they signed","Tablet at the kitchen table. They do not remember seeing a 28% dealer fee."],["Quoted payment","$140–$160 / month"],["ZIP / installer / type","89101 · Summit Solar · loan"]],
+  red:{facts:"$31,860 financed at 5.99% fixed for 300 months, $205.18 payment, 28% dealer fee inside principal. First-payment date not on the uploaded pages.",vs:"Quoted $140–$160 vs $205.18. Pitch of “less than the electric bill” vs two bills. Dealer fee not recalled.",state:["NV home-solicitation language lives on the signed install contract — not uploaded.","Kitchen-table pitch vs finance page."],fed:["TILA: dealer fee embedded in amount financed.","E-SIGN / tablet consent — no wet-ink pack.","Holder Rule — unconfirmed."],block:["signed install contract","first-payment date","utility bill"],flag:"Review only · insufficient file"},
+  brief:{body:"Mira Testley, Las Vegas. Booked Tue Sep 16, 10:00 AM PT. Thinks she bought a $150-ish solar loan that replaces the utility bill. The note is 25 years, $31,860, 5.99%, $205.18, 28% dealer fee in principal.",sur:["$205.18 vs $140–$160 quote","$8,920 dealer fee inside the loan"],ask:"signed install contract and a recent utility bill",open:"We read the agreement. Here is what it actually says.",ok:false}},
+ {id:"hector",fn:"Hector",ln:"Camarena",city:"Las Vegas",st:"NV",zip:"89108",src:"SCS Website",stage:"New lead",owner:null,
+  appt:{label:"Thu Sep 18 · 2:30 PM PT",day:18,time:"14:30"},ex:"none",
+  fin:{amt:miss("No finance PDF"),bal:cant(["finance agreement"]),apr:miss("No finance PDF"),aprT:"unknown",esc:null,int:cant(["finance agreement"]),y:null,mo:null,yr:cant(["finance agreement"]),mr:cant(["finance agreement"]),pay:miss("Intake only"),feeP:null,feeA:miss("No PDF"),lender:null,fp:null},
+  sol:{type:"Unknown",inst:null,credit:null,kw:null},
+  docs:tiles({comm_evidence:"uploaded"}),
+  intake:[["What they were told","Payment would stay flat."],["What is happening now","Wants a plain-language read before talking to anyone."],["How they signed","Not sure — paperwork not uploaded."],["Quoted payment","About $180"],["ZIP / installer / type","89108 · unknown · unknown"]],
+  red:{facts:"No finance or install agreement on file.",vs:"Remembers ~$180 / month. Nothing on a page to compare.",state:["Cannot review NV solicitation language without the signed contract."],fed:["No TILA page to review."],block:["finance agreement","signed contract"],flag:"Insufficient file"},
+  brief:{body:"Hector Camarena, Las Vegas. Booked Thu Sep 18, 2:30 PM PT. No contract uploaded. This call is a document hunt, not a term review.",sur:["Nothing extracted yet"],ask:"finance agreement and signed install contract",open:"Before we talk numbers, we need the pages you signed.",ok:false}},
+ {id:"ana",fn:"Ana",ln:"Ruiz",city:"Phoenix",st:"AZ",zip:"85021",src:"SCS Website",stage:"Booked",owner:"elena",
+  appt:{label:"Tue Sep 22 · 11:00 AM PT",day:22,time:"11:00"},ex:"verified",
+  fin:{amt:{v:41200,s:"verified",c:99},bal:val(38940,"amortization from first pay 2024-03-01"),apr:{v:3.99,s:"verified",c:99},aprT:"fixed",esc:0,int:val(2144,"29 months elapsed"),y:25,mo:300,yr:val(22.6,"from first-pay date"),mr:val(271,"from first-pay date"),pay:{v:211.4,s:"verified",c:99},feeP:22,feeA:{v:9064,s:"verified",c:94},lender:"GoodLeap",fp:"2024-03-01"},
+  sol:{type:"Loan",inst:"Titan Solar",credit:741,kw:8.2},
+  docs:tiles({finance_agreement:"verified",signed_contract:"uploaded",utility_bill:"uploaded",comm_evidence:"uploaded",ucc_lien:"uploaded",home_deed:"uploaded",county_permit:"uploaded",production_report:"uploaded"}),
+  intake:[["What they were told","No dealer fee. Rate around 2%."],["What is happening now","Payment is fine; they want the fee explained."],["How they signed","Tablet. Copies emailed later."],["Quoted payment","$190"],["ZIP / installer / type","85021 · Titan Solar · loan"]],
+  red:{facts:"$41,200 at 3.99% fixed, 300 months, $211.40, 22% dealer fee, first pay 1 Mar 2024. 271 months remain. About $2,144 interest paid.",vs:"Told no dealer fee / ~2% APR. Page shows 22% fee and 3.99%. Quoted $190 vs $211.40.",state:["AZ home-solicitation copy is on the signed contract — present, not line-read yet."],fed:["TILA dealer fee in principal.","APR disclosure vs oral 2% claim."],block:["attorney retainer if this becomes a legal file"],flag:"Review only"},
+  brief:{body:"Ana Ruiz, Phoenix. Owned by Elena. Booked Tue Sep 22, 11:00 AM PT. Cleanest file on the board — finance verified.",sur:["22% dealer fee vs “no fee”","3.99% vs the 2% pitch"],ask:"confirm she still has the welcome-email packet",open:"We verified the note. Two things on the page do not match what you were told.",ok:true}},
+ {id:"jordan",fn:"Jordan",ln:"Hale",city:"Henderson",st:"NV",zip:"89014",src:"SCS Website",stage:"New lead",owner:null,appt:null,ex:"none",
+  fin:{amt:miss("No file"),bal:cant(["finance agreement"]),apr:miss("No file"),aprT:"unknown",esc:null,int:cant(["finance agreement"]),y:null,mo:null,yr:cant(["finance agreement"]),mr:cant(["finance agreement"]),pay:miss("No file"),feeP:null,feeA:miss("No file"),lender:null,fp:null},
+  sol:{type:"Unknown",inst:null,credit:null,kw:null},docs:tiles({}),
+  intake:[["What they were told","System would wipe out the bill."],["What is happening now","Has not uploaded anything."],["How they signed","Door knock, tablet."],["Quoted payment","Does not remember"],["ZIP / installer / type","89014 · unknown · unknown"]],
+  red:{facts:"No documents.",vs:"Intake only.",state:["Cannot review."],fed:["Cannot review."],block:["any agreement"],flag:"Insufficient file"},
+  brief:{body:"Jordan Hale, Henderson. Unscheduled. No docs. Do not book a specialist review until a contract lands.",sur:["Empty file"],ask:"any page they still have",open:"Send us the agreement first.",ok:false}},
+ {id:"priya",fn:"Priya",ln:"Denton",city:"Chandler",st:"AZ",zip:"85225",src:"SCS Website",stage:"Booked",owner:null,appt:{label:"Tue Sep 16 · 2:00 PM PT",day:16,time:"14:00"},ex:"unverified",
+  fin:{amt:num(27500),bal:cant(["first payment date"]),apr:num(6.49),aprT:"fixed",esc:null,int:cant(["first payment date"]),y:20,mo:240,yr:cant(["first payment date"]),mr:cant(["first payment date"]),pay:num(198.11),feeP:30,feeA:num(8250),lender:"Mosaic",fp:null},
+  sol:{type:"Loan",inst:"Sunrun dealer",credit:690,kw:null},
+  docs:tiles({finance_agreement:"extracted",comm_evidence:"uploaded",production_report:"extracted"}),
+  intake:[["What they were told","Rate would drop after two years."],["What is happening now","Rate on the page is fixed 6.49%."],["How they signed","Tablet."],["Quoted payment","$170"],["ZIP / installer / type","85225 · Sunrun dealer · loan"]],
+  red:{facts:"$27,500 at 6.49% fixed, 240 months, $198.11, 30% dealer fee. No first-pay date.",vs:"Told the rate would drop after two years. Page is fixed. Quoted $170 vs $198.11.",state:["AZ signed install contract missing."],fed:["Fixed vs promised step-down.","TILA dealer fee 30%."],block:["signed contract","first-payment date"],flag:"Review only · insufficient file"},
+  brief:{body:"Priya Denton, Chandler. Finance PDF in, unscheduled. Fixed 6.49% vs a promised drop.",sur:["Fixed rate vs two-year drop story","30% dealer fee"],ask:"signed install contract",open:"The note we have is fixed. That is the first fact.",ok:false}},
+ {id:"luis",fn:"Luis",ln:"Ortega",city:"Riverside",st:"CA",zip:"92503",src:"SCS Website",stage:"New lead",owner:null,appt:null,ex:"none",
+  fin:{amt:miss("No finance PDF"),bal:cant(["finance agreement"]),apr:miss("No finance PDF"),aprT:"unknown",esc:null,int:cant(["finance agreement"]),y:null,mo:null,yr:cant(["finance agreement"]),mr:cant(["finance agreement"]),pay:miss("Intake only"),feeP:null,feeA:miss("No PDF"),lender:null,fp:null},
+  sol:{type:"PPA",inst:"Vivint (recalled)",credit:702,kw:null},docs:tiles({comm_evidence:"uploaded"}),
+  intake:[["What they were told","PPA, no loan, payment tied to production."],["What is happening now","Payment rose. Wants to know if it is a loan or a PPA."],["How they signed","Tablet."],["Quoted payment","$160 then it went up"],["ZIP / installer / type","92503 · Vivint · they think PPA"]],
+  red:{facts:"No agreement on file. Cannot classify loan vs PPA from intake.",vs:"Client believes PPA. Escalator only exists if the page says so.",state:["CA solar disclosures live on the signed contract — missing."],fed:["Cannot apply TILA unless this is a loan."],block:["the actual agreement"],flag:"Insufficient file"},
+  brief:{body:"Luis Ortega, Riverside. Credit 702 on intake. Thinks he has a PPA. Nothing uploaded to prove it.",sur:["Agreement type is unverified"],ask:"any page that says loan, lease, or PPA at the top",open:"First job is naming the product. Send the first page.",ok:false}},
+ {id:"marvin",fn:"Marvin",ln:"Luney",city:"Sacramento",st:"CA",zip:"95823",src:"SCS Website",stage:"Booked",owner:"elena",
+  appt:{label:"Sat Sep 19 · 4:00 PM PT",day:19,time:"16:00"},ex:"unverified",
+  fin:{amt:miss("Not extracted"),bal:cant(["finance agreement"]),apr:miss("Not extracted"),aprT:"unknown",esc:0,int:cant(["first payment date"]),y:25,mo:300,yr:cant(["first payment date"]),mr:cant(["first payment date"]),pay:num(291.45),feeP:null,feeA:miss("Not extracted"),lender:"EnerBank USA",fp:null},
+  sol:{type:"Loan",inst:"Skyline Smart Energy",credit:null,kw:null},
+  docs:tiles({comm_evidence:"uploaded"}),
+  intake:[["What they were told","Federal tax rebate check $18,692.18 could be applied to the loan. Bill would drop. No UCC."],["What is happening now","It was a credit, not a check, and could not be applied. Combined bill rose slightly."],["How they signed","Door-to-door at home, 2022."],["Quoted payment","$291.45"],["ZIP / installer / type","95823 · Skyline Smart Energy · loan · EnerBank"]],
+  red:{facts:"Intake-backed loan with Skyline / EnerBank, $291.45 / mo, 25 years, signed at home in 2022. UCC later filed.",vs:"Promised a $18,692.18 rebate check toward the loan and no lien. Page/intake now shows a tax credit that could not be applied and a UCC filing.",state:["CA home solicitation — signed at the door."],fed:["TILA / tax-credit pitch vs what funded.","UCC after no-lien promise."],block:["finance agreement PDF","signed install contract"],flag:"Review only · insufficient file"},
+  brief:{body:"Marvin Luney, Sacramento. 65+, limited English. Door-to-door Skyline / EnerBank loan. Wants cancel, lien off, lower payments.",sur:["$18,692.18 “rebate check” was a credit","UCC filed after no-lien pitch"],ask:"finance agreement and UCC printout",open:"We have the questionnaire. First fact is the rebate was not a check.",ok:false}}
+];
+const QSECTIONS=[
+  {t:"1. Client & Property",qs:[
+    {id:"legal_name",l:"Full legal name",ty:"text"},
+    {id:"prop_addr",l:"Property address",ty:"text"},
+    {id:"mail_same",l:"Mailing address same as property address?",ty:"one",o:["Yes","No"]},
+    {id:"phone",l:"Phone",ty:"text"},
+    {id:"email",l:"Email",ty:"text"},
+    {id:"sole_owner",l:"Are you the sole property owner?",ty:"one",o:["Yes","No"]},
+    {id:"on_contract",l:"Who is on the solar contract? (name/s)",ty:"text"},
+    {id:"prop_type",l:"Property type",ty:"one",o:["Single-family home","Condo / Townhome","Manufactured home","Commercial property"]}
+  ]},
+  {t:"2. Contract & Companies",qs:[
+    {id:"sales_co",l:"Solar company (sales company)",ty:"text"},
+    {id:"install_co",l:"Installer company (if different)",ty:"text"},
+    {id:"lender",l:"Finance company or lender name",ty:"text"},
+    {id:"agree_type",l:"Type of solar agreement(s)",ty:"multi",o:["Loan","Lease","Purchase Agreement","PPA (Power Purchase Agreement)","Cash purchase","Warranty Contract"]},
+    {id:"year_signed",l:"Year contract was actually signed",ty:"text"},
+    {id:"sign_where",l:"Where were the documents signed?",ty:"one",o:["At client's home (door-to-door)","In a business/office"]},
+    {id:"notice_3day",l:"Did you receive a 3-day cancellation notice?",ty:"one",o:["Yes","No","Not sure"]},
+    {id:"got_copies",l:"Did you receive copies of all documents you signed?",ty:"one",o:["Yes","No"]}
+  ]},
+  {t:"3. Sales Practices",qs:[
+    {id:"first_contact",l:"How did the solar company first contact you?",ty:"one",o:["Door-to-door salesperson","Phone call (cold call)","I responded to a mailer or advertisement","Online inquiry I submitted","Referral from friend/family","Event or home show","Other"]},
+    {id:"pres_where",l:"Where did the main sales presentation take place?",ty:"one",o:["At my home","At their office/sales center","Online/virtual meeting","Other"]},
+    {id:"pres_len",l:"Approximately how long did the sales presentation(s) last?",ty:"text"},
+    {id:"pressure",l:"Did the salesperson use high-pressure tactics? (check all that apply)",ty:"multi",o:["Limited-time offer","Told I had to sign immediately","Wouldn't allow me to review contract before signing","Long sales visit / repeated visits or calls","Said they were affiliated with utility/city/government"]},
+    {id:"promises",l:"Promises made by salesperson (check all that apply)",ty:"multi",o:["\"No cost solar\" / \"Free solar\"","Bill will drop significantly","\"You won't pay the utility again\"","Guaranteed tax credit","No lien or UCC filing","Buyout available anytime","Zero maintenance required","Other"]},
+    {id:"misled",l:"Did you feel misled by the salesperson?",ty:"one",o:["Yes","No","Unsure"]},
+    {id:"untrue",l:"Were there any other promises later discovered to be untrue?",ty:"long"}
+  ]},
+  {t:"4. Financial Terms",qs:[
+    {id:"mo_pay",l:"Monthly solar payment amount",ty:"text"},
+    {id:"term_yrs",l:"Length of agreement / loan",ty:"text"},
+    {id:"escalator",l:"Does your payment increase yearly?",ty:"one",o:["Yes","No","Not sure"]},
+    {id:"combo_bill",l:"Has your combined solar + utility bill increased?",ty:"one",o:["Yes, significantly","Yes, slightly","No, about the same","No, it decreased"]},
+    {id:"told_lower",l:"Were you told your bill would be lower than it is now?",ty:"one",o:["Yes","No"]}
+  ]},
+  {t:"5. System Performance & Installation",qs:[
+    {id:"working",l:"Is your system working today?",ty:"one",o:["Yes","No","Never turned on"]},
+    {id:"perf",l:"System performance issues (check all that apply)",ty:"multi",o:["System shuts off / inconsistent performance","Not meeting performance projections","Battery not working (if applicable)","None - no issues"]},
+    {id:"install",l:"Installation problems (check all that apply)",ty:"multi",o:["Roof leaks","Structural damage","Shading issues","Design issues","Improper roof penetrations","Poor electrical work","Failed inspections","Installation delays","None - no issues"]}
+  ]},
+  {t:"6. Billing, Service & Company Behavior",qs:[
+    {id:"service",l:"Customer service issues experienced (check all that apply)",ty:"multi",o:["No response / delayed response","Delayed repairs","Billing errors","Broken promises","None - no issues"]},
+    {id:"oob",l:"Has your installer or finance company gone out of business?",ty:"one",o:["Yes","No"]},
+    {id:"complaints",l:"Have you filed complaints anywhere? (check all that apply)",ty:"multi",o:["BBB","Attorney General","Utility","Finance company","FTC Complaint","None"]}
+  ]},
+  {t:"7. Home Sale, Liens & Title Issues",qs:[
+    {id:"selling",l:"Are you selling or attempting to sell your home?",ty:"one",o:["Yes","No"]},
+    {id:"sale_issue",l:"Has the solar agreement caused issues with the sale?",ty:"one",o:["Yes","No"]},
+    {id:"ucc",l:"Was a UCC financing statement filed?",ty:"one",o:["Yes","No","Not sure"]}
+  ]},
+  {t:"8. Personal Circumstances",qs:[
+    {id:"age",l:"Age range",ty:"one",o:["Under 40","40-64","65+"]},
+    {id:"le",l:"Limited English?",ty:"one",o:["Yes","No"]},
+    {id:"credit_ck",l:"Was a credit check run?",ty:"one",o:["Yes","No","Unsure"]},
+    {id:"hardship",l:"Has the solar panel contract caused financial hardship?",ty:"multi",o:["Behind on payments","Damaged credit","No hardship"]}
+  ]},
+  {t:"9. Client Goal",qs:[
+    {id:"goal",l:"What outcome are you seeking?",ty:"multi",o:["Cancel the contract entirely","Remove lien","Fix the system","Lower payments"]}
+  ]}
+];
+const QALL=QSECTIONS.flatMap(s=>s.qs);
+function blankAns(){const a={}; QALL.forEach(q=>a[q.id]=q.ty==="multi"?[]:""); return a;}
+function filled(v){return Array.isArray(v)?v.length>0:String(v||"").trim()!==""}
+function qProgress(c){return QALL.filter(q=>filled(c.q.answers[q.id])).length}
+clients.forEach(c=>{
+  if(c.q) return;
+  const a=blankAns();
+  a.legal_name=c.fn+" "+c.ln;
+  if(c.sol.inst){a.sales_co=c.sol.inst;a.install_co=c.sol.inst}
+  if(c.fin.lender) a.lender=c.fin.lender;
+  if(c.sol.type==="Loan") a.agree_type=["Loan"];
+  if(c.sol.type==="PPA") a.agree_type=["PPA (Power Purchase Agreement)"];
+  if(c.fin.pay&&c.fin.pay.v!=null) a.mo_pay=String(c.fin.pay.v);
+  if(c.fin.y) a.term_yrs=String(c.fin.y);
+  const signed=(c.intake.find(x=>x[0]==="How they signed")||[])[1]||"";
+  if(/home|kitchen|door|tablet/i.test(signed)) a.sign_where="At client's home (door-to-door)";
+  const told=(c.intake.find(x=>x[0]==="What they were told")||[])[1]||"";
+  if(/less than|drop|wipe|bill/i.test(told)) {a.told_lower="Yes"; if(!a.promises.length) a.promises=["Bill will drop significantly"]}
+  c.q={done:false,page:0,answers:a};
+});
+const MARVIN={
+  legal_name:"Marvin Luney",prop_addr:"8535 ElVerano Ave",mail_same:"Yes",phone:"(916) 516-4223",email:"gluney8535@hotmail.com",
+  sole_owner:"Yes",on_contract:"Marvin Luney & Beth Luney",prop_type:"Single-family home",
+  sales_co:"Skyline Smart Energy",install_co:"Skyline Smart Energy",lender:"EnerBank USA",agree_type:["Loan"],
+  year_signed:"2022",sign_where:"At client's home (door-to-door)",notice_3day:"Yes",got_copies:"Yes",
+  first_contact:"Door-to-door salesperson",pres_where:"At my home",pres_len:"1 Hr",
+  pressure:["Limited-time offer","Long sales visit / repeated visits or calls"],
+  promises:["Bill will drop significantly","Guaranteed tax credit","No lien or UCC filing"],
+  misled:"Yes",untrue:"The sales person promised you would receive a federal tax rebate check $18,692.18 and could take that money and put it towards the solar loan to reduce the monthly payment but it wasn't a check it was a credit and that wasn't able to be applied.",
+  mo_pay:"291.45",term_yrs:"25",escalator:"No",combo_bill:"Yes, slightly",told_lower:"Yes",
+  working:"Yes",perf:["System shuts off / inconsistent performance","Not meeting performance projections"],
+  install:["Poor electrical work","Installation delays"],
+  service:["No response / delayed response","Delayed repairs","Broken promises"],oob:"No",complaints:["None"],
+  selling:"No",sale_issue:"Yes",ucc:"Yes",
+  age:"65+",le:"Yes",credit_ck:"Unsure",hardship:["No hardship"],
+  goal:["Cancel the contract entirely","Remove lien","Lower payments"]
+};
+Object.assign(clients.find(c=>c.id==="marvin").q.answers, MARVIN);
+
+let view="board", profileId=null, menuId=null, modalId=null, boardMode="month", dayNum=15;
+const WD=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const BOOK_TZ="America/Los_Angeles";
+const VIEW_TZ=Intl.DateTimeFormat().resolvedOptions().timeZone||BOOK_TZ;
+function tzParts(date,tz){
+  const f=new Intl.DateTimeFormat("en-US",{timeZone:tz,hour12:false,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+  return Object.fromEntries(f.formatToParts(date).filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+}
+function bookedInstant(day,time){
+  const [hh,mm]=String(time).split(":").map(Number);
+  let utc=Date.UTC(2026,8,day,hh,mm);
+  for(let i=0;i<4;i++){
+    const p=tzParts(new Date(utc),BOOK_TZ);
+    const got=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute);
+    utc += Date.UTC(2026,8,day,hh,mm)-got;
+  }
+  return new Date(utc);
+}
+function fmt12(date){
+  return date.toLocaleTimeString("en-US",{timeZone:VIEW_TZ,hour:"numeric",minute:"2-digit"});
+}
+function tzAbbrev(){
+  const p=new Intl.DateTimeFormat("en-US",{timeZone:VIEW_TZ,timeZoneName:"short"}).formatToParts(new Date());
+  return (p.find(x=>x.type==="timeZoneName")||{}).value||VIEW_TZ;
+}
+function localClock(){
+  return new Date().toLocaleTimeString("en-US",{timeZone:VIEW_TZ,hour:"numeric",minute:"2-digit"});
+}
+function localToday(){
+  const p=tzParts(new Date(),VIEW_TZ);
+  if(+p.year===2026&&+p.month===9) return +p.day;
+  return 19;
+}
+function closerLine(id){
+  const n=own(id); if(!n) return "Unassigned";
+  const p=n.split(" ");
+  return "Closer - "+p[0]+(p[1]?" "+p[1][0]+".":"");
+}
+function upcomingAppt(){
+  const now=Date.now();
+  let best=null;
+  clients.forEach(c=>{
+    if(!c.appt) return;
+    const t=bookedInstant(c.appt.day,c.appt.time).getTime();
+    const d=t-now;
+    if(d>0&&d<=30*60*1000&&(!best||d<best.d)) best={c,d};
+  });
+  return best;
+}
+function alarmHTML(){
+  const u=upcomingAppt();
+  if(u){
+    const mins=Math.max(1,Math.round(u.d/60000));
+    return `<div class="alarm hot" id="alarmLive"><span class="bell">⏰</span><span>${u.c.fn} ${u.c.ln} · in ${mins} min</span></div>`;
+  }
+  return `<div class="alarm" id="alarmLive"><span class="bell">⏰</span><span>No call in the next 30 min</span></div>`;
+}
+function headerStamp(){
+  const now=new Date();
+  const date=now.toLocaleDateString("en-US",{timeZone:VIEW_TZ,weekday:"long",month:"short",day:"numeric",year:"numeric"});
+  return `${date} · 🕐 ${localClock()} ${tzAbbrev()}`;
+}
+function dayTitle(d){return `${WD[new Date(2026,8,d).getDay()]}, September ${d}, 2026`;}
+function mins(t){const [h,m]=String(t).split(":").map(Number);return h*60+(m||0);}
+
+function toast(m){const t=document.getElementById("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2200)}
+function cellN(f,pct){
+  if(!f||f.v==null) return `<div class="v m">Missing</div><small>${f&&f.h||""}</small>`;
+  const shown=pct?f.v+"%":money(f.v);
+  return `<div class="v">${shown}</div><small>${f.c??"—"}% · ${f.s}</small>`;
+}
+function cellD(f){
+  if(!f||f.k==="no") return `<div class="v m">Cannot compute</div><small>Needs ${(f&&f.m||[]).join(", ")}</small>`;
+  const shown=(f.b.includes("amort")||f.b.includes("interest"))?money(f.v):String(f.v);
+  return `<div class="v">${shown}</div><small>${f.b}</small>`;
+}
+
+function shell(title,body){
+  return `<div class="shell">
+    <aside class="rail">
+      <div class="brand"><small>SCS operations</small><strong>ProdigyFlo</strong></div>
+      <nav class="nav">
+        <button data-go="board" class="${view==="board"?"on":""}">Board</button>
+        <button data-go="clients" class="${view==="clients"?"on":""}">Clients</button>
+        <button data-go="queue" class="${view==="queue"?"on":""}">Queue · ${queueCount()}</button>
+        <div class="sec">More</div>
+        <button data-go="engine" class="${view==="engine"?"on":""}">Engine</button>
+        <button data-go="doclab" class="${view==="doclab"?"on":""}">Document lab</button>
+        <button data-go="cys" class="${view==="cys"?"on":""}">CYS / submissions</button>
+        <button data-go="users" class="${view==="users"?"on":""}">Users</button>
+      </nav>
+      <div class="rail-foot"><b>Gatsby</b>Master Admin<br>Invite-only desk<br><button class="out" type="button" data-signout="1">Sign out</button></div>
+    </aside>
+    <div class="col">
+      <header class="top"><div><h1>${title==="Board"?"Master Calendar Board":title}</h1><div class="muted">${headerStamp()}</div></div><div style="display:flex;align-items:center;gap:12px">${alarmHTML()}<div class="muted">Not a law firm · review only</div></div></header>
+      <main class="main">${body}</main>
+    </div>
+  </div>`;
+}
+function queueCount(){
+  return clients.filter(c=>c.ex==="unverified"||(c.ex==="none"&&c.appt)).length;
+}
+function openLook(clientId, docKey){
+  const c=clients.find(x=>x.id===clientId); if(!c) return;
+  const d=c.docs.find(x=>x.k===docKey); if(!d) return;
+  document.getElementById("lookTitle").textContent=d.l;
+  document.getElementById("lookMeta").textContent=`${c.fn} ${c.ln} · ${c.city}, ${c.st} ${c.zip} · ${d.s.replace("_"," ")}`;
+  const preview=(PREVIEWS[c.id]||{})[docKey];
+  const body=document.getElementById("lookBody");
+  if(d.s==="missing"||!preview){
+    body.innerHTML=`<div class="empty-look">
+      <div class="v m" style="font-size:20px">Not on file</div>
+      <p>This document is not uploaded for ${c.fn} yet. In production the real PDF / county record will open here.</p>
+      <button class="btn" data-req="${c.id}">Request ${d.l}</button>
+    </div>`;
+  }else{
+    body.innerHTML=`<div class="paper">
+      <div class="kicker">${preview.kicker}</div>
+      <h4>${preview.title}</h4>
+      <div class="kv">${preview.fields.map(([k,v])=>`<div><b>${k}</b>${v}</div>`).join("")}</div>
+      <p class="muted" style="margin-top:16px;font-size:13px;line-height:1.5">${preview.note}</p>
+    </div>`;
+  }
+  document.getElementById("look").classList.add("on");
+}
+function renderDayView(){
+  const start=8, end=19, rowH=64;
+  const list=clients.filter(c=>c.appt&&c.appt.day===dayNum).sort((a,b)=>mins(a.appt.time)-mins(b.appt.time));
+  let hours="", slots="";
+  for(let h=start;h<=end;h++){
+    const label=h===0?"12 AM":h<12?h+" AM":h===12?"12 PM":(h-12)+" PM";
+    hours+=`<div class="agenda-hour">${label}</div>`;
+    slots+=`<div class="agenda-slot" data-dropday="${dayNum}" data-droptime="${String(h).padStart(2,"0")}:00"></div>`;
+  }
+  const blocks=list.map(c=>{
+    const top=((mins(c.appt.time)-start*60)/60)*rowH+4;
+    const when=fmt12(bookedInstant(c.appt.day,c.appt.time));
+    return `<div class="appt ${c.owner?"":"u"}" style="top:${top}px;height:${rowH-8}px" data-open="${c.id}" data-chip="${c.id}">
+      <span>🕐 ${when}</span>
+      <b>${c.fn} ${c.ln}</b>
+      <span>${closerLine(c.owner)} · ${c.st} ${c.zip}</span>
+    </div>`;
+  }).join("");
+  const nowTop = dayNum===localToday() ? ((mins(new Date().toLocaleTimeString("en-GB",{timeZone:VIEW_TZ,hour:"2-digit",minute:"2-digit"}))-start*60)/60)*rowH : null;
+  const now = nowTop!=null ? `<div class="nowline" style="top:${nowTop}px"></div>` : "";
+  const uns=clients.filter(c=>!c.appt).map(c=>`<div class="lead" draggable="true" data-drag="${c.id}" data-open="${c.id}"><b>${c.fn} ${c.ln}</b><span>${c.st} · ${c.ex==="none"?"no contract yet":"finance PDF in"}</span></div>`).join("");
+  return shell("Board", `
+    <div class="banner">${list.length?list.length+" appointment"+(list.length===1?"":"s")+" this day. Click a block to open the file.":"No appointments this day. Drag someone from Unscheduled onto an hour."}</div>
+    <div class="grid">
+      <div class="card">
+        <div class="head">
+          <h2>${dayTitle(dayNum)}</h2>
+          <div class="actions">
+            <button class="btn secondary" data-shift="-1">←</button>
+            <button class="btn secondary" data-openday="${localToday()}">Today</button>
+            <button class="btn secondary" data-shift="1">→</button>
+            <button class="btn" data-cal="month">Month</button>
+          </div>
+        </div>
+        <div class="agenda" style="padding:0 0 18px">
+          <div>${hours}</div>
+          <div class="agenda-track" style="min-height:${(end-start+1)*rowH}px">
+            ${slots}${blocks}${now}
+          </div>
+        </div>
+        ${list.length?"":`<div class="empty-day">Nothing booked for September ${dayNum}.</div>`}
+      </div>
+      <aside class="card side">
+        <h3>Unscheduled</h3>
+        <p class="muted" style="margin-bottom:8px">Drag onto an hour.</p>
+        ${uns}
+      </aside>
+    </div>`);
+}
+function renderBoard(){
+  if(boardMode==="day") return renderDayView();
+  const una=clients.filter(c=>!c.owner).length;
+  let days="";
+  const off=new Date(2026,8,1).getDay();
+  for(let i=0;i<35;i++){
+    const d=i-off+1, inM=d>=1&&d<=30;
+    days+=`<div class="day ${inM?"":"mute"} ${d===localToday()?"today":""}" data-day="${inM?d:""}" ${inM?`data-openday="${d}"`:""}>`;
+    if(inM){
+      days+=`<span class="num">${d}</span>`;
+      clients.filter(c=>c.appt&&c.appt.day===d).forEach(c=>{
+        days+=`<div class="chip ${c.owner?"":"u"}" data-open="${c.id}" data-chip="${c.id}"><span class="chip-time">🕐 ${fmt12(bookedInstant(c.appt.day,c.appt.time))}</span><b>${c.fn} ${c.ln}</b><span class="closer">${closerLine(c.owner)}</span></div>`;
+      });
+    }
+    days+=`</div>`;
+  }
+  const uns=clients.filter(c=>!c.appt).map(c=>`<div class="lead" draggable="true" data-drag="${c.id}" data-open="${c.id}"><b>${c.fn} ${c.ln}</b><span>${c.st} · ${c.ex==="none"?"no contract yet":"finance PDF in"}</span></div>`).join("");
+  return shell("Board", `
+    <div class="banner">${una} unassigned leads. Click a day for the hour view · click a name for the file.</div>
+    <div class="grid">
+      <div class="card">
+        <div class="head"><h2>September 2026</h2><button class="btn secondary" data-openday="${localToday()}">Today</button></div>
+        <div class="week"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div class="days">${days}</div>
+      </div>
+      <aside class="card side">
+        <h3>Unscheduled</h3>
+        <p class="muted" style="margin-bottom:8px">Drag onto a day or click the file.</p>
+        ${uns}
+      </aside>
+    </div>`);
+}
+function renderQform(id){
+  const c=clients.find(x=>x.id===id); if(!c) return renderBoard();
+  const p=c.q.page||0;
+  const sec=QSECTIONS[p];
+  const n=qProgress(c);
+  const fields=sec.qs.map(q=>{
+    const v=c.q.answers[q.id];
+    if(q.ty==="text"||q.ty==="long"){
+      return `<div class="qfield"><label>${q.l}</label>${q.ty==="long"?`<textarea rows="4" data-q="${c.id}" data-qk="${q.id}">${v||""}</textarea>`:`<input data-q="${c.id}" data-qk="${q.id}" value="${(v||"").replace(/"/g,"&quot;")}" />`}</div>`;
+    }
+    const opts=q.o.map(o=>{
+      const on=q.ty==="multi"?(v||[]).includes(o):v===o;
+      return `<button class="qopt ${on?"on":""}" type="button" data-qp="${c.id}" data-qk="${q.id}" data-qv="${o.replace(/"/g,"&quot;")}" data-qm="${q.ty}">${o}</button>`;
+    }).join("");
+    return `<div class="qfield"><label>${q.l}</label><div class="qgrid">${opts}</div></div>`;
+  }).join("");
+  return shell("Questionnaire", `
+    <div class="card block">
+      <div class="head" style="padding:0 0 8px">
+        <div>
+          <button class="btn secondary" data-open="${c.id}">← Back to ${c.fn}'s file</button>
+          <h2 style="margin-top:12px">${sec.t}</h2>
+          <div class="muted">Section ${p+1} of 9 · ${n} of 42 answered</div>
+        </div>
+      </div>
+      <div class="qbar"><i style="width:${Math.round(n/42*100)}%"></i></div>
+      ${fields}
+      <div class="qfoot">
+        ${p===0?`<span></span>`:`<button class="btn secondary" data-qpg="${p-1}">Back</button>`}
+        ${p<8?`<button class="btn" data-qpg="${p+1}">Next</button>`:`<button class="btn" data-qdone="${c.id}" ${n<42?"disabled style='opacity:.45'":""}>Complete</button>`}
+      </div>
+      ${p===8&&n<42?`<p class="muted" style="margin-top:10px">Complete stays locked until all 42 have an answer. ${42-n} still blank.</p>`:""}
+    </div>`);
+}
+function renderClients(){
+  const rows=clients.map(c=>{
+    const d=c.docs.filter(x=>x.s!=="missing").length;
+    return `<tr class="row" data-open="${c.id}"><td><b>${c.fn} ${c.ln}</b></td><td>${c.st} ${c.zip}</td><td>${c.stage}</td><td>${own(c.owner)||"Unassigned"}</td><td>${c.appt?c.appt.label:"—"}</td><td>${d}/8</td><td>${c.sol.credit??"Not on file"}</td></tr>`;
+  }).join("");
+  return shell("Clients", `<div class="card"><div class="head"><h2>All files</h2><span class="muted">${clients.length} live · test records hidden</span></div>
+    <table><thead><tr><th>Name</th><th>State</th><th>Stage</th><th>Owner</th><th>Appointment</th><th>Docs</th><th>Credit</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+}
+function renderQueue(){
+  const rows=[];
+  clients.forEach(c=>{
+    if(c.ex==="unverified") rows.push([c,"Extraction unverified — confirm finance fields"]);
+    if(c.ex==="none"&&c.appt) rows.push([c,"Booked with no contract on file"]);
+  });
+  const body=rows.map(([c,w])=>`<tr class="row" data-open="${c.id}"><td>${c.fn} ${c.ln}</td><td>${w}</td><td>Open profile</td></tr>`).join("");
+  return shell("Queue", `<div class="card"><div class="head"><h2>Needs a human</h2></div>
+    <table><thead><tr><th>Client</th><th>Why</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`);
+}
+function renderProfile(id){
+  const c=clients.find(x=>x.id===id); if(!c) return renderBoard();
+  const have=c.docs.filter(d=>d.s!=="missing").length;
+  const f=c.fin;
+  const fee=(!f.amt||f.amt.v==null)
+    ?`<div class="v m">Cannot compute</div><small>Needs total / amount financed from extract</small>`
+    :`<div class="v">${money(Math.round(f.amt.v*0.3*100)/100)}</div><small>30% of ${money(f.amt.v)} total contract</small>`;
+  const apr=f.apr.v==null?`<div class="v m">Missing</div><small>${f.apr.h||""}</small>`:`<div class="v">${f.apr.v}% ${f.aprT}</div><small>${f.apr.c}% · ${f.apr.s}</small>`;
+  return shell("Client profile", `
+    <article class="card ph">
+      <div>
+        <button class="btn secondary" data-go="board">← Board</button>
+        <div class="who">${c.fn} ${c.ln}</div>
+        <div class="muted">${c.city}, ${c.st} ${c.zip} · ${c.src} · ${c.stage}</div>
+        <div class="tags">
+          <span class="tag ${c.owner?"g":"w"}">Owner: ${own(c.owner)||"Unassigned"}</span>
+          <span class="tag">${c.appt?"Appt "+c.appt.label:"Not booked"}</span>
+          <span class="tag">Docs ${have}/8</span>
+          <span class="tag ${c.ex==="verified"?"g":"w"}">Extraction ${c.ex}</span>
+          <span class="tag ${c.sol.credit?"g":"w"}">${c.sol.credit?"Credit "+c.sol.credit:"Credit not on file"}</span>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" data-assign="${c.id}">Assign closer</button>
+        <button class="btn secondary" data-book="${c.id}">${c.appt?"Reschedule":"Book"}</button>
+        <button class="btn secondary" data-req="${c.id}">Request missing docs</button>
+        <button class="btn secondary" data-call="${c.id}">Call</button>
+      </div>
+    </article>
+    <div class="g2">
+      <div class="card block"><h3>Finance agreement</h3><div class="math">
+        <div class="cell"><label>Total / amount financed</label>${cellN(f.amt)}</div>
+        <div class="cell"><label>Remaining balance</label>${cellD(f.bal)}</div>
+        <div class="cell"><label>Interest rate</label>${apr}</div>
+        <div class="cell"><label>Interest paid to date</label>${cellD(f.int)}</div>
+        <div class="cell"><label>Annual Escalator Rate %</label>${f.esc==null?`<div class="v m">Missing</div>`:`<div class="v">${f.esc}%</div><small>${f.esc===0?"No yearly increase on file":"From agreement"}</small>`}</div>
+        <div class="cell"><label>Term years</label><div class="${f.y==null?"v m":"v"}">${f.y??"Missing"}</div></div>
+        <div class="cell"><label>Term months</label><div class="${f.mo==null?"v m":"v"}">${f.mo??"Missing"}</div></div>
+        <div class="cell"><label>Years remaining</label>${cellD(f.yr)}</div>
+        <div class="cell"><label>Months remaining</label>${cellD(f.mr)}</div>
+        <div class="cell"><label>Monthly payment</label>${cellN(f.pay)}</div>
+        <div class="cell"><label>30% Dealer Fee</label>${fee}</div>
+        <div class="cell"><label>Lender</label><div class="${f.lender?"v":"v m"}" style="font-size:15px">${f.lender||"Missing"}</div></div>
+        <div class="cell"><label>First payment date</label><div class="${f.fp?"v":"v m"}">${f.fp||"Missing"}</div></div>
+      </div></div>
+      <div class="card block"><h3>Solar / intake</h3><div class="math">
+        <div class="cell"><label>Agreement type</label><div class="v" style="font-size:16px">${c.sol.type}</div></div>
+        <div class="cell"><label>Installer</label><div class="${c.sol.inst?"v":"v m"}" style="font-size:16px">${c.sol.inst||"Missing"}</div></div>
+        <div class="cell"><label>Credit score</label><div class="${c.sol.credit?"v":"v m"}">${c.sol.credit??"Not on file"}</div><small>SCS intake only · not a bureau pull</small></div>
+        <div class="cell"><label>System size</label><div class="${c.sol.kw?"v":"v m"}">${c.sol.kw?c.sol.kw+" kW":"Missing"}</div></div>
+      </div></div>
+    </div>
+    <div class="card block" style="margin-bottom:14px"><h3>Documents</h3>
+      <p class="muted" style="margin:-4px 0 12px">Click Quick look to open the page. Live desk will load the real file; this prototype shows the extract when a document exists.</p>
+      <div class="docs">${c.docs.map(d=>`<div class="doc">
+        <div class="doc-top"><span>${d.l}</span><div class="doc-acts"><button class="lookbtn" data-look="${c.id}" data-doc="${d.k}">Quick look</button><button class="lookbtn" data-up="${c.id}" data-doc="${d.k}">Upload</button></div></div>
+        <div class="st ${d.s==="missing"?"m":"g"}">${d.s.replace("_"," ")}</div>
+      </div>`).join("")}</div>
+    </div>
+    <div class="g2">
+      <div class="card block"><h3>Intake answers · verbatim</h3>
+        <div class="qa">${c.intake.map(p=>`<div><b>${p[0]}</b>${p[1]}</div>`).join("")}</div>
+        <button class="qtab" data-qopen="${c.id}" style="margin:14px 0 0">
+          <div>
+            <b>Client's Questionnaire Form</b>
+            <div class="muted">${c.q.done?"All 42 answered":qProgress(c)+" of 42 answered · finish on the booking call"}</div>
+          </div>
+          <div class="mark ${c.q.done?"tag g":"tag w"}">${c.q.done?"✓ Completed":"In progress"}</div>
+        </button>
+      </div>
+      <div class="card block prose"><h3>Redline · internal posture</h3>
+        <p><b>On the page:</b> ${c.red.facts}</p>
+        <p><b>Intake vs page:</b> ${c.red.vs}</p>
+        <p><b>State</b></p><ul>${c.red.state.map(x=>`<li>${x}</li>`).join("")}</ul>
+        <p><b>Federal</b></p><ul>${c.red.fed.map(x=>`<li>${x}</li>`).join("")}</ul>
+        <p><b>Blockers:</b> ${c.red.block.join(", ")}.</p>
+        <span class="flag">Flag · ${c.red.flag}</span>
+      </div>
+    </div>
+    <div class="card block prose" style="margin-top:14px"><h3>Closer brief ${c.brief.ok?"· approved":""}</h3>
+      <p>${c.brief.body}</p>
+      <p>Surprise numbers: ${c.brief.sur.join("; ")}.</p>
+      <p>First ask: ${c.brief.ask}.</p>
+      <p>Suggested open: ${c.brief.open}</p>
+      <div class="actions" style="margin-top:10px">
+        <button class="btn" data-ok="${c.id}">${c.brief.ok?"Approved":"Approve brief"}</button>
+        <button class="btn secondary" data-edit="${c.id}">Edit</button>
+      </div>
+    </div>`);
+}
+
+const staff=[
+  {id:"hector",name:"Hector Camarena",role:"Admin",email:"hector@solarcontractservices.com",status:"Active"},
+  {id:"elena",name:"Elena Voss",role:"Closer",email:"elena@solarcontractservices.com",status:"Active"},
+  {id:"marcus",name:"Marcus Hill",role:"Closer",email:"marcus@solarcontractservices.com",status:"Invited"},
+  {id:"asha",name:"Asha Patel",role:"Operations",email:"asha@solarcontractservices.com",status:"Active"},
+];
+let engineCards=[
+  {id:"e1",client:"mira",title:"Unassigned + unverified extraction",body:"Mira Testley is booked tomorrow with finance fields still Unverified. Confirm $31,860 / 5.99% / $205.18 before the call.",state:"open"},
+  {id:"e2",client:"hector",title:"Booked with empty file",body:"Hector Camarena is on the calendar Thursday with no contract. Treat as a document hunt.",state:"open"},
+  {id:"e3",client:"priya",title:"Fixed rate vs promised drop",body:"Priya Denton: page is 6.49% fixed. Intake said the rate would drop after two years.",state:"open"},
+];
+function renderEngine(){
+  const cards=engineCards.map(e=>{
+    const c=clients.find(x=>x.id===e.client);
+    return `<div class="card block" style="margin-bottom:12px">
+      <h3>${e.state==="open"?"Open":e.state}</h3>
+      <p style="font-size:16px;font-weight:600;margin:6px 0">${e.title}</p>
+      <p class="muted">${e.body}</p>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn" data-open="${e.client}">Open ${c?c.fn:"file"}</button>
+        <button class="btn secondary" data-eng="${e.id}" data-engact="accept">Accept</button>
+        <button class="btn secondary" data-eng="${e.id}" data-engact="dismiss">Dismiss</button>
+      </div>
+    </div>`;
+  }).join("");
+  return shell("Engine", `<div class="banner">Suggestions only. Accept writes nothing to the homeowner site.</div>${cards}`);
+}
+function renderDoclab(){
+  const rows=clients.flatMap(c=>c.docs.filter(d=>d.s!=="missing").map(d=>
+    `<tr class="row" data-open="${c.id}"><td>${c.fn} ${c.ln}</td><td>${d.l}</td><td>${d.s}</td><td>${c.ex}</td></tr>`
+  )).join("");
+  return shell("Document lab", `<div class="card"><div class="head"><h2>Uploaded files</h2><span class="muted">Click a row to open the case</span></div>
+    <table><thead><tr><th>Client</th><th>Document</th><th>State</th><th>Extraction</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+}
+function renderCys(){
+  const ready=clients.filter(c=>c.ex==="verified");
+  const blocked=clients.filter(c=>c.ex!=="verified");
+  const row=(c,why)=>`<tr class="row" data-open="${c.id}"><td>${c.fn} ${c.ln}</td><td>${c.st}</td><td>${why}</td></tr>`;
+  return shell("CYS / submissions", `
+    <div class="banner">Nothing leaves this desk until a human marks the file ready. No live CYS push in the prototype.</div>
+    <div class="g2">
+      <div class="card"><div class="head"><h2>Ready</h2></div>
+        <table><thead><tr><th>Client</th><th>State</th><th></th></tr></thead>
+        <tbody>${ready.map(c=>row(c,"Finance verified · packet incomplete")).join("")||"<tr><td colspan=3>None</td></tr>"}</tbody></table></div>
+      <div class="card"><div class="head"><h2>Blocked</h2></div>
+        <table><thead><tr><th>Client</th><th>State</th><th></th></tr></thead>
+        <tbody>${blocked.map(c=>row(c,c.ex==="none"?"No agreement":"Unverified extraction")).join("")}</tbody></table></div>
+    </div>`);
+}
+function renderUsers(){
+  const rows=staff.map(u=>`<tr><td><b>${u.name}</b></td><td>${u.role}</td><td>${u.email}</td><td>${u.status}</td>
+    <td>${u.status==="Invited"?`<button class="btn secondary" data-resend="${u.id}">Resend invite</button>`:`<button class="btn secondary" data-off="${u.id}">Disable</button>`}</td></tr>`).join("");
+  return shell("Users", `<div class="card"><div class="head"><h2>Invite only</h2>
+    <button class="btn" id="inviteBtn" type="button">Invite teammate</button></div>
+    <table><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`);
+}
+function paint(){
+  const root=document.getElementById("app");
+  if(view==="clients") root.innerHTML=renderClients();
+  else if(view==="queue") root.innerHTML=renderQueue();
+  else if(view==="profile") root.innerHTML=renderProfile(profileId);
+  else if(view==="qform") root.innerHTML=renderQform(profileId);
+  else if(view==="engine") root.innerHTML=renderEngine();
+  else if(view==="doclab") root.innerHTML=renderDoclab();
+  else if(view==="cys") root.innerHTML=renderCys();
+  else if(view==="users") root.innerHTML=renderUsers();
+  else root.innerHTML=renderBoard();
+  bindDrag();
+  tickAlarm();
+}
+let alarmTimer=null;
+function tickAlarm(){
+  if(alarmTimer) clearInterval(alarmTimer);
+  alarmTimer=setInterval(()=>{
+    const el=document.getElementById("alarmLive");
+    if(!el) return;
+    const box=document.createElement("div");
+    box.innerHTML=alarmHTML();
+    el.replaceWith(box.firstElementChild);
+    const stamp=document.querySelector(".top .muted");
+    if(stamp) stamp.textContent=headerStamp();
+  },15000);
+}
+function bindDrag(){
+  document.querySelectorAll("[data-drag]").forEach(el=>{
+    el.addEventListener("dragstart",e=>e.dataTransfer.setData("id",el.dataset.drag));
+  });
+  document.querySelectorAll(".day[data-day]").forEach(day=>{
+    if(!day.dataset.day) return;
+    day.addEventListener("dragover",e=>e.preventDefault());
+    day.addEventListener("drop",e=>{
+      e.preventDefault();
+      const id=e.dataTransfer.getData("id");
+      const c=clients.find(x=>x.id===id); if(!c) return;
+      const d=Number(day.dataset.day);
+      c.appt={label:`Sep ${d} · 10:00 AM PT`,day:d,time:"10:00"};
+      c.stage="Booked";
+      toast(`Booked ${c.fn} on Sep ${d}`);
+      paint();
+    });
+  });
+  document.querySelectorAll("[data-dropday]").forEach(slot=>{
+    slot.addEventListener("dragover",e=>e.preventDefault());
+    slot.addEventListener("drop",e=>{
+      e.preventDefault();
+      const id=e.dataTransfer.getData("id");
+      const c=clients.find(x=>x.id===id); if(!c) return;
+      const d=Number(slot.dataset.dropday);
+      const time=slot.dataset.droptime;
+      c.appt={label:`Sep ${d} · ${time} PT`,day:d,time};
+      c.stage="Booked";
+      toast(`Booked ${c.fn} at ${time}`);
+      paint();
+    });
+  });
+}
+
+document.getElementById("closer").innerHTML=CLOSERS.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+document.addEventListener("input",e=>{
+  if(!e.target.dataset.qk) return;
+  const c=clients.find(x=>x.id===e.target.dataset.q); if(!c) return;
+  c.q.answers[e.target.dataset.qk]=e.target.value;
+});
+document.addEventListener("click",e=>{
+  document.getElementById("menu").style.display="none";
+  if(e.target.closest("[data-signout]")){toast("Signed out · invite-only desk");return;}
+  const look=e.target.closest("[data-look]");
+  if(look){e.stopPropagation();openLook(look.dataset.look, look.dataset.doc);return;}
+  const up=e.target.closest("[data-up]");
+  if(up){
+    e.stopPropagation();
+    const c=clients.find(x=>x.id===up.dataset.up); if(!c) return;
+    const d=c.docs.find(x=>x.k===up.dataset.doc); if(!d) return;
+    const inp=document.createElement("input");
+    inp.type="file";
+    inp.accept=".pdf,.png,.jpg,.jpeg,.heic,.webp,.txt,.eml";
+    inp.onchange=()=>{
+      const f=inp.files&&inp.files[0];
+      if(!f) return;
+      d.s="uploaded";
+      paint();
+      toast(f.name+" uploaded · "+d.l);
+    };
+    inp.click();
+    return;
+  }
+  const go=e.target.closest("[data-go]"); if(go){view=go.dataset.go;if(go.dataset.go==="board")boardMode="month";paint();return;}
+  const qopen=e.target.closest("[data-qopen]"); if(qopen){profileId=qopen.dataset.qopen;view="qform";paint();return;}
+  const qp=e.target.closest("[data-qp]");
+  if(qp){
+    const c=clients.find(x=>x.id===qp.dataset.qp); const k=qp.dataset.qk, val=qp.dataset.qv;
+    if(qp.dataset.qm==="multi"){
+      const cur=c.q.answers[k]||[];
+      c.q.answers[k]=cur.includes(val)?cur.filter(x=>x!==val):cur.concat(val);
+    } else c.q.answers[k]=val;
+    paint(); return;
+  }
+  if(e.target.dataset.qpg!=null){
+    const c=clients.find(x=>x.id===profileId);
+    c.q.page=Math.max(0,Math.min(8,Number(e.target.dataset.qpg)));
+    toast("Draft saved");
+    paint(); return;
+  }
+  if(e.target.dataset.qdone){
+    const c=clients.find(x=>x.id===e.target.dataset.qdone);
+    if(qProgress(c)<42){toast("Answer every question before Complete");return;}
+    c.q.done=true; view="profile"; paint(); toast("Questionnaire marked Completed"); return;
+  }
+  const open=e.target.closest("[data-open]"); if(open){profileId=open.dataset.open;view="profile";paint();return;}
+  if(e.target.closest("[data-cal]")?.dataset.cal==="month"){boardMode="month";view="board";paint();return;}
+  const sh=e.target.closest("[data-shift]");
+  if(sh){dayNum=Math.min(30,Math.max(1,dayNum+Number(sh.dataset.shift)));boardMode="day";view="board";paint();return;}
+  const od=e.target.closest("[data-openday]");
+  if(od){dayNum=Number(od.dataset.openday);boardMode="day";view="board";paint();return;}
+  const as=e.target.closest("[data-assign]"); if(as){modalId=as.dataset.assign;document.getElementById("assign").classList.add("on");return;}
+  const bk=e.target.closest("[data-book]"); if(bk){modalId=bk.dataset.book;document.getElementById("book").classList.add("on");return;}
+  if(e.target.dataset.req){
+    const c=clients.find(x=>x.id===e.target.dataset.req);
+    const miss=c.docs.filter(d=>d.s==="missing").map(d=>d.l);
+    toast("Doc request drafted for "+c.fn+": "+(miss.slice(0,3).join(", ")||"none missing"));
+    return;
+  }
+  if(e.target.dataset.call){
+    const c=clients.find(x=>x.id===e.target.dataset.call);
+    toast("No phone line connected. Copied "+c.fn+" "+c.ln+" · "+c.st+" "+c.zip);
+    return;
+  }
+  if(e.target.dataset.edit){
+    const c=clients.find(x=>x.id===e.target.dataset.edit);
+    const next=prompt("Edit closer brief", c.brief.body);
+    if(next!=null && next.trim()){c.brief.body=next.trim();c.brief.ok=false;paint();toast("Brief updated · needs approve");}
+    return;
+  }
+  const eng=e.target.closest("[data-eng]");
+  if(eng){
+    const card=engineCards.find(x=>x.id===eng.dataset.eng);
+    card.state=eng.dataset.engact==="accept"?"accepted":"dismissed";
+    paint(); toast(card.title+" "+card.state);
+    return;
+  }
+  if(e.target.id==="inviteBtn"){
+    const name=prompt("Name to invite");
+    if(name&&name.trim()){
+      staff.push({id:"u"+Date.now(),name:name.trim(),role:"Closer",email:name.trim().toLowerCase().replace(/\s+/g,".")+"@solarcontractservices.com",status:"Invited"});
+      paint(); toast("Invite created · pending email");
+    }
+    return;
+  }
+  if(e.target.dataset.resend){toast("Invite resent");return;}
+  if(e.target.dataset.off){
+    const u=staff.find(x=>x.id===e.target.dataset.off);
+    u.status=u.status==="Disabled"?"Active":"Disabled";
+    paint(); toast(u.name+" · "+u.status);
+    return;
+  }
+  const ok=e.target.closest("[data-ok]"); if(ok){const c=clients.find(x=>x.id===ok.dataset.ok);c.brief.ok=true;paint();toast("Brief approved");}
+});
+document.addEventListener("contextmenu",e=>{
+  const chip=e.target.closest("[data-chip]"); if(!chip) return;
+  e.preventDefault(); menuId=chip.dataset.chip;
+  const m=document.getElementById("menu"); m.style.left=e.pageX+"px"; m.style.top=e.pageY+"px"; m.style.display="block";
+});
+document.getElementById("menu").addEventListener("click",e=>{
+  const act=e.target.dataset.act; const c=clients.find(x=>x.id===menuId);
+  if(act==="view"){profileId=menuId;view="profile";paint();}
+  if(act==="assign"){modalId=menuId;document.getElementById("assign").classList.add("on");}
+  if(act==="book"){modalId=menuId;document.getElementById("book").classList.add("on");}
+  if(act==="copy") toast(`Copied ${c.fn} ${c.ln} · ${c.zip}`);
+  if(act==="noshow"){c.appt=null;c.stage="New lead";view="board";paint();toast(c.fn+" marked no-show");}
+});
+document.getElementById("xAssign").onclick=()=>document.getElementById("assign").classList.remove("on");
+document.getElementById("xBook").onclick=()=>document.getElementById("book").classList.remove("on");
+document.getElementById("xLook").onclick=()=>document.getElementById("look").classList.remove("on");
+document.getElementById("look").addEventListener("click",e=>{
+  if(e.target.id==="look") document.getElementById("look").classList.remove("on");
+});
+document.getElementById("okAssign").onclick=()=>{
+  const c=clients.find(x=>x.id===modalId); c.owner=document.getElementById("closer").value;
+  document.getElementById("assign").classList.remove("on"); paint(); toast("Assigned to "+own(c.owner));
+};
+document.getElementById("okBook").onclick=()=>{
+  const c=clients.find(x=>x.id===modalId);
+  const date=document.getElementById("bdate").value, time=document.getElementById("btime").value, day=Number(date.split("-")[2]);
+  c.appt={label:date+" · "+time+" PT",day,time}; c.stage="Booked";
+  document.getElementById("book").classList.remove("on"); profileId=c.id; view="profile"; paint(); toast("Appointment saved");
+};
+paint();
+</script>
+</body>
+</html>

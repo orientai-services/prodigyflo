@@ -1,3 +1,5 @@
+import { finalDeskEnabled } from '@/lib/final-desk/data'
+import { FinalDeskPage } from '@/components/final-desk/page'
 import Link from 'next/link'
 import { Download, Plus, Upload } from 'lucide-react'
 import type { Prisma, StageKey } from '@prisma/client'
@@ -30,6 +32,7 @@ const SORTS = {
 export type SortKey = keyof typeof SORTS
 
 export default async function ClientsPage({ searchParams }: PageProps<'/clients'>) {
+  if (finalDeskEnabled()) return <FinalDeskPage view="clients" />
   const user = await requireUser()
   const params = await searchParams
 

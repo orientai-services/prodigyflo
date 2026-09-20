@@ -1,3 +1,4 @@
+import { finalDeskEnabled } from '@/lib/final-desk/data'
 import { notificationScope } from '@/lib/notification-scope'
 import type { Metadata } from 'next'
 import { db } from '@/lib/db'
@@ -39,6 +40,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const user = await requireUser()
+  if (finalDeskEnabled()) return <>{children}</>
 
   const unreadCount = await db.notification.count({
     where: { ...await notificationScope(user), readAt: null },

@@ -1,3 +1,5 @@
+import { finalDeskEnabled } from '@/lib/final-desk/data'
+import { FinalDeskPage } from '@/components/final-desk/page'
 import type { DocumentStatus, Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requirePermissionPage } from '@/lib/rbac'
@@ -20,6 +22,7 @@ const FILTERS: { key: string; label: string; statuses: DocumentStatus[] }[] = [
 ]
 
 export default async function DocumentsPage({ searchParams }: PageProps<'/documents'>) {
+  if (finalDeskEnabled()) return <FinalDeskPage view="documents" />
   const user = await requirePermissionPage('documents:review')
   const params = await searchParams
   const filterKey = typeof params.filter === 'string' ? params.filter : 'queue'

@@ -24,6 +24,11 @@ describe('matchDocKind', () => {
 })
 
 describe('classifyDeskKind', () => {
+  it('never counts generated lookup summaries as original records', () => {
+    expect(classifyDeskKind({detectedType: 'public_record_summary', fileName: 'County-Permit-Record.pdf'})?.key).toBe('other')
+    expect(classifyDeskKind({fileName: 'UCC-Fixture-Search-Summary.pdf'})?.key).toBe('other')
+    expect(classifyDeskKind({fileName: 'County-Permit-Search-Summary.pdf'})?.key).toBe('other')
+  })
   it('puts a lender PDF on finance and a Steele install PDF on solar', () => {
     expect(classifyDeskKind({ fileName: 'GoodLeap_TIL.pdf' })?.key).toBe('finance_agreement')
     expect(classifyDeskKind({ fileName: 'Steele_Solar_Agreement.pdf' })?.key).toBe('signed_contract')

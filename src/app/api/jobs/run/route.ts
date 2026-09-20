@@ -116,6 +116,10 @@ async function run(request: NextRequest) {
   if (new URL(request.url).searchParams.get('scope') === 'scs-document-extractions') {
     return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentExtractions })
   }
+  if (process.env.PRODIGYFLO_FINAL_DESK === 'true') {
+    const scsDocumentImports = await runPendingScsDocumentImports()
+    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
+  }
   const counts = await runDueWork(new Date())
   const scores = await freshenScores()
   // Monday-morning manager digest — the settings.digest.lastSentWeek guard

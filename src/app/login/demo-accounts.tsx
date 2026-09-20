@@ -4,14 +4,8 @@ import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 
 const ACCOUNTS = [
-  { email: 'super@prodigyflo.ai', role: 'Super Admin', blurb: 'Everything, including roles and audit log' },
-  { email: 'admin@prodigyflo.ai', role: 'Admin / Operations', blurb: 'All clients, configuration, submissions' },
-  { email: 'rm.west@prodigyflo.ai', role: 'Regional Manager', blurb: 'West region, teams and closer comparison' },
-  { email: 'sm.west1@prodigyflo.ai', role: 'Sales Manager', blurb: 'One team’s pipeline and performance' },
-  { email: 'marisol.west00@prodigyflo.ai', role: 'Closer', blurb: 'Own assigned clients and daily work' },
-  { email: 'collector1@prodigyflo.ai', role: 'Document Collector', blurb: 'Only assigned document requests' },
-  { email: 'marketing@prodigyflo.ai', role: 'Marketing', blurb: 'Attribution, funnel, campaign performance' },
-  { email: 'client@prodigyflo.ai', role: 'Client', blurb: 'The client-facing portal' },
+  { email: 'admin@prodigyflo.ai', role: 'Super Admin', blurb: 'All clients, calendar, staff and settings' },
+  { email: 'closer@prodigyflo.ai', role: 'Closer', blurb: 'Assigned clients, documents and appointments' },
 ]
 
 export function DemoAccounts() {

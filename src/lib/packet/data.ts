@@ -22,7 +22,7 @@ export async function assemblePacket(clientId: string) {
     where: { id: clientId },
     include: {
       addresses: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }], take: 1 },
-      surveyResponses: { orderBy: { updatedAt: 'desc' }, take: 1 },
+      surveyResponses: { where: { survey: { name: { not: 'ProdigyFlo Final Questionnaire' } } }, orderBy: { updatedAt: 'desc' }, take: 1 },
       documents: {
         where: { status: { notIn: ['REJECTED', 'EXPIRED'] } },
         include: {

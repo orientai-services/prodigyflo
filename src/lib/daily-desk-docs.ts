@@ -68,6 +68,11 @@ export function classifyDeskKind(input: {
   label?: string | null
   fileName?: string | null
 }): DeskDocKind | null {
+  // Search summaries are evidence of a lookup, never the original deed, lien or permit.
+  const sourceText = [input.requirementKey, input.detectedType, input.label, input.fileName].filter(Boolean).join(' ')
+  if (/public[_ -]record[_ -]summary|search[_ -]summary|records?[_ -]summary/i.test(sourceText)) {
+    return CASE_DOC_KINDS.find(k => k.key === 'other') ?? null
+  }
   const direct =
     matchDocKind(input.requirementKey) ||
     matchDocKind(input.detectedType) ||

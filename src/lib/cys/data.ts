@@ -88,7 +88,7 @@ export async function loadSourcesForClients(clientIds: string[]): Promise<Map<st
       },
     }),
     db.surveyResponse.findMany({
-      where: { clientId: { in: clientIds }, status: 'COMPLETED' },
+      where: { clientId: { in: clientIds }, status: 'COMPLETED', survey: { name: { not: 'ProdigyFlo Final Questionnaire' } } },
       distinct: ['clientId'],
       orderBy: { completedAt: 'desc' },
       select: { clientId: true, answers: true },

@@ -35,7 +35,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
       owner: { select: { name: true } },
       leadSource: { select: { name: true } },
       addresses: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }], take: 1 },
-      surveyResponses: {
+      surveyResponses: { where: { survey: { name: { not: 'ProdigyFlo Final Questionnaire' } } },
         orderBy: { updatedAt: 'desc' },
         take: 1,
         include: { survey: { select: { schema: true } } },

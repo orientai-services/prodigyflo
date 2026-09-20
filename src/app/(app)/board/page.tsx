@@ -1,3 +1,5 @@
+import { finalDeskEnabled } from '@/lib/final-desk/data'
+import { FinalDeskPage } from '@/components/final-desk/page'
 import { redirect } from 'next/navigation'
 import { requireUser } from '@/lib/rbac'
 import { canReadDesk, loadDeskBoard } from '@/lib/daily-desk-data'
@@ -11,6 +13,7 @@ export default async function BoardPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  if (finalDeskEnabled()) return <FinalDeskPage view="board" />
   const user = await requireUser()
   if (!canReadDesk(user)) redirect('/forbidden')
 
