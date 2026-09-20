@@ -23,7 +23,7 @@ export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
   const next = typeof params.next === 'string' ? params.next : undefined
   const justReset = params.reset === '1'
   const justCreated = params.created === '1'
-  const signupEnabled = process.env.ALLOW_SELF_SIGNUP === 'true'
+  const signupEnabled = false
 
   return (
     <main className="relative grid min-h-dvh lg:grid-cols-2">

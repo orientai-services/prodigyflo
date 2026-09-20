@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { STAFF_ROLES } from '@/lib/permissions'
 import { consumeAuthToken } from '@/lib/auth-tokens'
 
 const credentialsSchema = z.object({
@@ -38,6 +39,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           const user = await consumeAuthToken(magic.data.magicToken, 'MAGIC_LINK')
           if (!user) return null
+          const staff = await db.user.findFirst({ where: { id: user.id, isActive: true, deletedAt: null, role: { key: { in: STAFF_ROLES } } }, select: { id: true } })
+          if (!staff) return null
 
           await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
           return { id: user.id, email: user.email, name: user.name }
@@ -52,7 +55,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // match. orderBy is a determinism backstop should legacy duplicates
         // exist — the oldest account (first to claim the email) wins.
         const user = await db.user.findFirst({
-          where: { email, deletedAt: null },
+          where: { email, deletedAt: null, role: { key: { in: STAFF_ROLES } } },
           orderBy: { createdAt: 'asc' },
           select: { id: true, email: true, name: true, passwordHash: true, isActive: true },
         })

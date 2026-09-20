@@ -26,7 +26,7 @@ import {
  * the checkpoint, not a transaction.
  */
 
-const MAX_RAW_TEXT = 80_000
+const MAX_RAW_TEXT = 400_000
 
 export type ExtractionRunResult = {
   extractionId: string
@@ -41,6 +41,7 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
     where: { id: documentId },
     include: {
       requirement: { select: { key: true, category: true } },
+      externalImport: { select: { sourceDocumentType: true } },
       client: {
         select: {
           firstName: true,
@@ -63,6 +64,9 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
   const statusBefore = doc.status
 
   try {
+    if (doc.externalImport?.sourceDocumentType === 'public_record_summary') {
+      throw new Error('This file is a generated public-record search reference, not an official record. Fact extraction is disabled; open the reference or upload the actual source document for review.')
+    }
     await db.clientDocument.update({ where: { id: doc.id }, data: { status: 'PROCESSING' } })
     await db.documentExtraction.update({
       where: { id: extraction.id },
@@ -80,9 +84,9 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
     // base64 content block (the mock still refuses to read it). Unsupported or
     // oversized images keep the honest no-OCR behavior with a reason attached.
     const vision = visionImageFor(buf, doc.mimeType)
-    // Text-layer PDFs are cheaper and more precise as text. Only scans travel
-    // to the model as a PDF vision document.
-    const pdf = text.pages.length === 0 ? visionPdfFor(buf, doc.mimeType) : null
+    // Scans and signed-form overlays need the original PDF so filled values
+    // remain associated with their labels instead of detached text-layer order.
+    const pdf = text.needsVision || !joined.trim() ? visionPdfFor(buf, doc.mimeType) : null
     const visionUsed = (vision.image !== null || pdf !== null) && provider.name !== 'mock'
 
     const detection = detectDocumentType({
@@ -91,6 +95,17 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
       requirementKey: doc.requirement?.key ?? doc.label ?? null,
     })
     const spec = detection.spec
+
+    // Keep source diagnostics even when provider configuration or OCR fails.
+    await db.documentExtraction.update({
+      where: { id: extraction.id },
+      data: {
+        detectedTypeKey: spec.key, detectedTypeLabel: spec.label, typeConfidence: detection.confidence,
+        pageCount: text.pageCount, rawText: joined.slice(0, MAX_RAW_TEXT) || null, warnings: text.warnings,
+      },
+    })
+    if ((pdf || vision.image) && provider.name === 'mock') throw new Error('This document requires vision OCR, but only the mock processor is configured. Enable a live document provider and retry; the original file is preserved.')
+    if (!joined.trim() && !pdf && !vision.image) throw new Error(vision.reason ?? 'No readable document content was found. Upload a readable original and retry.')
 
     const result = await provider.extractFields({
       docType: spec,
@@ -110,7 +125,9 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
     }
     const conflicts = computeConflictNotes(result.fields, snapshot)
     const missing = computeMissingFieldKeys(spec, result.fields)
-    const nextStatus = documentStatusAfterExtraction(missing)
+    const noValues = !result.fields.some((field) => field.value?.trim())
+    const nextStatus = noValues ? 'MISSING_INFORMATION' : documentStatusAfterExtraction(missing)
+    const emptyError = 'The processor returned no supported fields. Review the document type and provider response, then retry; the original file and extraction evidence are preserved.'
 
     // The no-OCR warning is accurate only when nothing actually read the
     // image; once the vision model has, replace it with a verification nudge.
@@ -121,6 +138,8 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
       warnings.push('Field values were read by the vision model — verify each value against the file.')
     }
     if (vision.reason && provider.name !== 'mock') warnings.push(vision.reason)
+    warnings.push(...(result.warnings ?? []))
+    if (noValues) warnings.push(emptyError)
     if (spec.key === 'other') {
       warnings.push('Document type could not be determined; generic metadata fields were requested for review.')
     }
@@ -145,10 +164,8 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
       db.documentExtraction.update({
         where: { id: extraction.id },
         data: {
-          status: 'COMPLETED',
-          // The selected adapter may honestly fall back to mock behavior when
-          // it has no readable source. Record what actually processed the
-          // document, not merely the adapter chosen at the start of the run.
+          status: noValues ? 'FAILED' : 'COMPLETED',
+          error: noValues ? emptyError : null,
           provider: result.provider,
           model: result.model,
           detectedTypeKey: spec.key,
@@ -167,7 +184,7 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
       db.clientDocument.update({ where: { id: doc.id }, data: { status: nextStatus } }),
     ])
 
-    return { extractionId: extraction.id, status: 'COMPLETED', documentStatus: nextStatus, missingFieldKeys: missing }
+    return { extractionId: extraction.id, status: noValues ? 'FAILED' : 'COMPLETED', documentStatus: nextStatus, missingFieldKeys: missing, ...(noValues ? { error: emptyError } : {}) }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Extraction failed.'
     const fallback: DocumentStatus = statusBefore === 'PROCESSING' ? 'RECEIVED' : statusBefore

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { can, findClientInScope, getSessionUser } from '@/lib/rbac'
+import { can, clientScope, findClientInScope, getSessionUser } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
 import { getFileStorage } from '@/lib/storage'
 import { sha256, validateUpload } from '@/lib/extraction/sniff'
@@ -74,16 +74,6 @@ export async function POST(request: Request) {
 
   const checksum = sha256(buffer)
 
-  // Version chain: everything ever uploaded against this requirement for this client.
-  const existing = requirement
-    ? await db.clientDocument.findMany({
-        where: { clientId, requirementId: requirement.id },
-        select: { id: true, version: true, status: true, storageKey: true },
-        orderBy: { version: 'asc' },
-      })
-    : []
-  const plan = planUpload(existing)
-
   const { key } = await getFileStorage().put(buffer, {
     fileName: file.name,
     mimeType: validation.mimeType,
@@ -102,18 +92,23 @@ export async function POST(request: Request) {
     receivedAt: new Date(),
   }
 
-  const doc =
-    plan.mode === 'fill'
-      ? await db.clientDocument.update({ where: { id: plan.documentId }, data })
-      : await db.clientDocument.create({
-          data: {
-            ...data,
-            clientId,
-            requirementId: requirement?.id ?? null,
-            version: plan.version,
-            supersedesId: plan.supersedesId,
-          },
-        })
+  const doc = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Client" WHERE id = ${clientId} FOR UPDATE`
+    const stillAssigned = await tx.client.findFirst({ where: { AND: [clientScope(user), { id: clientId }] }, select: { id: true } })
+    if (!stillAssigned) return null
+    const existing = requirement ? await tx.clientDocument.findMany({
+      where: { clientId, requirementId: requirement.id },
+      select: { id: true, version: true, status: true, storageKey: true }, orderBy: { version: 'asc' },
+    }) : []
+    const plan = planUpload(existing)
+    return plan.mode === 'fill'
+      ? tx.clientDocument.update({ where: { id: plan.documentId }, data })
+      : tx.clientDocument.create({ data: { ...data, clientId, requirementId: requirement?.id ?? null, version: plan.version, supersedesId: plan.supersedesId } })
+  })
+  if (!doc) {
+    await getFileStorage().delete(key)
+    return json(403, { error: 'Client assignment changed. Reload and try again.' })
+  }
 
   await recordAudit(user, {
     action: 'document.uploaded',

@@ -102,7 +102,7 @@ describe('hotLeadWhere', () => {
     organizationId: 'org1',
     organizationName: 'Org',
     roleId: 'r1',
-    role: 'ADMIN',
+    role: 'SUPER_ADMIN',
     roleName: 'Admin / Operations',
     isOwner: false,
     regionId: null,

@@ -178,7 +178,7 @@ export async function buildAssistContext(user: SessionUser, clientId: string): P
     currentStage: { select: { name: true } },
     contracts: { orderBy: { createdAt: 'desc' as const } },
     creditPulls: { orderBy: { createdAt: 'desc' as const }, take: 1 },
-    surveyResponses: { orderBy: { updatedAt: 'desc' as const }, take: 1 },
+    surveyResponses: { where: { survey: { name: { not: 'ProdigyFlo Final Questionnaire' } } }, orderBy: { updatedAt: 'desc' as const }, take: 1 },
     intakeSubmissions: {
       orderBy: { createdAt: 'desc' as const },
       take: 5,

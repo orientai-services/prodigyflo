@@ -10,6 +10,7 @@
 import { pathLabel, trenchLabel } from './route'
 import { str, type Path, type Trench } from './schema'
 import { federalLevers, leverFor, stateLeversForFile } from './state-levers'
+import { normalizeProduct } from '@/lib/desk-extract'
 
 export type CloserWinInput = {
   firstName: string
@@ -25,6 +26,11 @@ export type CloserWinInput = {
   contractValue: string
   payoff: string
   signedDate: string
+  effectiveDate?: string
+  firstYearMonthly?: string
+  escalation?: string
+  paymentBasis?: string
+  termNote?: string
   painType: string
   painNarrative: string
   saleOrRefi: string
@@ -102,6 +108,9 @@ function pullList(input: CloserWinInput): string[] {
 }
 
 export function composeCloserWinBrief(input: CloserWinInput): CloserWinBrief {
+  // PPA / lease economics and an unknown product cannot inherit a loan exit
+  // narrative or a cancellation deadline inferred from an effective date.
+  if (normalizeProduct(input.product) !== 'loan') return composeContractReviewBrief(input)
   const name = `${str(input.firstName)} ${str(input.lastName)}`.trim() || 'this client'
   const product = str(input.product) || 'MISSING'
   const lender = str(input.lender) || 'MISSING'
@@ -318,6 +327,39 @@ export function composeCloserWinBrief(input: CloserWinInput): CloserWinBrief {
     talkingPoints,
     recommendedNextStep,
     missingForCeiling,
+  }
+}
+
+function composeContractReviewBrief(input: CloserWinInput): CloserWinBrief {
+  const name = `${str(input.firstName)} ${str(input.lastName)}`.trim() || 'Client'
+  const product = normalizeProduct(input.product)
+  const show = (value: string | undefined) => str(value) || 'MISSING'
+  const dollars = (value: string | undefined) => value && present(value) ? moneyish(value) : 'MISSING'
+  const facts = [
+    `${name} · ${show(input.city)}, ${show(input.state)}.`,
+    `Reviewed product: ${product || 'MISSING — review the document classification'}. Contract counterparty: ${show(input.lender)}.`,
+    `Customer signature: ${show(input.signedDate)}. Contract effective date: ${show(input.effectiveDate)}.`,
+    `First-year monthly payment: ${dollars(input.firstYearMonthly)}. Contract / intake monthly payment: ${dollars(input.monthly)}. Payment basis: ${show(input.paymentBasis)}.`,
+    `Term: ${show(input.termMonths)} months. Annual payment escalation: ${show(input.escalation).replace(/%$/, '')}${input.escalation ? '%' : ''}. ${input.termNote || ''}`.trim(),
+    `Payoff / buyout quote: ${dollars(input.payoff)}. Reported concern: ${show(input.painNarrative || input.painType)}.`,
+  ]
+  const missing = [...input.missing]
+  const next = input.ready ? 'Review the completed packet with the client; require staff approval before any submission.' : `Review the original document and complete: ${missing.join(', ') || 'missing or unverified facts'}.`
+  const redline = [
+    'Document extraction must be reviewed before it is presented as confirmed client data.',
+    'A first-year payment does not establish today’s payment. The actual in-service date and current statement must be checked.',
+    'Annual payment escalation is not loan APR. No loan principal, dealer fee, amortization, or cancellation entitlement is inferred.',
+    'Review the agreement’s cancellation and transfer clauses. Do not infer a deadline from the signature or effective date alone.',
+  ]
+  return {
+    situation: facts.join(' '), fileFacts: facts, redline,
+    cancelPath: ['Review the PPA / lease agreement and its current account records before selecting a resolution path.'],
+    whyThisFile: [input.hasContract ? 'Agreement received for review.' : 'Agreement still needed.'],
+    outcomeCeiling: 'No resolution or financial outcome is established by document extraction alone.',
+    closeTalk: `Confirm the client’s concern and review the agreement facts together. ${next}`,
+    highlights: facts.slice(1, 5), objections: [], talkingPoints: [next],
+    recommendedNextStep: next,
+    missingForCeiling: ['Current dated statement', 'Actual in-service date', ...missing],
   }
 }
 

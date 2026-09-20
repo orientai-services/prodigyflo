@@ -9,7 +9,17 @@ export type CaseCell = {
   unverified?: boolean
 }
 
+export type CaseDocFile = {
+  id: string
+  label: string
+  version: number
+  status: string
+  fileUrl: string | null
+  mimeType: string | null
+}
+
 export type CaseDocTile = {
+  files: CaseDocFile[]
   key: string
   label: string
   state: DeskDocState
@@ -63,6 +73,9 @@ export type CaseFileData = {
   closers: { id: string; name: string }[]
   canAssign: boolean
   canBook: boolean
+  canUpload: boolean
+  timezone: string
+  appointmentId: string | null
   canRequest: boolean
   canBrief: boolean
   bookDate: string

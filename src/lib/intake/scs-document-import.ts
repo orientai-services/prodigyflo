@@ -11,6 +11,11 @@ import { scsRequirementId } from './scs-document-requirements'
 
 const MAX_IMPORT_MB = 25
 const MAX_ATTEMPTS = 8
+const MAX_EXTRACTION_ATTEMPTS = 3
+const PUBLIC_RECORD_SUMMARY = 'public_record_summary'
+// The leading category also prevents filename heuristics from presenting a
+// generated UCC/deed search guide as an actual record on the client profile.
+const PUBLIC_RECORD_REFERENCE_LABEL = 'Other documents — generated public-record search reference'
 
 function value(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null
@@ -135,7 +140,12 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
 
     stage = 'fetching the authenticated SCS export'
     const response = await fetch(exportUrl(row.sourceDocumentId), {
-      headers: { 'X-SCS-Export-Token': exportToken() },
+      headers: {
+        'X-SCS-Export-Token': exportToken(),
+        ...(process.env.SCS_VERCEL_PROTECTION_BYPASS ? { 'x-vercel-protection-bypass': process.env.SCS_VERCEL_PROTECTION_BYPASS } : {}),
+      },
+      // Never forward either credential to a redirected destination.
+      redirect: 'error',
       cache: 'no-store',
       signal: AbortSignal.timeout(55_000),
     })
@@ -163,7 +173,8 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
     const sourceChecksum = response.headers.get('x-scs-sha256')
     if (sourceChecksum && sourceChecksum !== checksum) throw new Error('SCS document checksum mismatch.')
     stage = 'resolving the SCS upload area'
-    let requirementId = await scsRequirementId(row.organizationId, row.sourceDocumentType)
+    const referenceOnly = row.sourceDocumentType === PUBLIC_RECORD_SUMMARY
+    let requirementId = referenceOnly ? null : await scsRequirementId(row.organizationId, row.sourceDocumentType)
     if (requirementId) {
       // Two SCS files can share kind=agreement (contract + amendment). The
       // first occupies the upload-area slot; later files still persist as
@@ -209,9 +220,9 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
           sizeBytes: bytes.length,
           checksum,
           scanStatus: 'clean',
-          label: (row.sourceFileName ?? row.sourceDocumentType ?? 'SCS document').slice(0, 120),
+          label: referenceOnly ? PUBLIC_RECORD_REFERENCE_LABEL : (row.sourceFileName ?? row.sourceDocumentType ?? 'SCS document').slice(0, 120),
           receivedAt: now,
-          internalComment: `Imported from SCS document ${row.sourceDocumentId}${row.sourceLeadId ? ` for lead ${row.sourceLeadId}` : ''}.`,
+          internalComment: `Imported from SCS document ${row.sourceDocumentId}${row.sourceLeadId ? ` for lead ${row.sourceLeadId}` : ''}. Source type: ${row.sourceDocumentType ?? 'unspecified'}.${referenceOnly ? ' Origin: SCS-generated public-record lookup summary. Reference only; not an official deed, UCC filing, lien or permit. Does not fulfill a record requirement and is excluded from automatic fact extraction.' : ''}`,
         },
       })
       await store.externalDocumentImport.update({
@@ -228,8 +239,8 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
           action: 'scs.document_imported',
           entityType: 'ClientDocument',
           entityId: documentId,
-          summary: `Imported SCS document ${row.sourceDocumentType ?? row.sourceFileName ?? row.sourceDocumentId}.`,
-          after: { sourceDocumentId: row.sourceDocumentId, sourceLeadId: row.sourceLeadId, checksum, sizeBytes: bytes.length },
+          summary: `Imported SCS ${referenceOnly ? 'generated search reference (not an official public record)' : `document ${row.sourceDocumentType ?? row.sourceFileName ?? row.sourceDocumentId}`}.`,
+          after: { sourceDocumentId: row.sourceDocumentId, sourceLeadId: row.sourceLeadId, sourceDocumentType: row.sourceDocumentType, classification: referenceOnly ? 'reference_only' : 'source_document', checksum, sizeBytes: bytes.length },
         },
       })
     })
@@ -296,14 +307,34 @@ export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: 
  * the original mock result for audit.
  */
 export async function runPendingScsDocumentExtractions(limit = 5) {
+  const empty = { attempted: 0, completed: 0, failed: 0, skipped: 0 }
+  const cohort = selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true')
+  if (process.env.SCS_IMPORT_REQUIRE_COHORT === 'true' && cohort === undefined) throw Error('Execution cohort required')
+  if (cohort === null) return empty
+  if (cohort && (!cohort.organizationId || !cohort.sourceId)) throw Error('Organization and source required')
+  const scope: Prisma.ExternalDocumentImportWhereInput = cohort ? {
+    organizationId: cohort.organizationId,
+    intakeSubmission: { sourceId: cohort.sourceId },
+    OR: cohort.cases.map((item) => ({ sourceLeadId: item.leadId, sourceDocumentId: { in: item.documentIds } })),
+  } : {}
+  // Generated search summaries remain accessible files, but cannot supply
+  // extracted facts or masquerade as an official public record. Preserve
+  // eligibility for historical imports whose source type was not supplied.
+  const extractionScope: Prisma.ExternalDocumentImportWhereInput = {
+    AND: [scope, { OR: [{ sourceDocumentType: null }, { sourceDocumentType: { not: PUBLIC_RECORD_SUMMARY } }] }],
+  }
+  if (process.env.AI_PROVIDER !== 'anthropic') return { ...empty, blockedReason: 'SCS document extraction requires the live Anthropic provider; mock processing is not an end-to-end test.' }
   const staleBefore = new Date(Date.now() - 5 * 60_000)
   // A serverless invocation can end after the model call was started. Release
   // that durable claim so the document is not stranded in RUNNING forever.
   await db.documentExtraction.updateMany({
     where: {
       provider: 'anthropic',
-      status: 'RUNNING',
-      startedAt: { lt: staleBefore },
+      document: { externalImport: { is: { ...extractionScope, status: 'IMPORTED' } } },
+      OR: [
+        { status: 'RUNNING', startedAt: { lt: staleBefore } },
+        { status: 'PENDING', createdAt: { lt: staleBefore } },
+      ],
     },
     data: {
       status: 'FAILED',
@@ -312,28 +343,40 @@ export async function runPendingScsDocumentExtractions(limit = 5) {
     },
   })
 
+  // Includes a worker interrupted after claiming the document but before
+  // creating its extraction row. Never release a still-active attempt.
+  await db.clientDocument.updateMany({
+    where: {
+      externalImport: { is: { ...extractionScope, status: 'IMPORTED' } },
+      status: 'PROCESSING', updatedAt: { lt: staleBefore },
+      extractions: { none: { status: { in: ['PENDING', 'RUNNING'] } } },
+    },
+    data: { status: 'RECEIVED' },
+  })
+  const exhausted = await db.documentExtraction.groupBy({
+    by: ['documentId'],
+    where: { provider: 'anthropic', status: 'FAILED', document: { externalImport: { is: { ...extractionScope, status: 'IMPORTED' } } } },
+    having: { id: { _count: { gte: MAX_EXTRACTION_ATTEMPTS } } },
+  })
+  const eligible: Prisma.ClientDocumentWhereInput = {
+    id: { notIn: exhausted.map((row) => row.documentId) },
+    status: { notIn: ['APPROVED', 'REJECTED', 'PROCESSING'] },
+    AND: [
+      { extractions: { none: { provider: 'anthropic', status: 'COMPLETED' } } },
+      { extractions: { none: { status: { in: ['PENDING', 'RUNNING'] } } } },
+    ],
+  }
+
   const rows = await db.externalDocumentImport.findMany({
     where: {
+      ...extractionScope,
       status: 'IMPORTED',
       clientDocumentId: { not: null },
-      clientDocument: {
-        status: { notIn: ['APPROVED', 'REJECTED'] },
-        AND: [
-          // A failed run is retryable; completed and currently-running runs
-          // are not. The stale-run sweep above releases abandoned claims.
-          { extractions: { none: { provider: 'anthropic', status: { in: ['COMPLETED', 'RUNNING'] } } } },
-          {
-            OR: [
-              { extractions: { none: {} } },
-              { extractions: { some: { provider: 'mock' } } },
-            ],
-          },
-        ],
-      },
+      clientDocument: eligible,
     },
     // A fresh upload should never wait behind an old mock-only backlog.
     orderBy: { createdAt: 'desc' },
-    take: limit,
+    take: Math.min(Math.max(limit, 1), 5),
     select: { clientDocumentId: true },
   })
 
@@ -344,6 +387,12 @@ export async function runPendingScsDocumentExtractions(limit = 5) {
       continue
     }
     try {
+      if (selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true') === null) break
+      const claim = await db.clientDocument.updateMany({
+        where: { ...eligible, id: row.clientDocumentId, externalImport: { is: { ...extractionScope, status: 'IMPORTED' } } },
+        data: { status: 'PROCESSING' },
+      })
+      if (claim.count !== 1) { result.skipped++; continue }
       const extraction = await runExtraction(row.clientDocumentId)
       if (extraction.status === 'COMPLETED') result.completed++
       else result.failed++

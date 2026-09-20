@@ -1,23 +1,18 @@
 import 'server-only'
 import { cache } from 'react'
-import { cookies } from 'next/headers'
+import { headers } from 'next/headers'
+import { staffRouteAllowed } from '@/lib/staff-routes'
 import { redirect } from 'next/navigation'
 import type { Prisma, RoleKey } from '@prisma/client'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { ORG_SWITCH_COOKIE, verifyOrgSwitchGrant } from '@/lib/org-switch'
-import type { PermissionKey } from '@/lib/permissions'
+import { effectivePermissions, isStaffRole, type PermissionKey } from '@/lib/permissions'
 
 export type SessionUser = {
   id: string
   name: string
   email: string
-  /**
-   * The organization the user is CURRENTLY working in. Normally the org the
-   * user row belongs to; for agency users holding a valid org-switch grant it
-   * is the chosen child account instead. Every query that scopes by
-   * organizationId therefore follows the switch automatically.
-   */
+  /** The single workspace this staff identity belongs to. */
   organizationId: string
   organizationName: string
   /**
@@ -26,26 +21,13 @@ export type SessionUser = {
    * Branding reads this rather than the name, which users can edit.
    */
   organizationSlug?: string
-  /**
-   * The organization the user's row actually lives in — always their agency
-   * (or standalone) org, never affected by switching. Use it when the HOME
-   * identity matters: the agency console, the switcher, audit attribution.
-   * getSessionUser always sets it; optional only so pre-existing test
-   * fixtures that build SessionUser literals stay valid. Treat absence as
-   * "same as organizationId".
-   */
+  /** Compatibility fields for retained historical modules; organization switching is retired. */
   homeOrganizationId?: string
-  /**
-   * Kind of the HOME organization ('AGENCY' | 'CLIENT'). Deliberately the
-   * home org's kind, not the active one: it answers "is this an agency user
-   * who may switch?", which must not change while visiting a client account.
-   * getSessionUser always sets it; optional for fixtures, absence = CLIENT.
-   */
   organizationKind?: string
   roleId: string
   role: RoleKey
   roleName: string
-  /** True owner of the organization. Never surfaced in the UI — reads as Super Admin. */
+  /** Compatibility alias derived from Super Admin role; never a separate authority. */
   isOwner: boolean
   regionId: string | null
   teamId: string | null
@@ -53,9 +35,9 @@ export type SessionUser = {
   avatarUrl: string | null
   title: string | null
   permissions: Set<PermissionKey>
-  /** Set only for CLIENT-role users: the client record they own. */
+  /** Retained type compatibility; always null for active staff. */
   portalClientId: string | null
-  /** Optional post-login landing override; falls back to ROLE_HOME. */
+  /** Retained type compatibility; active staff always land on Board. */
   landingPath?: string | null
 }
 
@@ -82,68 +64,31 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
       // `slug` is the per-account branding key — see components/brand/org-brand.
       organization: { select: { id: true, name: true, kind: true, slug: true } },
       role: { include: { permissions: { include: { permission: true } } } },
-      clientPortalLink: { select: { id: true } },
     },
   })
-  if (!user) return null
-
-  // ── agency org switch ──────────────────────────────────────
-  // A valid `pf-active-org` grant lets a user whose HOME org is an AGENCY
-  // work inside one of its direct, non-deleted child accounts: the session's
-  // organizationId/organizationName flip to the target, and the org-local
-  // anchors (region/team/manager/portal link) are nulled because they belong
-  // to the home org and would be dangling references in the target.
-  //
-  // Role and permissions deliberately still resolve from the HOME org role:
-  // the child account has no Role row for this user, and the agency's
-  // authority is what admits them — an agency admin acts as an admin wherever
-  // they go. With region/team null, their base `clients:read_all` scope
-  // applies cleanly inside the target org via clientScope().
-  //
-  // Absent, expired, forged, self-targeted, or ineligible cookies all fall
-  // through silently — byte-identical to pre-switch behavior.
-  let activeOrg: { id: string; name: string; slug: string } = {
-    id: user.organizationId,
-    name: user.organization.name,
-    slug: user.organization.slug,
-  }
-  let switched = false
-  if (user.organization.kind === 'AGENCY') {
-    const token = (await cookies()).get(ORG_SWITCH_COOKIE)?.value
-    const grant = token ? verifyOrgSwitchGrant(token) : null
-    if (grant && grant.uid === user.id && grant.orgId !== user.organizationId) {
-      const target = await db.organization.findFirst({
-        where: { id: grant.orgId, deletedAt: null, parentOrganizationId: user.organizationId },
-        select: { id: true, name: true, slug: true },
-      })
-      if (target) {
-        activeOrg = target
-        switched = true
-      }
-    }
-  }
+  if (!user || !isStaffRole(user.role.key)) return null
 
   return {
     id: user.id,
     name: user.name,
     email: user.email,
-    organizationId: activeOrg.id,
-    organizationName: activeOrg.name,
-    organizationSlug: activeOrg.slug,
+    organizationId: user.organizationId,
+    organizationName: user.organization.name,
+    organizationSlug: user.organization.slug,
     homeOrganizationId: user.organizationId,
-    organizationKind: user.organization.kind,
+    organizationKind: 'CLIENT',
     roleId: user.roleId,
     role: user.role.key,
     roleName: user.role.name,
-    isOwner: user.isOwner,
-    regionId: switched ? null : user.regionId,
-    teamId: switched ? null : user.teamId,
-    managerId: switched ? null : user.managerId,
+    isOwner: user.role.key === 'SUPER_ADMIN',
+    regionId: null,
+    teamId: user.teamId,
+    managerId: null,
     avatarUrl: user.avatarUrl,
     title: user.title,
-    permissions: new Set(user.role.permissions.map((rp) => rp.permission.key as PermissionKey)),
-    portalClientId: switched ? null : (user.clientPortalLink?.id ?? null),
-    landingPath: user.landingPath ?? null,
+    permissions: effectivePermissions(user.role.key, user.role.permissions.map((rp) => rp.permission.key as PermissionKey)),
+    portalClientId: null,
+    landingPath: null,
   }
 })
 
@@ -151,15 +96,20 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
 export async function requireUser(): Promise<SessionUser> {
   const user = await getSessionUser()
   if (!user) redirect('/login')
+  const pathname = (await headers()).get('x-prodigy-path')
+  if (pathname && !staffRouteAllowed(user.role, pathname)) {
+    if (pathname.startsWith('/api/')) throw new ForbiddenError()
+    redirect('/forbidden')
+  }
   return user
 }
 
 export function can(user: SessionUser, permission: PermissionKey): boolean {
-  return user.permissions.has(permission)
+  return effectivePermissions(user.role, user.permissions).has(permission)
 }
 
 export function canAny(user: SessionUser, permissions: PermissionKey[]): boolean {
-  return permissions.some((p) => user.permissions.has(p))
+  return permissions.some((p) => can(user, p))
 }
 
 /** Throws ForbiddenError — for server actions and route handlers. */
@@ -189,53 +139,9 @@ export function clientScope(user: SessionUser): Prisma.ClientWhereInput {
     deletedAt: null,
   }
 
-  // ADMIN / SUPER_ADMIN see every client in THIS organization. Team filters
-  // must not hide a file from org admins. Other orgs stay unreachable.
-  if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.permissions.has('clients:read_all')) return base
-
-  if (user.permissions.has('clients:read_region')) {
-    return {
-      ...base,
-      OR: [
-        { regionId: user.regionId },
-        { ownerId: user.id },
-        { team: { regionId: user.regionId } },
-      ],
-    }
-  }
-
-  if (user.permissions.has('clients:read_team')) {
-    return {
-      ...base,
-      OR: [
-        { teamId: user.teamId },
-        { ownerId: user.id },
-        { owner: { managerId: user.id } },
-        { team: { managerId: user.id } },
-      ],
-    }
-  }
-
-  if (user.role === 'DOCUMENT_COLLECTOR') {
-    // Collectors reach a client only through a document assigned to them.
-    return { ...base, documents: { some: { collectorId: user.id } } }
-  }
-
-  if (user.permissions.has('clients:read_assigned')) {
-    return {
-      ...base,
-      OR: [
-        { ownerId: user.id },
-        { assignments: { some: { assigneeId: user.id, isActive: true } } },
-      ],
-    }
-  }
-
-  if (user.role === 'CLIENT') {
-    return { ...base, portalUserId: user.id }
-  }
-
-  // No client-read permission at all — match nothing.
+  if (user.role === 'SUPER_ADMIN') return base
+  // The current owner is authoritative; historical Assignment rows grant nothing.
+  if (user.role === 'CLOSER') return { ...base, ownerId: user.id }
   return { ...base, id: '__none__' }
 }
 
@@ -262,15 +168,10 @@ export async function requireClientInScope(user: SessionUser, clientId: string) 
 export function userScope(user: SessionUser): Prisma.UserWhereInput {
   const base: Prisma.UserWhereInput = { organizationId: user.organizationId, deletedAt: null }
 
-  if (user.permissions.has('clients:read_all')) return base
-  if (user.permissions.has('clients:read_region')) return { ...base, regionId: user.regionId }
-  if (user.permissions.has('clients:read_team')) {
-    return { ...base, OR: [{ teamId: user.teamId }, { managerId: user.id }, { id: user.id }] }
-  }
-  return { ...base, id: user.id }
+  return user.role === 'SUPER_ADMIN' ? base : { ...base, id: user.id }
 }
 
 /** True when the viewer is allowed to see staff-only content on a client record. */
 export function canSeeInternal(user: SessionUser): boolean {
-  return user.role !== 'CLIENT' && user.permissions.has('communications:read_internal')
+  return can(user, 'communications:read_internal')
 }

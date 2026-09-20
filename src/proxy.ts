@@ -45,13 +45,25 @@ const PUBLIC_PREFIXES = [
 ]
 
 export function proxy(request: NextRequest) {
+  // Release cutovers stop pages, server actions, inbound writes, and job drains
+  // together. A retryable response leaves SCS deliveries in its durable queue.
+  if (process.env.PRODIGYFLO_MAINTENANCE === 'true') {
+    return new NextResponse('Prodigyflo is being updated. Please try again shortly.', {
+      status: 503,
+      headers: { 'Retry-After': '60', 'Cache-Control': 'no-store' },
+    })
+  }
   const { pathname } = request.nextUrl
+  // Overwrite any caller-supplied value; server authorization reads this path.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-prodigy-path', pathname)
+  const next = () => NextResponse.next({ request: { headers: requestHeaders } })
 
   // Exact operator route has its own fail-closed bearer + cohort authorization.
-  if (pathname === '/api/internal/scs/execute') return NextResponse.next()
+  if (pathname === '/api/internal/scs/execute') return next()
 
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next()
+    return next()
   }
 
   const hasSession =
@@ -64,7 +76,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return NextResponse.next()
+  return next()
 }
 
 export const config = {

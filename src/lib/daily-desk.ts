@@ -6,6 +6,9 @@
 export const DESK_TIMEZONE = 'America/Los_Angeles'
 
 export type DeskChip = {
+  appointmentId: string
+  startsAt: string
+  status: string
   clientId: string
   firstName: string
   lastName: string
@@ -37,6 +40,7 @@ export type DeskLead = {
 export type DeskCloser = { id: string; name: string }
 
 export type DeskBoard = {
+  timezone: string
   month: string
   title: string
   today: string

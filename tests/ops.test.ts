@@ -38,7 +38,7 @@ function session(
     organizationId,
     organizationName: 'Ops Test',
     roleId: 'role',
-    role: 'ADMIN',
+    role: userId === adminId || userId === outsiderId ? 'SUPER_ADMIN' : 'CLOSER',
     roleName: 'Admin',
     isOwner: false,
     regionId: null,
@@ -73,17 +73,18 @@ beforeAll(async () => {
   // Org A — the org under test.
   const a = await db.organization.create({ data: { name: 'Ops Org A', slug: `${stamp}-a` } })
   orgA = a.id
-  const roleA = await db.role.create({ data: { organizationId: orgA, key: 'ADMIN', name: 'Admin' } })
+  const roleA = await db.role.create({ data: { organizationId: orgA, key: 'SUPER_ADMIN', name: 'Admin' } })
   const admin = await db.user.create({
     data: { organizationId: orgA, roleId: roleA.id, email: `admin.${stamp}@example.com`, passwordHash: 'x', name: 'Ada Admin' },
   })
   adminId = admin.id
+  const closerRole = await db.role.create({ data: { organizationId: orgA, key: 'CLOSER', name: 'Closer' } })
   const closerA = await db.user.create({
-    data: { organizationId: orgA, roleId: roleA.id, email: `ca.${stamp}@example.com`, passwordHash: 'x', name: 'Cleo Closer' },
+    data: { organizationId: orgA, roleId: closerRole.id, email: `ca.${stamp}@example.com`, passwordHash: 'x', name: 'Cleo Closer' },
   })
   closerAId = closerA.id
   const closerB = await db.user.create({
-    data: { organizationId: orgA, roleId: roleA.id, email: `cb.${stamp}@example.com`, passwordHash: 'x', name: 'Bert Closer' },
+    data: { organizationId: orgA, roleId: closerRole.id, email: `cb.${stamp}@example.com`, passwordHash: 'x', name: 'Bert Closer' },
   })
   closerBId = closerB.id
 
@@ -134,7 +135,7 @@ beforeAll(async () => {
   // Org B — a foreign org that must never leak into org A's results.
   const b = await db.organization.create({ data: { name: 'Ops Org B', slug: `${stamp}-b` } })
   orgB = b.id
-  const roleB = await db.role.create({ data: { organizationId: orgB, key: 'ADMIN', name: 'Admin' } })
+  const roleB = await db.role.create({ data: { organizationId: orgB, key: 'SUPER_ADMIN', name: 'Admin' } })
   const outsider = await db.user.create({
     data: { organizationId: orgB, roleId: roleB.id, email: `out.${stamp}@example.com`, passwordHash: 'x', name: 'Olga Outsider' },
   })

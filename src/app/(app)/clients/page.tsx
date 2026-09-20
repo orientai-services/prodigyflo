@@ -1,3 +1,5 @@
+import { finalDeskEnabled } from '@/lib/final-desk/data'
+import { FinalDeskPage } from '@/components/final-desk/page'
 import Link from 'next/link'
 import { Download, Plus, Upload } from 'lucide-react'
 import type { Prisma, StageKey } from '@prisma/client'
@@ -14,7 +16,6 @@ import { fullName, relativeTime } from '@/lib/format'
 import { listedMoney } from '@/lib/daily-desk-finance'
 import { DEFAULT_STAGES } from '@/lib/pipeline'
 import { scsReadiness, scsReadinessLabel } from '@/lib/intake/scs-readiness'
-import { deskVisibleClientWhere } from '@/lib/intake/scs-desk'
 
 export const metadata = { title: 'Clients' }
 
@@ -31,6 +32,7 @@ const SORTS = {
 export type SortKey = keyof typeof SORTS
 
 export default async function ClientsPage({ searchParams }: PageProps<'/clients'>) {
+  if (finalDeskEnabled()) return <FinalDeskPage view="clients" />
   const user = await requireUser()
   const params = await searchParams
 
@@ -43,7 +45,7 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
   const sort = (str(params.sort) as SortKey) ?? 'recent'
   const page = Math.max(1, Number(str(params.page) ?? 1) || 1)
 
-  const filters: Prisma.ClientWhereInput[] = [clientScope(user), deskVisibleClientWhere()]
+  const filters: Prisma.ClientWhereInput[] = [clientScope(user)]
   if (q) {
     filters.push({
       OR: [

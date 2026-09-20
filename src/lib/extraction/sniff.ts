@@ -59,6 +59,7 @@ export function normalizeMime(mime: string): string {
   if (m === 'image/jpg' || m === 'image/pjpeg') return 'image/jpeg'
   if (m === 'application/x-pdf') return 'application/pdf'
   if (m === 'image/heif') return 'image/heic'
+  if (m === 'message/rfc822') return 'text/plain'
   if (m.startsWith('text/')) return 'text/plain'
   return m
 }

@@ -1,5 +1,7 @@
 import 'server-only'
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
 import { evaluateReady } from './ready'
 import { buildDashboardPayload } from './dashboard'
 import { buildStrawberrySkill } from './skill'
@@ -7,25 +9,12 @@ import { composeCloserWinBrief, formatCloserWinBrief } from './closer-win'
 import { evaluateFloorAudit } from './floor-audit'
 import { feeTrench, pathLabel, routePath, trenchLabel } from './route'
 import { asRecord, str } from './schema'
+import { extractedFact, normalizeProduct, termMonthsFromYears, type ExtractableDoc } from '@/lib/desk-extract'
 
-function extracted(docs: {
-  label: string | null
-  fileName: string | null
-  requirement: { key: string } | null
-  extractions: {
-    detectedTypeKey: string | null
-    fields: { key: string; value: string | null; correctedValue: string | null }[]
-  }[]
-}[], typeKey: string, fieldKey: string): string {
-  for (const d of docs) {
-    for (const ex of d.extractions) {
-      if (str(ex.detectedTypeKey) !== typeKey) continue
-      const f = ex.fields.find((x) => x.key === fieldKey)
-      const v = str(f?.correctedValue) || str(f?.value)
-      if (v) return v
-    }
-  }
-  return ''
+/** Final packets use only reviewed document facts, never raw AI suggestions. */
+function extracted(docs: ExtractableDoc[], typeKey: string, fieldKey: string): string {
+  const fact = extractedFact(docs, typeKey, fieldKey)
+  return fact?.verified ? fact.value : ''
 }
 
 export async function assemblePacket(clientId: string) {
@@ -33,7 +22,7 @@ export async function assemblePacket(clientId: string) {
     where: { id: clientId },
     include: {
       addresses: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }], take: 1 },
-      surveyResponses: { orderBy: { updatedAt: 'desc' }, take: 1 },
+      surveyResponses: { where: { survey: { name: { not: 'ProdigyFlo Final Questionnaire' } } }, orderBy: { updatedAt: 'desc' }, take: 1 },
       documents: {
         where: { status: { notIn: ['REJECTED', 'EXPIRED'] } },
         include: {
@@ -41,12 +30,12 @@ export async function assemblePacket(clientId: string) {
           extractions: {
             where: { status: 'COMPLETED' },
             orderBy: { createdAt: 'desc' },
-            take: 1,
             include: { fields: true },
           },
         },
       },
       contracts: { take: 1 },
+      cysFieldValues: { where: { status: 'VERIFIED', verifiedById: { not: null } } },
     },
   })
   if (!client) return null
@@ -61,69 +50,77 @@ export async function assemblePacket(clientId: string) {
     /finance|loan|til/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''}`),
   )
 
-  const product =
-    str(answers.product_confirmed) ||
-    str(client.contracts[0]?.productType) ||
-    str(answers.product_type_guess) ||
-    ''
-  // Field 27: finance doc first, then statement, then the homeowner guess.
-  const lender =
-    extracted(docs, 'finance_agreement', 'lender_name') ||
-    extracted(docs, 'lender_statement', 'lender_name') ||
-    str(answers.lender_confirmed) ||
-    str(answers.lender_guess)
-  const monthly =
-    extracted(docs, 'finance_agreement', 'monthly_payment') ||
-    extracted(docs, 'solar_contract', 'monthly_payment') ||
-    extracted(docs, 'lender_statement', 'monthly_payment') ||
-    str(answers.monthly_guess)
+  const confirmed = (key: string) => client.cysFieldValues.find(field => field.fieldKey === key)?.value || ''
+  const product = normalizeProduct(confirmed('product_confirmed') || extracted(docs, 'solar_contract', 'product_type') || extracted(docs, 'finance_agreement', 'product_type'))
+  const isPpaOrLease = product === 'ppa' || product === 'lease'
+  const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
+  const installer = extracted(docs, 'solar_contract', 'installer_name')
+  const lender = confirmed('lender_confirmed') || (isPpaOrLease
+    ? extracted(docs, 'solar_contract', 'contract_counterparty')
+    : extracted(docs, type, 'lender_name') || extracted(docs, 'lender_statement', 'lender_name'))
+  const monthly = extracted(docs, 'lender_statement', 'monthly_payment') || extracted(docs, type, 'monthly_payment') || confirmed('monthly_guess') || str(answers.monthly_guess)
+  const firstYearMonthly = isPpaOrLease ? extracted(docs, 'solar_contract', 'first_year_monthly_payment') : ''
+  const statedYears = extracted(docs, type, 'term_years')
+  const directTerm = confirmed('term_months') || extracted(docs, type, 'term_months')
+  const term = directTerm || termMonthsFromYears(statedYears)
+  const apr = isPpaOrLease ? '' : confirmed('apr_or_escalator') || extracted(docs, 'finance_agreement', 'apr')
+  const escalation = isPpaOrLease ? confirmed('apr_or_escalator') || extracted(docs, 'solar_contract', 'escalator_pct') : ''
+  const effectiveDate = extracted(docs, 'solar_contract', 'contract_date')
+  const signatureDate = extracted(docs, 'solar_contract', 'customer_signed_date') || str(client.contracts[0]?.signedAt)
+  const termNote = !directTerm && term ? `Term months derived from stated years × 12 (${statedYears}).` : ''
 
   const ready = evaluateReady({
-    first_name: client.firstName,
-    last_name: client.lastName,
-    phone: client.phone,
-    email: client.email,
-    property_street: str(answers.property_street) || addr?.line1 || '',
-    city: str(answers.city) || addr?.city || '',
-    state: str(answers.state) || addr?.state || '',
-    zip: str(answers.zip) || addr?.postalCode || '',
+    first_name: confirmed('first_name') || client.firstName,
+    last_name: confirmed('last_name') || client.lastName,
+    phone: confirmed('phone') || client.phone,
+    email: confirmed('email') || client.email,
+    property_street: (confirmed('property_street') || str(answers.property_street)) || addr?.line1 || '',
+    city: (confirmed('city') || str(answers.city)) || addr?.city || '',
+    state: (confirmed('state') || str(answers.state)) || addr?.state || '',
+    zip: (confirmed('zip') || str(answers.zip)) || addr?.postalCode || '',
     product_confirmed: product,
     lender_confirmed: lender,
-    monthly,
+    monthly: monthly || firstYearMonthly,
     has_contract: hasContract,
     has_finance: hasFinance,
   })
 
   const path = routePath({
     lender,
-    sale_or_refi: str(answers.sale_or_refi),
+    sale_or_refi: (confirmed('sale_or_refi') || str(answers.sale_or_refi)),
     has_contract: hasContract || hasFinance,
   })
-  const trench = feeTrench(
-    extracted(docs, 'finance_agreement', 'amount_financed') || answers.contract_value || answers.monthly_guess,
-  )
+  const trench = feeTrench(isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed'))
 
   const dashFields = {
-    'First name': client.firstName,
-    'Last name': client.lastName,
-    Phone: client.phone,
-    Email: client.email,
-    'Property street': str(answers.property_street) || addr?.line1 || '',
-    City: str(answers.city) || addr?.city || '',
-    State: str(answers.state) || addr?.state || '',
-    ZIP: str(answers.zip) || addr?.postalCode || '',
-    'Mailing same as property': str(answers.mailing_same_as_property) || 'Yes',
-    Installer: extracted(docs, 'solar_contract', 'installer_name') || str(answers.installer_guess),
+    'First name': confirmed('first_name') || client.firstName,
+    'Last name': confirmed('last_name') || client.lastName,
+    Phone: confirmed('phone') || client.phone,
+    Email: confirmed('email') || client.email,
+    'Property street': (confirmed('property_street') || str(answers.property_street)) || addr?.line1 || '',
+    City: (confirmed('city') || str(answers.city)) || addr?.city || '',
+    State: (confirmed('state') || str(answers.state)) || addr?.state || '',
+    ZIP: (confirmed('zip') || str(answers.zip)) || addr?.postalCode || '',
+    'Mailing same as property': confirmed('mailing_same_as_property') || str(answers.mailing_same_as_property),
+    Installer: installer,
     Lender: lender,
     Product: product,
-    'Account or loan #': extracted(docs, 'finance_agreement', 'account_number') || 'MISSING',
-    'Original contract value': extracted(docs, 'finance_agreement', 'amount_financed'),
-    'Current payoff': extracted(docs, 'payoff_letter', 'payoff_amount') || 'MISSING',
+    'Account or loan #': isPpaOrLease ? 'Not a loan' : confirmed('account_number') || extracted(docs, 'finance_agreement', 'account_number') || 'MISSING',
+    'Original contract value': isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed'),
+    'Current payoff': confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount') || 'MISSING',
     'Monthly payment': monthly,
-    APR: extracted(docs, 'finance_agreement', 'apr') || 'MISSING',
-    'Term months': extracted(docs, 'finance_agreement', 'term_months'),
-    'Pain type': str(answers.pain_type),
-    'Complaint summary': str(answers.pain_narrative),
+    APR: isPpaOrLease ? 'Not applicable to PPA / lease' : apr || 'MISSING',
+    'First-year monthly payment': firstYearMonthly,
+    'Payment basis': extracted(docs, type, 'payment_basis'),
+    'Annual payment escalation': escalation,
+    'Contract effective date': effectiveDate,
+    'Customer signature date': signatureDate,
+    'Actual in-service date': extracted(docs, type, 'in_service_date'),
+    'Term starts': extracted(docs, type, 'term_start_basis'),
+    'Term months': term,
+    'Notes for closer': [termNote, isPpaOrLease ? 'First-year payment is not today’s bill. No loan principal or APR inferred.' : '', 'Only reviewed document facts are included.'].filter(Boolean).join(' '),
+    'Pain type': (confirmed('pain_type') || str(answers.pain_type)),
+    'Complaint summary': (confirmed('pain_narrative') || str(answers.pain_narrative)),
     'Fee trench': trenchLabel(trench),
     'Assigned path': pathLabel(path),
     'Docs attach order': docs.map((d) => d.fileName || d.label || d.id).join(', '),
@@ -131,24 +128,29 @@ export async function assemblePacket(clientId: string) {
 
   // C files (no instrument / no identity) never hit the CYS Dashboard.
   const payload = ready.closeability === 'C' ? 'BLOCKED: do not Dashboard this file.' : buildDashboardPayload(dashFields)
-  const fileId = `${client.lastName}_${client.firstName}_${dashFields.ZIP || 'UNKNOWN'}`
+  const fileId = `${dashFields['Last name']}_${dashFields['First name']}_${dashFields.ZIP || 'UNKNOWN'}`
   const win = composeCloserWinBrief({
-    firstName: client.firstName,
-    lastName: client.lastName,
-    city: str(answers.city) || addr?.city || '',
-    state: str(answers.state) || addr?.state || '',
+    firstName: dashFields['First name'],
+    lastName: dashFields['Last name'],
+    city: (confirmed('city') || str(answers.city)) || addr?.city || '',
+    state: (confirmed('state') || str(answers.state)) || addr?.state || '',
     product,
     lender,
-    installer: extracted(docs, 'solar_contract', 'installer_name') || str(answers.installer_guess),
+    installer,
     monthly,
-    termMonths: extracted(docs, 'finance_agreement', 'term_months') || extracted(docs, 'solar_contract', 'term_months'),
-    apr: extracted(docs, 'finance_agreement', 'apr'),
-    contractValue: extracted(docs, 'finance_agreement', 'amount_financed'),
-    payoff: extracted(docs, 'payoff_letter', 'payoff_amount'),
-    signedDate: extracted(docs, 'solar_contract', 'contract_date') || str(client.contracts[0]?.signedAt),
-    painType: str(answers.pain_type),
-    painNarrative: str(answers.pain_narrative),
-    saleOrRefi: str(answers.sale_or_refi),
+    termMonths: term,
+    firstYearMonthly,
+    escalation,
+    paymentBasis: extracted(docs, type, 'payment_basis'),
+    termNote,
+    effectiveDate,
+    apr,
+    contractValue: isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed'),
+    payoff: confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount'),
+    signedDate: signatureDate,
+    painType: (confirmed('pain_type') || str(answers.pain_type)),
+    painNarrative: (confirmed('pain_narrative') || str(answers.pain_narrative)),
+    saleOrRefi: (confirmed('sale_or_refi') || str(answers.sale_or_refi)),
     flags: Array.isArray(answers.experience_flags)
       ? (answers.experience_flags as unknown[]).map((f) => String(f))
       : [],
@@ -205,17 +207,14 @@ export async function assemblePacket(clientId: string) {
     update: { packageJson: packetJson },
   })
 
-  await db.cysFieldValue.upsert({
-    where: { clientId_fieldKey: { clientId, fieldKey: 'closeability' } },
-    create: { clientId, fieldKey: 'closeability', value: ready.closeability, status: 'SUGGESTED', sourceLabel: 'packet OS' },
-    update: { value: ready.closeability, sourceLabel: 'packet OS' },
-  }).catch(() => undefined)
-
-  await db.cysFieldValue.upsert({
-    where: { clientId_fieldKey: { clientId, fieldKey: 'dashboard_status' } },
-    create: { clientId, fieldKey: 'dashboard_status', value: strawberryStatus, status: 'SUGGESTED', sourceLabel: 'packet OS' },
-    update: { value: strawberryStatus, sourceLabel: 'packet OS' },
-  }).catch(() => undefined)
+  // Automatic packet projections must not replace a concurrent staff decision.
+  const projectionRows = [['closeability', ready.closeability], ['dashboard_status', strawberryStatus]]
+    .map(([key, value]) => Prisma.sql`(${randomUUID()}, ${clientId}, ${key}, ${value}, 'SUGGESTED'::"CysValueStatus", 'packet OS', NOW(), NOW())`)
+  await db.$executeRaw(Prisma.sql`
+    INSERT INTO "CysFieldValue" (id,"clientId","fieldKey",value,status,"sourceLabel","createdAt","updatedAt") VALUES ${Prisma.join(projectionRows)}
+    ON CONFLICT ("clientId","fieldKey") DO UPDATE SET value=EXCLUDED.value,status=EXCLUDED.status,"sourceLabel"=EXCLUDED."sourceLabel","updatedAt"=NOW()
+    WHERE NOT ("CysFieldValue".status='VERIFIED' AND "CysFieldValue"."verifiedById" IS NOT NULL)
+  `)
 
   return {
     fileId,
@@ -234,7 +233,7 @@ export async function assemblePacket(clientId: string) {
     floor,
     closerApproved,
     closerWin: win,
-    solarPacket: Boolean(product || lender || hasContract || hasFinance || str(answers.pain_type)),
+    solarPacket: Boolean(product || lender || hasContract || hasFinance || (confirmed('pain_type') || str(answers.pain_type))),
   }
 }
 

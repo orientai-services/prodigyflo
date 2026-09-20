@@ -469,12 +469,12 @@ export async function reassignClients(
   clientIds: string[],
   ownerId: string | null,
 ): Promise<BulkRowResult[]> {
-  if (!user.permissions.has('clients:reassign')) throw new ForbiddenError()
+  if (user.role !== 'SUPER_ADMIN' || !user.permissions.has('clients:reassign')) throw new ForbiddenError()
 
   let ownerName: string | null = null
   if (ownerId) {
     const owner = await db.user.findFirst({
-      where: { AND: [userScope(user), { id: ownerId, isActive: true }] },
+      where: { AND: [userScope(user), { id: ownerId, isActive: true, role: { key: 'CLOSER' } }] },
       select: { id: true, name: true, teamId: true },
     })
     if (!owner) throw new ForbiddenError('That owner is not available to you.')
@@ -494,7 +494,16 @@ export async function reassignClients(
       results.push({ id, name: 'Unknown client', ok: false, error: 'Not found or outside your scope.' })
       continue
     }
-    await db.client.update({ where: { id }, data: { ownerId, lastActivityAt: new Date() } })
+    await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`staff:${user.organizationId}`}))`
+      if (ownerId && !await tx.user.findFirst({ where: { id: ownerId, organizationId: user.organizationId, isActive: true, deletedAt: null, role: { key: 'CLOSER' } } })) throw new ForbiddenError('That closer is no longer active.')
+      await tx.$queryRaw`SELECT id FROM "Client" WHERE id = ${id} FOR UPDATE`
+      const now = new Date()
+      await tx.assignment.updateMany({ where: { clientId: id, role: 'CLOSER', isActive: true }, data: { isActive: false, unassignedAt: now } })
+      if (ownerId) await tx.assignment.create({ data: { clientId: id, assigneeId: ownerId, assignedById: user.id, role: 'CLOSER', reason: 'Manual reassignment' } })
+      await tx.client.update({ where: { id }, data: { ownerId, lastActivityAt: now } })
+      await tx.appointment.updateMany({ where: { clientId: id, startsAt: { gte: now }, status: { in: ['SCHEDULED', 'CONFIRMED'] } }, data: { ownerId } })
+    })
     await recordAudit(user, {
       action: 'client.reassigned',
       entityType: 'Client',

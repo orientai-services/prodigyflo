@@ -12,7 +12,7 @@ import { DeployConsole, type DeployConsoleVM } from './deploy-console'
  */
 export async function DeployPanel() {
   const user = await requireUser()
-  if (!user.isOwner) redirect('/forbidden')
+  if (user.role !== 'SUPER_ADMIN') redirect('/forbidden')
 
   const [version, status, history] = await Promise.all([
     getVersionInfo(),

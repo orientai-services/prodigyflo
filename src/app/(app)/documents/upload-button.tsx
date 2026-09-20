@@ -56,6 +56,8 @@ export function UploadButton({
         toast.success('Uploaded and extracted — ready for review.')
       }
       router.refresh()
+    } catch {
+      toast.error('Upload did not finish. Check the document list before retrying.');
     } finally {
       setBusy(false)
       if (inputRef.current) inputRef.current.value = ''

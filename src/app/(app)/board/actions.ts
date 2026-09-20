@@ -5,8 +5,8 @@ import { AppointmentStatus, AppointmentType, StageKey } from '@prisma/client'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { applyAssignment } from '@/lib/assignment'
-import { DESK_TIMEZONE, zonedDate } from '@/lib/daily-desk'
-import { ForbiddenError, findClientInScope, requirePermission, requireUser } from '@/lib/rbac'
+import { DESK_TIMEZONE, civilDate, timeLabel, zonedDate } from '@/lib/daily-desk'
+import { ForbiddenError, clientScope, findClientInScope, requirePermission, requireUser } from '@/lib/rbac'
 import { StageTransitionError, checkTransition, moveClientToStage } from '@/lib/stage-transitions'
 
 export type MoveCardResult = {
@@ -96,6 +96,7 @@ export async function assignDeskCloserAction(
 
 const bookSchema = z.object({
   clientId: z.string().min(1),
+  appointmentId: z.string().min(1).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: z.string().regex(/^\d{2}:\d{2}$/),
   timezone: z.string().min(1).optional(),
@@ -117,45 +118,26 @@ export async function bookAppointmentAction(
     const client = await findClientInScope(user, parsed.data.clientId)
     if (!client) return { error: 'Client not found or outside your scope.' }
 
-    const tz = parsed.data.timezone || DESK_TIMEZONE
-    const startsAt = zonedDate(parsed.data.date, parsed.data.time, tz)
+    const organization = await db.organization.findUnique({ where: { id: user.organizationId }, select: { timezone: true } })
+    const tz = organization?.timezone || DESK_TIMEZONE
+    let startsAt: Date
+    try { startsAt = zonedDate(parsed.data.date, parsed.data.time, tz) } catch { return { error: 'Invalid appointment time.' } }
+    if (!Number.isFinite(startsAt.getTime()) || civilDate(startsAt, tz) !== parsed.data.date || timeLabel(startsAt, tz) !== parsed.data.time) return { error: 'That local time does not exist. Choose another time.' }
     const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000)
-    const ownerId = client.ownerId ?? user.id
-
-    const existing = await db.appointment.findFirst({
-      where: {
-        clientId: client.id,
-        status: { in: ['SCHEDULED', 'CONFIRMED'] },
-        startsAt: { gte: new Date() },
-      },
-      orderBy: { startsAt: 'asc' },
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Client" WHERE id = ${client.id} FOR UPDATE`
+      const current = await tx.client.findFirst({ where: { AND: [clientScope(user), { id: client.id }] } })
+      if (!current) throw new ForbiddenError('This client is no longer assigned to you.')
+      if (parsed.data.appointmentId) {
+        const updated = await tx.appointment.updateMany({
+          where: { id: parsed.data.appointmentId, clientId: current.id, status: { in: ['SCHEDULED', 'CONFIRMED'] } },
+          data: { startsAt, endsAt, timezone: tz, ownerId: current.ownerId },
+        })
+        if (updated.count !== 1) throw new ForbiddenError('This appointment is no longer available to reschedule.')
+      } else {
+        await tx.appointment.create({ data: { clientId: current.id, ownerId: current.ownerId, type: AppointmentType.PRESENTATION, status: AppointmentStatus.SCHEDULED, startsAt, endsAt, timezone: tz } })
+      }
     })
-
-    if (existing) {
-      await db.appointment.update({
-        where: { id: existing.id },
-        data: {
-          startsAt,
-          endsAt,
-          timezone: tz,
-          status: AppointmentStatus.SCHEDULED,
-          cancelledAt: null,
-          noShowRecordedAt: null,
-        },
-      })
-    } else {
-      await db.appointment.create({
-        data: {
-          clientId: client.id,
-          ownerId,
-          type: AppointmentType.PRESENTATION,
-          status: AppointmentStatus.SCHEDULED,
-          startsAt,
-          endsAt,
-          timezone: tz,
-        },
-      })
-    }
 
     await maybeAdvanceToScheduled(user, client.id)
 
@@ -167,7 +149,7 @@ export async function bookAppointmentAction(
   }
 }
 
-const noShowSchema = z.object({ clientId: z.string().min(1) })
+const noShowSchema = z.object({ clientId: z.string().min(1), appointmentId: z.string().min(1) })
 
 /** Marks the next live appointment NO_SHOW. Does not invent a new stage. */
 export async function markNoShowAction(
@@ -181,22 +163,15 @@ export async function markNoShowAction(
     const client = await findClientInScope(user, parsed.data.clientId)
     if (!client) return { error: 'Client not found or outside your scope.' }
 
-    const existing = await db.appointment.findFirst({
-      where: {
-        clientId: client.id,
-        status: { in: ['SCHEDULED', 'CONFIRMED'] },
-      },
-      orderBy: { startsAt: 'desc' },
-    })
-    if (!existing) return { error: 'No live appointment to mark.' }
-
-    await db.appointment.update({
-      where: { id: existing.id },
-      data: {
-        status: AppointmentStatus.NO_SHOW,
-        noShowRecordedAt: new Date(),
-        outcome: 'No show',
-      },
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Client" WHERE id = ${client.id} FOR UPDATE`
+      const current = await tx.client.findFirst({ where: { AND: [clientScope(user), { id: client.id }] } })
+      if (!current) throw new ForbiddenError('This client is no longer assigned to you.')
+      const updated = await tx.appointment.updateMany({
+        where: { id: parsed.data.appointmentId, clientId: client.id, status: { in: ['SCHEDULED', 'CONFIRMED'] } },
+        data: { status: AppointmentStatus.NO_SHOW, noShowRecordedAt: new Date(), outcome: 'No show' },
+      })
+      if (updated.count !== 1) throw new ForbiddenError('No live appointment to mark.')
     })
 
     revalidateDesk()

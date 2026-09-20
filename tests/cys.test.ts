@@ -47,6 +47,30 @@ const sources = (overrides: Partial<SourceRecord> = {}): SourceRecord => ({
 })
 
 describe('CYS field resolution', () => {
+  it('maps a PPA provider, escalation and derived term without fabricating loan or service-date facts', () => {
+    const record = sources({ documentFields: [
+      docField({ key: 'product_type', value: 'Power Purchase Agreement' }),
+      docField({ key: 'contract_counterparty', value: 'Example Energy LLC' }),
+      docField({ key: 'installer_name', value: 'Example Installation Team' }),
+      docField({ key: 'escalator_pct', value: '1.9' }),
+      docField({ key: 'term_years', value: '20 years', sourcePage: 8 }),
+      docField({ key: 'contract_date', value: '2018-05-30' }),
+      docField({ key: 'customer_signed_date', value: '2018-05-28' }),
+    ] })
+    const product = resolveField(def({ key: 'product_confirmed', sourcePath: 'document.product_type' }), record)
+    expect(product).toMatchObject({ value: 'ppa', status: 'SUGGESTED' })
+    const provider = resolveField(def({ key: 'lender_confirmed', sourcePath: 'document.finance_agreement.lender_name' }), record)
+    expect(provider).toMatchObject({ value: 'Example Energy LLC', status: 'SUGGESTED' })
+    expect(provider.note).toMatch(/not a loan lender/)
+    const rate = resolveField(def({ key: 'apr_or_escalator', sourcePath: 'document.finance_agreement.apr' }), record)
+    expect(rate).toMatchObject({ value: '1.9', status: 'SUGGESTED' })
+    expect(rate.note).toMatch(/not loan APR/)
+    const term = resolveField(def({ key: 'term_months', sourcePath: 'document.finance_agreement.term_months' }), record)
+    expect(term).toMatchObject({ value: '240', status: 'SUGGESTED', sourcePage: 8 })
+    expect(term.note).toMatch(/Derived months/)
+    expect(resolveField(def({ key: 'first_payment_or_install', sourcePath: 'document.finance_agreement.first_payment_date' }), record).status).toBe('MISSING')
+    expect(resolveField(def({ key: 'contract_value', sourcePath: 'document.finance_agreement.amount_financed' }), record).status).toBe('MISSING')
+  })
   it('resolves a non-empty CRM client field to VERIFIED', () => {
     const d = def({ sourceType: 'CLIENT_FIELD', sourcePath: 'client.email', key: 'homeowner_email' })
     const r = resolveField(d, sources({ client: { email: 'ana@example.com' } }))
@@ -297,5 +321,16 @@ describe('package generation', () => {
     })
     expect(pkg.documents).toHaveLength(1)
     expect(pkg.documents[0].checksum).toBe('abc123')
+  })
+})
+
+
+describe('PPA counterparty boundary', () => {
+  it('does not use an installer as the counterparty when no party evidence exists', () => {
+    const record = sources({ documentFields: [
+      docField({ key: 'product_type', value: 'PPA' }),
+      docField({ key: 'installer_name', value: 'Other Installer LLC', verification: 'VERIFIED' }),
+    ] })
+    expect(resolveField(def({ key: 'lender_confirmed', sourcePath: 'document.finance_agreement.lender_name' }), record).status).toBe('MISSING')
   })
 })

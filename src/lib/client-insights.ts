@@ -33,7 +33,7 @@ export async function getClientInsights(clientId: string): Promise<ClientInsight
       verifications: { select: { type: true, status: true } },
       creditPulls: { orderBy: { createdAt: 'desc' }, take: 1 },
       qualificationReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
-      surveyResponses: { orderBy: { startedAt: 'desc' }, take: 1 },
+      surveyResponses: { where: { survey: { name: { not: 'ProdigyFlo Final Questionnaire' } } }, orderBy: { startedAt: 'desc' }, take: 1 },
       appointments: { orderBy: { startsAt: 'desc' }, take: 1 },
       paymentMethods: { orderBy: { createdAt: 'desc' }, take: 1 },
       documents: { include: { requirement: { select: { isRequired: true, name: true } } } },

@@ -1,54 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionUser } from '@/lib/rbac'
-import { clientScope } from '@/lib/rbac'
+import { clientScope, can, type SessionUser } from '@/lib/rbac'
+import { staffRouteAllowed } from '@/lib/staff-routes'
+const user = { id: 'closer', organizationId: 'team', permissions: new Set(['clients:read_all', 'submissions:approve']), isOwner: true } as SessionUser
 
-function session(overrides: Partial<SessionUser> = {}): SessionUser {
-  return {
-    id: 'u1',
-    name: 'Test',
-    email: 'test@example.com',
-    organizationId: 'org-scs',
-    organizationName: 'Team Prodigy',
-    roleId: 'r1',
-    role: 'ADMIN',
-    roleName: 'Admin',
-    isOwner: false,
-    regionId: null,
-    teamId: 'team-a',
-    managerId: null,
-    avatarUrl: null,
-    title: null,
-    permissions: new Set(),
-    portalClientId: null,
-    ...overrides,
-  }
-}
-
-describe('clientScope', () => {
-  it('lets ADMIN see every client in their org even with a teamId and without read_all', () => {
-    const where = clientScope(session({ role: 'ADMIN', teamId: 'team-a', permissions: new Set(['clients:read_team']) }))
-    expect(where).toEqual({ organizationId: 'org-scs', deletedAt: null })
-    expect(where).not.toHaveProperty('OR')
+describe('staff authorization', () => {
+  it('gives Super Admin all authority, independent of the retired owner flag', () => {
+    const admin = { ...user, role: 'SUPER_ADMIN', isOwner: false } as SessionUser
+    expect(clientScope(admin)).toEqual({ organizationId: 'team', deletedAt: null })
+    expect(can(admin, 'users:manage')).toBe(true)
   })
-
-  it('lets SUPER_ADMIN see every client in their org', () => {
-    const where = clientScope(session({ role: 'SUPER_ADMIN', teamId: 'team-a', permissions: new Set(['clients:read_team']) }))
-    expect(where).toEqual({ organizationId: 'org-scs', deletedAt: null })
+  it('never widens Closer assignment scope with legacy grants or owner flags', () => {
+    const closer = { ...user, role: 'CLOSER' } as SessionUser
+    expect(clientScope(closer)).toEqual({ organizationId: 'team', deletedAt: null, ownerId: 'closer' })
+    expect(can(closer, 'clients:read_all')).toBe(false)
+    expect(can(closer, 'submissions:approve')).toBe(true)
+    expect(can({ ...closer, permissions: new Set() }, 'submissions:approve')).toBe(false)
   })
-
-  it('does not open another organization', () => {
-    const where = clientScope(session({ organizationId: 'org-scs', role: 'ADMIN' }))
-    expect(where.organizationId).toBe('org-scs')
-    expect(where.organizationId).not.toBe('org-other')
+  it.each(['ADMIN', 'REGIONAL_MANAGER', 'SALES_MANAGER', 'DOCUMENT_COLLECTOR', 'MARKETING', 'CLIENT'] as const)('denies retired %s roles', (role) => {
+    expect(clientScope({ ...user, role })).toHaveProperty('id', '__none__')
+    expect(can({ ...user, role }, 'users:manage')).toBe(false)
   })
-
-  it('still team-scopes a manager who is not an org admin', () => {
-    const where = clientScope(
-      session({ role: 'SALES_MANAGER', permissions: new Set(['clients:read_team']), teamId: 'team-a' }),
-    )
-    expect(where.organizationId).toBe('org-scs')
-    expect(where.OR).toEqual(
-      expect.arrayContaining([expect.objectContaining({ teamId: 'team-a' })]),
-    )
+  it('denies direct legacy URLs and Pipeline to Closers, and Engine to everyone', () => {
+    for (const route of ['/pipeline', '/engine', '/marketing', '/sales/qualifier', '/settings/users', '/api/reports/revenue']) expect(staffRouteAllowed('CLOSER', route)).toBe(false)
+    for (const route of ['/board', '/clients/a', '/documents', '/submissions', '/api/documents/a/file']) expect(staffRouteAllowed('CLOSER', route)).toBe(true)
+    expect(staffRouteAllowed('SUPER_ADMIN', '/pipeline')).toBe(true)
+    expect(staffRouteAllowed('SUPER_ADMIN', '/engine')).toBe(false)
   })
 })

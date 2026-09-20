@@ -1,52 +1,25 @@
 import 'server-only'
 import bcrypt from 'bcryptjs'
-import type { RoleKey } from '@prisma/client'
+import type { Prisma, RoleKey } from '@prisma/client'
 import { db } from '@/lib/db'
 import { hashValue, randomToken } from '@/lib/crypto'
 import { recordAudit } from '@/lib/audit'
 import type { SessionUser } from '@/lib/rbac'
+import { STAFF_ROLES } from '@/lib/permissions'
 
 export const INVITE_TTL_DAYS = 7
 
-/**
- * Who may grant what. A user can only assign roles of strictly lower rank than
- * their own — except SUPER_ADMIN, who can mint peers. CLIENT is absent on
- * purpose: portal accounts are created from a Client record, never by invite.
- */
-const RANK: Record<RoleKey, number> = {
-  SUPER_ADMIN: 100,
-  ADMIN: 80,
-  REGIONAL_MANAGER: 60,
-  SALES_MANAGER: 50,
-  CLOSER: 40,
-  DOCUMENT_COLLECTOR: 30,
-  MARKETING: 30,
-  CLIENT: 0,
-}
-
-const OWNER_RANK = 110
-
-export function rankOf(role: RoleKey, isOwner = false): number {
-  return isOwner ? OWNER_RANK : (RANK[role] ?? 0)
-}
-
-/** How many Super Admin seats exist besides the owner. Owner-adjustable later. */
-export const SUPER_ADMIN_SEATS = 2
-
+/** Super Admins have equal authority; legacy Owner flags grant no extra power. */
 export function assignableRoles(actor: SessionUser): RoleKey[] {
-  // Only the owner mints Super Admins; a Super Admin peer cannot. The owner
-  // rank itself is never assignable — there is exactly one owner.
-  return (Object.keys(RANK) as RoleKey[]).filter(
-    (r) => r !== 'CLIENT' && (actor.isOwner ? RANK[r] <= RANK.SUPER_ADMIN : RANK[r] < rankOf(actor.role)),
-  )
+  return actor.role === 'SUPER_ADMIN' ? [...STAFF_ROLES] : []
 }
 
 export function canManageUser(
   actor: SessionUser,
-  target: { id: string; roleKey: RoleKey; isOwner?: boolean },
+  _target: { id: string; roleKey: RoleKey; isOwner?: boolean },
 ): boolean {
-  if (actor.id === target.id) return false
-  return rankOf(target.roleKey, target.isOwner) < rankOf(actor.role, actor.isOwner)
+  void _target
+  return actor.role === 'SUPER_ADMIN'
 }
 
 export class InviteError extends Error {}
@@ -88,20 +61,8 @@ export async function createInvite(
   })
   if (!role) throw new InviteError('Role not found for this organization.')
 
-  if (input.roleKey === 'SUPER_ADMIN') {
-    // Seats exclude the owner (who merely displays as Super Admin).
-    const [seated, pendingSeats] = await Promise.all([
-      db.user.count({
-        where: { organizationId: actor.organizationId, deletedAt: null, isActive: true, isOwner: false, role: { key: 'SUPER_ADMIN' } },
-      }),
-      db.invite.count({
-        where: { organizationId: actor.organizationId, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() }, isOwner: false, role: { key: 'SUPER_ADMIN' } },
-      }),
-    ])
-    if (seated + pendingSeats >= SUPER_ADMIN_SEATS) {
-      throw new InviteError(`All ${SUPER_ADMIN_SEATS} Super Admin seats are taken (counting pending invites). Revoke one first.`)
-    }
-  }
+  const team = await db.team.findFirst({ where: { organizationId: actor.organizationId, name: 'Team Prodigy' } })
+  if (!team) throw new InviteError('The Team Prodigy workspace has not been initialized.')
 
   const token = randomToken(32)
   const invite = await db.invite.create({
@@ -109,8 +70,8 @@ export async function createInvite(
       organizationId: actor.organizationId,
       email,
       roleId: role.id,
-      teamId: input.teamId ?? null,
-      regionId: input.regionId ?? null,
+      teamId: team.id,
+      regionId: null,
       tokenHash: hashValue(token),
       invitedById: actor.id,
       expiresAt: new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000),
@@ -171,7 +132,7 @@ export async function revokeInvite(actor: SessionUser, inviteId: string) {
 export async function findLiveInvite(token: string) {
   if (!token || token.length < 20) return null
   return db.invite.findFirst({
-    where: { tokenHash: hashValue(token), acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+    where: { tokenHash: hashValue(token), acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() }, role: { key: { in: STAFF_ROLES } } },
     include: { organization: { select: { name: true } }, role: true },
   })
 }
@@ -191,6 +152,11 @@ export async function acceptInvite(token: string, input: { name: string; passwor
   // The uniqueness re-check and the accept happen atomically so two submits of
   // the same link cannot mint two users.
   const user = await db.$transaction(async (tx) => {
+    const claimed = await tx.invite.updateMany({
+      where: { id: invite.id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+      data: { acceptedAt: new Date() },
+    })
+    if (claimed.count !== 1) throw new InviteError('This invite is no longer available.')
     // Global email uniqueness (see createInvite): login is org-blind, so a
     // duplicate in ANY organization would shadow one account at sign-in.
     const clash = await tx.user.findFirst({
@@ -209,7 +175,7 @@ export async function acceptInvite(token: string, input: { name: string; passwor
         name: input.name.trim(),
         passwordHash,
         isActive: true,
-        isOwner: invite.isOwner,
+        isOwner: false,
       },
     })
     await tx.invite.update({
@@ -235,13 +201,13 @@ export async function acceptInvite(token: string, input: { name: string; passwor
 }
 
 /** Guard shared by deactivate + role change: never lose the last super admin. */
-export async function assertNotLastSuperAdmin(organizationId: string, userId: string) {
-  const target = await db.user.findFirst({
+export async function assertNotLastSuperAdmin(organizationId: string, userId: string, store: Prisma.TransactionClient = db) {
+  const target = await store.user.findFirst({
     where: { id: userId, organizationId },
     select: { role: { select: { key: true } } },
   })
   if (target?.role.key !== 'SUPER_ADMIN') return
-  const others = await db.user.count({
+  const others = await store.user.count({
     where: {
       organizationId,
       id: { not: userId },

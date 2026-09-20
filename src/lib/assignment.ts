@@ -410,7 +410,7 @@ export async function applyAssignment(
   user: SessionUser,
   input: { clientId: string; assigneeId: string; recommendationId?: string; overrideReason?: string },
 ): Promise<ApplyAssignmentResult> {
-  if (!user.permissions.has('clients:reassign')) throw new ForbiddenError()
+  if (user.role !== 'SUPER_ADMIN' || !can(user, 'clients:reassign')) throw new ForbiddenError()
 
   const client = await db.client.findFirst({
     where: { AND: [clientScope(user), { id: input.clientId }] },
@@ -452,6 +452,11 @@ export async function applyAssignment(
 
   const now = new Date()
   await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`staff:${user.organizationId}`}))`
+    // Serialize competing assignments and booking writes on this client.
+    await tx.$queryRaw`SELECT id FROM "Client" WHERE id = ${client.id} FOR UPDATE`
+    const eligible = await tx.user.findFirst({ where: { id: assignee.id, organizationId: user.organizationId, isActive: true, deletedAt: null, role: { key: 'CLOSER' } } })
+    if (!eligible) throw new ForbiddenError('That closer is no longer active.')
     await tx.assignment.updateMany({
       where: { clientId: client.id, role: 'CLOSER', isActive: true },
       data: { isActive: false, unassignedAt: now },
@@ -476,6 +481,10 @@ export async function applyAssignment(
     await tx.client.update({
       where: { id: client.id },
       data: { ownerId: assignee.id, lastActivityAt: now },
+    })
+    await tx.appointment.updateMany({
+      where: { clientId: client.id, startsAt: { gte: now }, status: { in: ['SCHEDULED', 'CONFIRMED'] } },
+      data: { ownerId: assignee.id },
     })
     if (rec) {
       await tx.aIRecommendation.update({

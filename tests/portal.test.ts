@@ -186,10 +186,10 @@ describe('portal scoping (DB)', () => {
     await db.organization.deleteMany({ where: { id: orgId } })
   })
 
-  it('a portal session resolves only its own client', async () => {
+  it('a retired portal session cannot resolve even its previously linked client', async () => {
     const session = clientSession({ organizationId: orgId, id: userA, portalClientId: clientA })
     const found = await findPortalClient(session)
-    expect(found?.id).toBe(clientA)
+    expect(found).toBeNull()
   })
 
   it('client A can never load client B, even with a forged portalClientId', async () => {
@@ -209,10 +209,10 @@ describe('portal scoping (DB)', () => {
     expect(await findPortalClient(staff)).toBeNull()
   })
 
-  it('upload target accepts the session’s own requested requirement', async () => {
+  it('retired portal accounts cannot upload even to their previously linked client', async () => {
     const session = clientSession({ organizationId: orgId, id: userA, portalClientId: clientA })
     const target = await portalUploadTarget(session, reqA)
-    expect(target.ok).toBe(true)
+    expect(target.ok).toBe(false)
     if (target.ok) {
       expect(target.client.id).toBe(clientA)
       expect(target.requirement.id).toBe(reqA)
@@ -223,7 +223,7 @@ describe('portal scoping (DB)', () => {
     const session = clientSession({ organizationId: orgId, id: userA, portalClientId: clientA })
     const target = await portalUploadTarget(session, reqB)
     expect(target.ok).toBe(false)
-    if (!target.ok) expect(target.status).toBe(404)
+    if (!target.ok) expect(target.status).toBe(403)
   })
 
   it('upload target rejects a session with no portal link (permission bypass attempt)', async () => {
@@ -241,7 +241,7 @@ describe('portal scoping (DB)', () => {
     const session = clientSession({ organizationId: orgId, id: userA, portalClientId: clientA })
     const target = await portalUploadTarget(session, reqA)
     expect(target.ok).toBe(false)
-    if (!target.ok) expect(target.status).toBe(409)
+    if (!target.ok) expect(target.status).toBe(403)
     await db.clientDocument.updateMany({
       where: { clientId: clientA, requirementId: reqA },
       data: { status: 'REQUESTED' },

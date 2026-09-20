@@ -124,13 +124,9 @@ export async function updateOverviewAction(input: unknown): Promise<ActionResult
       orderBy: { isPrimary: 'desc' },
     })
 
-    const nextOwnerId = data.ownerId || null
-    if (nextOwnerId !== client.ownerId && !user.permissions.has('clients:reassign')) {
-      return { error: 'You do not have permission to reassign this client.' }
-    }
-    if (nextOwnerId) {
-      const owner = await db.user.findFirst({ where: { AND: [userScope(user), { id: nextOwnerId }] } })
-      if (!owner) return { error: 'That owner is not available to you.' }
+    // The legacy overview form cannot bypass the assignment/calendar transaction.
+    if (data.ownerId !== undefined && (data.ownerId || null) !== client.ownerId) {
+      return { error: 'Use Assign Closer on the client profile to transfer this client and upcoming appointments together.' }
     }
 
     if (data.line1 && (!data.city || !data.state || !data.postalCode)) {
@@ -159,7 +155,6 @@ export async function updateOverviewAction(input: unknown): Promise<ActionResult
       preferredLanguage: data.preferredLanguage,
       preferredContact: data.preferredContact,
       estimatedValue: data.estimatedValue,
-      ownerId: nextOwnerId,
       leadSourceId: data.leadSourceId || null,
     }
 

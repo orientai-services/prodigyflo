@@ -1,0 +1,49 @@
+name: Workspace checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pf_test
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: pf_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://pf_test:synthetic-ci-only@127.0.0.1:5432/pf_test
+      AUTH_SECRET: synthetic-ci-auth-only
+      VAULT_KEY: synthetic-ci-vault-only
+      AI_PROVIDER: mock
+      FILE_STORAGE_DRIVER: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:canonical
+      - run: npx prisma migrate deploy
+      - run: npx next typegen
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --config=playwright.workspace.config.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: workspace-browser-failure
+          path: test-results/
+          retention-days: 7

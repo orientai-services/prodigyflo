@@ -202,6 +202,9 @@ export async function ingestInstagramEvent(organizationId: string, ev: Instagram
       return { duplicate: false, created: false, clientId: null }
     }
 
+    const defaultCloser = source.defaultOwnerId
+      ? await db.user.findFirst({ where: { id: source.defaultOwnerId, organizationId, isActive: true, deletedAt: null, role: { key: 'CLOSER' } }, select: { id: true } })
+      : null
     let client
     try {
       client = await db.client.create({
@@ -217,7 +220,7 @@ export async function ingestInstagramEvent(organizationId: string, ev: Instagram
           instagramHandle: handle,
           preferredContact: 'instagram',
           leadSourceId: source.defaultLeadSourceId,
-          ownerId: source.defaultOwnerId,
+          ownerId: defaultCloser?.id ?? null,
           utmSource: 'instagram',
           utmMedium: ev.kind,
           stageEnteredAt: new Date(),

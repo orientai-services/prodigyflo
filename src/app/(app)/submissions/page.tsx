@@ -1,3 +1,5 @@
+import { finalDeskEnabled } from '@/lib/final-desk/data'
+import { FinalDeskPage } from '@/components/final-desk/page'
 import Link from 'next/link'
 import type { Prisma, SubmissionStatus } from '@prisma/client'
 import { db } from '@/lib/db'
@@ -20,6 +22,7 @@ const STATUSES: SubmissionStatus[] = [
 ]
 
 export default async function SubmissionsPage({ searchParams }: PageProps<'/submissions'>) {
+  if (finalDeskEnabled()) return <FinalDeskPage view="submissions" />
   const user = await requirePermissionPage('submissions:read')
   const params = await searchParams
   const statusParam = typeof params.status === 'string' ? params.status : undefined

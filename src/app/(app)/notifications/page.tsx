@@ -1,3 +1,4 @@
+import { notificationScope } from '@/lib/notification-scope'
 import Link from 'next/link'
 import type { NotificationKind, Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
@@ -40,7 +41,7 @@ export default async function NotificationsPage({ searchParams }: PageProps<'/no
   const page = Math.max(1, Number(str(params.page) ?? 1) || 1)
 
   // Notifications are strictly the caller's own — never cross-user.
-  const own: Prisma.NotificationWhereInput = { userId: user.id, organizationId: user.organizationId }
+  const own = await notificationScope(user)
   const scope: Prisma.NotificationWhereInput = { ...own, ...(filter === 'unread' ? { readAt: null } : {}) }
   const where: Prisma.NotificationWhereInput = { ...scope, ...(kind ? { kind } : {}) }
 

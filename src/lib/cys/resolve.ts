@@ -1,4 +1,5 @@
 import type { CysSourceType, CysValueStatus, FieldVerification } from '@prisma/client'
+import { keysForField, keysForType, normalizeProduct, termMonthsFromYears } from '@/lib/desk-extract'
 
 /**
  * Pure CYS field resolution. No DB access here — callers assemble a
@@ -31,10 +32,17 @@ export type DocumentFieldInput = {
   sourcePage: number | null
 }
 
+export const CYS_DOCUMENT_KINDS: Record<string, string> = {
+  doc_contract: 'signed_contract', doc_finance: 'finance_agreement', doc_proposal: 'proposal',
+  doc_statement: 'lender_statement', doc_payoff: 'payoff_letter', doc_utility_bill: 'utility_bill', doc_photo_id: 'gov_id',
+}
+
 export type SourceRecord = {
+  documents?: { id: string; kind: string; label: string; approved: boolean }[]
   client: Record<string, string | null | undefined>
   address: Record<string, string | null | undefined> | null
   survey: Record<string, string | null | undefined>
+  surveyProvenance?: Record<string, { source?: string }>
   documentFields: DocumentFieldInput[]
 }
 
@@ -120,12 +128,40 @@ function resolveDocumentField(def: CysDefinitionInput, sources: SourceRecord): R
   const fieldKey = dot === -1 ? path : path.slice(dot + 1)
 
   // REJECTED fields are a human saying "this reading is wrong" — never a source.
-  const candidates = sources.documentFields.filter(
+  let candidates = sources.documentFields.filter(
     (f) =>
-      f.key === fieldKey &&
+      keysForField(fieldKey).includes(f.key) &&
       f.verification !== 'REJECTED' &&
-      (typeKey === null || f.documentTypeKey === typeKey),
+      (typeKey === null || keysForType(typeKey).includes(f.documentTypeKey ?? '')),
   )
+  let derivation: string | null = null
+  const at = (type: string, key: string) => sources.documentFields.filter(field => field.verification !== 'REJECTED' && keysForType(type).includes(field.documentTypeKey ?? '') && keysForField(key).includes(field.key))
+  const productFields = sources.documentFields.filter(field => keysForField('product_type').includes(field.key) && field.verification !== 'REJECTED' && !isBlank(effectiveValue(field)))
+  const productField = productFields.find(field => ['CORRECTED', 'VERIFIED'].includes(field.verification)) ?? productFields[0]
+  const product = normalizeProduct(productField ? effectiveValue(productField) ?? '' : '')
+  const isPpaOrLease = product === 'ppa' || product === 'lease'
+
+  // Keep the schema-42 keys and support existing stored definitions. Product-aware
+  // selection prevents a PPA escalation from turning into a loan interest rate.
+  if (def.key === 'lender_confirmed' && isPpaOrLease) {
+    candidates = at('solar_contract', 'contract_counterparty')
+    derivation = 'PPA / lease contract counterparty; this is not a loan lender.'
+  } else if (def.key === 'apr_or_escalator' && isPpaOrLease) {
+    candidates = at('solar_contract', 'escalator_pct')
+    derivation = 'Annual payment escalation; not loan APR.'
+  } else if (def.key === 'term_months') {
+    candidates = [...at('finance_agreement', 'term_months'), ...at('solar_contract', 'term_months')]
+    if (!candidates.some(field => !isBlank(effectiveValue(field)))) {
+      candidates = [...at('solar_contract', 'term_years'), ...at('finance_agreement', 'term_years')]
+        .filter(field => termMonthsFromYears(effectiveValue(field) ?? ''))
+        .map(field => ({ ...field, value: termMonthsFromYears(field.value ?? ''), correctedValue: field.correctedValue ? termMonthsFromYears(field.correctedValue) : null }))
+      derivation = 'Derived months = stated years × 12. The term start date remains separate.'
+    }
+  } else if (def.key === 'first_payment_or_install' && isPpaOrLease) {
+    candidates = at('solar_contract', 'in_service_date')
+    derivation = 'Actual in-service date; never inferred from signing or the effective date.'
+  }
+  if (def.key === 'product_confirmed') candidates = candidates.map(field => ({ ...field, value: field.value ? normalizeProduct(field.value) : null, correctedValue: field.correctedValue ? normalizeProduct(field.correctedValue) : null }))
 
   const verified = candidates
     .filter(
@@ -166,9 +202,7 @@ function resolveDocumentField(def: CysDefinitionInput, sources: SourceRecord): R
       status: 'VERIFIED',
       confidence: primary.confidence,
       // A human-reviewed value beats an AI suggestion, but the disagreement is noted.
-      note: dissent
-        ? `An unverified extraction read "${dissent.value}" (${dissent.documentLabel}).`
-        : null,
+      note: [derivation, dissent ? `An unverified extraction read "${dissent.value}" (${dissent.documentLabel}).` : null].filter(Boolean).join(' ') || null,
     }
   }
 
@@ -195,6 +229,7 @@ function resolveDocumentField(def: CysDefinitionInput, sources: SourceRecord): R
       value: primary.value,
       status: 'SUGGESTED',
       confidence: primary.confidence,
+      note: derivation,
     }
   }
 
@@ -202,13 +237,19 @@ function resolveDocumentField(def: CysDefinitionInput, sources: SourceRecord): R
 }
 
 export function resolveField(def: CysDefinitionInput, sources: SourceRecord): ResolvedValue {
+  const documentKind = CYS_DOCUMENT_KINDS[def.key]
+  if (documentKind && sources.documents) {
+    const docs = sources.documents.filter((doc) => doc.kind === documentKind)
+    const doc = docs.find((candidate) => candidate.approved) ?? docs[0]
+    return doc ? { ...missing(def.key), value: 'On file', status: doc.approved ? 'VERIFIED' : 'SUGGESTED', sourceDocumentId: doc.id, sourceLabel: doc.label, note: doc.approved ? 'Document approved.' : 'File received; document review is still needed.' } : missing(def.key)
+  }
   switch (def.sourceType) {
     case 'CLIENT_FIELD':
       return resolveRecordField(def, sources.client, 'client', 'CRM')
     case 'ADDRESS_FIELD':
       return resolveRecordField(def, sources.address, 'address', 'CRM · address')
     case 'SURVEY_FIELD':
-      return resolveRecordField(def, sources.survey, 'survey', 'Client survey')
+      return resolveRecordField(def, sources.survey, 'survey', sources.surveyProvenance?.[pathTail(def.sourcePath ?? def.key, 'survey')]?.source === 'document_review' ? 'Client document review' : 'Client survey')
     case 'DOCUMENT_FIELD':
       return resolveDocumentField(def, sources)
     case 'MANUAL':
@@ -264,6 +305,7 @@ export function flattenSurveyAnswers(answers: unknown): Record<string, string> {
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) return {}
   const out: Record<string, string> = {}
   for (const [key, value] of Object.entries(answers as Record<string, unknown>)) {
+    if (key.startsWith('_')) continue
     if (value === null || value === undefined) continue
     out[key] = typeof value === 'string' ? value : JSON.stringify(value)
   }

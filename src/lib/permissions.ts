@@ -82,7 +82,7 @@ export type PermissionKey = keyof typeof PERMISSIONS
 
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as PermissionKey[]
 
-const CLOSER_PERMISSIONS: PermissionKey[] = [
+export const CLOSER_PERMISSIONS: PermissionKey[] = [
   'clients:read_assigned',
   'clients:update',
   'clients:advance_stage',
@@ -102,6 +102,11 @@ const CLOSER_PERMISSIONS: PermissionKey[] = [
   'submissions:prepare',
   'analytics:self',
   'ai:run',
+  'ai:review',
+  'credit:request',
+  'qualification:review',
+  'documents:review',
+  'submissions:approve',
 ]
 
 const SALES_MANAGER_PERMISSIONS: PermissionKey[] = [
@@ -192,11 +197,10 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
 }
 
 /**
- * Post-login landing. A per-user landingPath wins. Admin / Operations /
- * Closer (and Super Admin, whose old home was Dashboard) land on Board.
+ * Active staff land on Board. Retired roles and landing overrides grant no access.
  */
 export function homeFor(user: { role: RoleKey; landingPath?: string | null }): string {
-  return user.landingPath || ROLE_HOME[user.role]
+  return isStaffRole(user.role) ? '/board' : '/login'
 }
 
 export const ROLE_HOME: Record<RoleKey, string> = {
@@ -212,4 +216,26 @@ export const ROLE_HOME: Record<RoleKey, string> = {
 
 export function permissionsForRole(role: RoleKey): PermissionKey[] {
   return ROLE_PERMISSIONS[role] ?? []
+}
+
+/** Only these roles can sign in or be assigned in the staff workspace.
+ * Legacy enum values remain for migration/history compatibility only. */
+export const STAFF_ROLES: RoleKey[] = ['SUPER_ADMIN', 'CLOSER']
+export function isStaffRole(role: RoleKey): boolean {
+  return STAFF_ROLES.includes(role)
+}
+
+/** Fixed scope is never an editable role permission. */
+export const CLOSER_EDITABLE_PERMISSIONS: PermissionKey[] = CLOSER_PERMISSIONS.filter(
+  (key) => key !== 'clients:read_assigned',
+)
+
+export function effectivePermissions(role: RoleKey, stored: Iterable<PermissionKey>): Set<PermissionKey> {
+  if (role === 'SUPER_ADMIN') return new Set(ALL_PERMISSIONS)
+  if (role !== 'CLOSER') return new Set()
+  const requested = new Set(stored)
+  return new Set([
+    'clients:read_assigned',
+    ...CLOSER_EDITABLE_PERMISSIONS.filter((key) => requested.has(key)),
+  ])
 }

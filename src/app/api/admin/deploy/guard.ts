@@ -15,7 +15,7 @@ export async function guardDeploy(): Promise<DeployGuard> {
   if (!user) {
     return { ok: false, response: Response.json({ error: 'Unauthorized.' }, { status: 401 }) }
   }
-  if (!user.isOwner) {
+  if (user.role !== 'SUPER_ADMIN') {
     return { ok: false, response: Response.json({ error: 'Owner only.' }, { status: 403 }) }
   }
   try {

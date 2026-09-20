@@ -65,7 +65,7 @@ beforeAll(async () => {
   const org = await db.organization.create({ data: { name: 'Automation Test Org', slug: stamp } })
   orgId = org.id
 
-  const role = await db.role.create({ data: { organizationId: orgId, key: 'ADMIN', name: 'Admin' } })
+  const role = await db.role.create({ data: { organizationId: orgId, key: 'SUPER_ADMIN', name: 'Admin' } })
   roleId = role.id
   // loadActor reads permissions from the DB, so the role needs real rows.
   for (const key of ['communications:send', 'clients:read_all', 'users:manage'] as const) {

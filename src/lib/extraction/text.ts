@@ -12,6 +12,7 @@ export type ExtractedText = {
   pageCount: number
   warnings: string[]
   extractor: string
+  needsVision?: boolean
 }
 
 export interface TextExtractor {
@@ -38,8 +39,8 @@ export const pdfTextExtractor: TextExtractor = {
   name: 'pdf-text',
   supports: (mime) => normalizeMime(mime) === 'application/pdf',
   async extract(buf) {
-    const { pages, pageCount, warnings } = extractPdfText(buf)
-    return { pages, pageCount, warnings, extractor: 'pdf-text' }
+    const { pages, pageCount, warnings, needsVision } = await extractPdfText(buf)
+    return { pages, pageCount, warnings, needsVision, extractor: 'pdf-text' }
   },
 }
 

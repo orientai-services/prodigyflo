@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { RoleKey } from '@prisma/client'
+import { type RoleKey } from '@prisma/client'
+import { CLOSER_EDITABLE_PERMISSIONS, type PermissionKey } from '@/lib/permissions'
 import { db } from '@/lib/db'
 import { requirePermission } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
@@ -78,130 +79,6 @@ export async function revokeInviteAction(formData: FormData): Promise<void> {
 
 export type UserActionState = { error?: string }
 
-export type AccountRecoveryState = {
-  error?: string
-  recoveredEmail?: string
-  sourceOrganization?: string
-  preview?: {
-    userId: string
-    email: string
-    sourceOrganization: string
-    isOwner: boolean
-    otherUserCount: number
-    clientCount: number
-  }
-}
-
-const recoverySchema = z.object({
-  email: z.email('Enter a valid email address.').transform((value) => value.trim().toLowerCase()),
-})
-
-/**
- * Looks up an account before a cross-workspace recovery. It has no side effect:
- * the dialog must show the legacy workspace's actual user/client counts before
- * a separate, explicit recovery action may move or delete anything.
- */
-export async function inspectExistingAccountAction(
-  _prev: AccountRecoveryState,
-  formData: FormData,
-): Promise<AccountRecoveryState> {
-  const actor = await requirePermission('users:manage')
-  if (!actor.isOwner) return { error: 'Only the workspace owner can recover an account from another workspace.' }
-
-  const parsed = recoverySchema.safeParse({ email: formData.get('email') })
-  if (!parsed.success) return { error: parsed.error.issues[0].message }
-
-  const target = await db.user.findFirst({
-    where: { email: parsed.data.email, deletedAt: null },
-    include: { role: true, organization: { select: { id: true, name: true } } },
-  })
-  if (!target) return { error: 'No active account exists for that email.' }
-  if (target.organizationId === actor.organizationId) {
-    return { error: 'That account is already in this workspace. Refresh the staff list.' }
-  }
-
-  const [otherUserCount, clientCount] = await Promise.all([
-    db.user.count({ where: { organizationId: target.organizationId, id: { not: target.id }, deletedAt: null } }),
-    db.client.count({ where: { organizationId: target.organizationId, deletedAt: null } }),
-  ])
-
-  return {
-    preview: {
-      userId: target.id,
-      email: target.email,
-      sourceOrganization: target.organization.name,
-      isOwner: target.isOwner,
-      otherUserCount,
-      clientCount,
-    },
-  }
-}
-
-/** Moves the inspected account, deleting only a proven-empty legacy workspace. */
-export async function completeAccountRecoveryAction(
-  _prev: AccountRecoveryState,
-  formData: FormData,
-): Promise<AccountRecoveryState> {
-  const actor = await requirePermission('users:manage')
-  if (!actor.isOwner) return { error: 'Only the workspace owner can recover an account from another workspace.' }
-  const userId = String(formData.get('userId') ?? '')
-  if (!userId) return { error: 'Account recovery details are missing. Inspect the account again.' }
-
-  const target = await db.user.findFirst({
-    where: { id: userId, deletedAt: null },
-    include: { role: true, organization: { select: { id: true, name: true } } },
-  })
-  if (!target || target.organizationId === actor.organizationId) {
-    return { error: 'That account is no longer recoverable. Refresh and inspect it again.' }
-  }
-
-  const [otherUserCount, clientCount, adminRole] = await Promise.all([
-    db.user.count({ where: { organizationId: target.organizationId, id: { not: target.id }, deletedAt: null } }),
-    db.client.count({ where: { organizationId: target.organizationId, deletedAt: null } }),
-    db.role.findFirst({ where: { organizationId: actor.organizationId, key: RoleKey.ADMIN }, select: { id: true } }),
-  ])
-  if (!adminRole) return { error: 'The Admin role is not configured in this workspace.' }
-
-  if (target.isOwner && (otherUserCount > 0 || clientCount > 0)) {
-    return {
-      error: `The ${target.organization.name} workspace has ${otherUserCount} other staff member(s) and ${clientCount} client record(s). It was not deleted.`,
-    }
-  }
-  if (!target.isOwner && target.role.key === RoleKey.SUPER_ADMIN) {
-    try {
-      await assertNotLastSuperAdmin(target.organizationId, target.id)
-    } catch (e) {
-      return { error: e instanceof InviteError ? e.message : 'This account cannot be moved safely.' }
-    }
-  }
-
-  await db.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: target.id },
-      data: {
-        organizationId: actor.organizationId,
-        roleId: adminRole.id,
-        regionId: null,
-        teamId: null,
-        managerId: null,
-        isActive: true,
-        isOwner: false,
-      },
-    })
-    if (target.isOwner) await tx.organization.delete({ where: { id: target.organizationId } })
-  })
-  await recordAudit(actor, {
-    action: 'user.recovered_to_workspace',
-    entityType: 'User',
-    entityId: target.id,
-    summary: `${target.isOwner ? `Deleted empty legacy workspace ${target.organization.name} and recovered` : 'Recovered'} ${target.email} as Admin / Operations.`,
-    before: { organizationId: target.organizationId, role: target.role.key },
-    after: { organizationId: actor.organizationId, role: RoleKey.ADMIN },
-  })
-  revalidatePath('/settings/users')
-  return { recoveredEmail: target.email, sourceOrganization: target.organization.name }
-}
-
 export async function setUserActiveAction(_prev: UserActionState, formData: FormData): Promise<UserActionState> {
   const actor = await requirePermission('users:manage')
   const userId = String(formData.get('userId') ?? '')
@@ -217,12 +94,20 @@ export async function setUserActiveAction(_prev: UserActionState, formData: Form
   }
 
   try {
-    if (!makeActive) await assertNotLastSuperAdmin(actor.organizationId, target.id)
+    await db.$transaction(async (tx) => {
+      await lockStaffChanges(tx, actor.organizationId, actor.id)
+      if (!makeActive) await assertNotLastSuperAdmin(actor.organizationId, target.id, tx)
+      if (makeActive && !assignableRoles(actor).includes(target.role.key)) throw new InviteError('This historical role cannot be reactivated.')
+      await tx.user.update({ where: { id: target.id }, data: { isActive: makeActive } })
+      if (!makeActive) {
+        await tx.authToken.updateMany({ where: { userId: target.id, usedAt: null }, data: { usedAt: new Date() } })
+        await detachCloser(tx, target.id)
+      }
+    })
   } catch (e) {
-    return { error: e instanceof InviteError ? e.message : 'Blocked.' }
+    return { error: e instanceof InviteError ? e.message : 'Could not update staff access.' }
   }
 
-  await db.user.update({ where: { id: target.id }, data: { isActive: makeActive } })
   await recordAudit(actor, {
     action: makeActive ? 'user.reactivated' : 'user.deactivated',
     entityType: 'User',
@@ -249,16 +134,19 @@ export async function changeRoleAction(_prev: UserActionState, formData: FormDat
   if (!assignableRoles(actor).includes(roleKey)) return { error: 'You cannot grant that role.' }
   if (target.role.key === roleKey) return {}
 
-  try {
-    await assertNotLastSuperAdmin(actor.organizationId, target.id)
-  } catch (e) {
-    return { error: e instanceof InviteError ? e.message : 'Blocked.' }
-  }
-
   const role = await db.role.findFirst({ where: { organizationId: actor.organizationId, key: roleKey } })
   if (!role) return { error: 'Role not found.' }
+  try {
+    await db.$transaction(async (tx) => {
+      await lockStaffChanges(tx, actor.organizationId, actor.id)
+      await assertNotLastSuperAdmin(actor.organizationId, target.id, tx)
+      await tx.user.update({ where: { id: target.id }, data: { roleId: role.id, isOwner: false } })
+      if (roleKey !== 'CLOSER') await detachCloser(tx, target.id)
+    })
+  } catch (e) {
+    return { error: e instanceof InviteError ? e.message : 'Could not change role.' }
+  }
 
-  await db.user.update({ where: { id: target.id }, data: { roleId: role.id } })
   await recordAudit(actor, {
     action: 'user.role_changed',
     entityType: 'User',
@@ -267,4 +155,48 @@ export async function changeRoleAction(_prev: UserActionState, formData: FormDat
   })
   revalidatePath('/settings/users')
   return {}
+}
+
+async function lockStaffChanges(tx: import('@prisma/client').Prisma.TransactionClient, organizationId: string, actorId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`staff:${organizationId}`}))`
+  const actor = await tx.user.findFirst({ where: { id: actorId, organizationId, isActive: true, deletedAt: null, role: { key: 'SUPER_ADMIN' } } })
+  if (!actor) throw new InviteError('Your staff-management access changed. Reload and try again.')
+}
+
+async function detachCloser(tx: import('@prisma/client').Prisma.TransactionClient, userId: string) {
+  await tx.$queryRaw`SELECT id FROM "Client" WHERE "ownerId" = ${userId} ORDER BY id FOR UPDATE`
+  const now = new Date()
+  await tx.appointment.updateMany({ where: { client: { ownerId: userId }, status: { in: ['SCHEDULED', 'CONFIRMED'] }, startsAt: { gte: now } }, data: { ownerId: null } })
+  await tx.assignment.updateMany({ where: { assigneeId: userId, isActive: true }, data: { isActive: false, unassignedAt: now } })
+  await tx.client.updateMany({ where: { ownerId: userId }, data: { ownerId: null } })
+}
+
+export type CloserPermissionState = { error?: string; saved?: boolean }
+export async function updateCloserPermissionsAction(_prev: CloserPermissionState, formData: FormData): Promise<CloserPermissionState> {
+  const actor = await requirePermission('roles:manage')
+  const selected = formData.getAll('permission').map(String)
+  if (selected.some((key) => !CLOSER_EDITABLE_PERMISSIONS.includes(key as PermissionKey))) return { error: 'Only listed Closer actions can be changed.' }
+  const keys = [...new Set(['clients:read_assigned', ...selected])]
+  try {
+    await db.$transaction(async (tx) => {
+      await lockStaffChanges(tx, actor.organizationId, actor.id)
+      const role = await tx.role.findFirst({ where: { organizationId: actor.organizationId, key: 'CLOSER' } })
+      if (!role) throw new InviteError('Closer role is not configured.')
+      const before = await tx.rolePermission.findMany({ where: { roleId: role.id }, include: { permission: true } })
+      const permissions = await tx.permission.findMany({ where: { key: { in: keys } } })
+      if (permissions.length !== keys.length) throw new InviteError('Permission catalog is incomplete.')
+      await tx.rolePermission.deleteMany({ where: { roleId: role.id } })
+      await tx.rolePermission.createMany({ data: permissions.map((permission) => ({ roleId: role.id, permissionId: permission.id })) })
+      await tx.auditEvent.create({ data: {
+        organizationId: actor.organizationId, actorId: actor.id, actorLabel: `${actor.name} (Super Admin)`,
+        action: 'role.closer_permissions_changed', entityType: 'Role', entityId: role.id,
+        summary: 'Updated shared Closer action permissions; assignment scope is unchanged.',
+        before: before.map((row) => row.permission.key), after: keys,
+      } })
+    })
+  } catch (error) {
+    return { error: error instanceof InviteError ? error.message : 'Could not update Closer permissions.' }
+  }
+  revalidatePath('/settings/users')
+  return { saved: true }
 }

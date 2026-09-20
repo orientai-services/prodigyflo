@@ -31,6 +31,7 @@ describe('invites', () => {
     })
     superAdmin = { ...fakeUser(orgId, 'SUPER_ADMIN'), id: sa.id }
     admin = fakeUser(orgId, 'ADMIN')
+    await db.team.create({ data: { organizationId: orgId, name: 'Team Prodigy' } })
     // audit needs a real actor row for admin actions? recordAudit only stores actorId string — fine.
   })
 
@@ -38,44 +39,22 @@ describe('invites', () => {
     await db.organization.delete({ where: { id: orgId } })
   })
 
-  it('rank rules: only the owner mints Super Admins', () => {
-    const owner = { ...fakeUser(orgId, 'SUPER_ADMIN', `${run}-owner`), isOwner: true }
-    expect(assignableRoles(admin)).not.toContain('SUPER_ADMIN')
-    expect(assignableRoles(admin)).not.toContain('ADMIN')
-    expect(assignableRoles(admin)).toContain('CLOSER')
-    // a non-owner Super Admin can no longer mint peers
-    expect(assignableRoles(superAdmin)).not.toContain('SUPER_ADMIN')
-    expect(assignableRoles(superAdmin)).toContain('ADMIN')
-    expect(assignableRoles(owner)).toContain('SUPER_ADMIN')
-    expect(assignableRoles(owner)).not.toContain('CLIENT')
+  it('only Super Admin can grant either active role, regardless of owner flag', () => {
+    expect(assignableRoles(admin)).toEqual([])
+    expect(assignableRoles(superAdmin)).toEqual(['SUPER_ADMIN', 'CLOSER'])
+    expect(assignableRoles({ ...superAdmin, isOwner: true })).toEqual(assignableRoles(superAdmin))
+    expect(canManageUser(admin, { id: 'other', roleKey: 'CLOSER' })).toBe(false)
+    expect(canManageUser(superAdmin, { id: superAdmin.id, roleKey: 'SUPER_ADMIN', isOwner: true })).toBe(true)
   })
 
-  it('canManageUser: never self, never upward — and the owner is untouchable', () => {
-    const owner = { ...fakeUser(orgId, 'SUPER_ADMIN', `${run}-owner`), isOwner: true }
-    expect(canManageUser(admin, { id: admin.id, roleKey: 'ADMIN' })).toBe(false)
-    expect(canManageUser(admin, { id: 'other', roleKey: 'SUPER_ADMIN' })).toBe(false)
-    expect(canManageUser(admin, { id: 'other', roleKey: 'CLOSER' })).toBe(true)
-    // even a Super Admin cannot manage the owner (who reads as a mere peer)
-    expect(canManageUser(superAdmin, { id: 'o', roleKey: 'SUPER_ADMIN', isOwner: true })).toBe(false)
-    // the owner can manage a Super Admin
-    expect(canManageUser(owner, { id: 'sa', roleKey: 'SUPER_ADMIN' })).toBe(true)
-  })
-
-  it('Super Admin seats are capped for the owner (owner excluded from the count)', async () => {
+  it('allows more than two Super Admin seats', async () => {
     const saRole = await db.role.findFirstOrThrow({ where: { organizationId: orgId, key: 'SUPER_ADMIN' } })
-    const ownerRow = await db.user.create({
-      data: { organizationId: orgId, roleId: saRole.id, isOwner: true, email: `own-${run}@t.test`, name: 'O', passwordHash: 'x' },
-    })
-    const owner = { ...fakeUser(orgId, 'SUPER_ADMIN', ownerRow.id), id: ownerRow.id, isOwner: true }
-    // one non-owner Super Admin already exists (the fixture) → one seat left of 2
-    await createInvite(owner, { email: `seat1-${run}@t.test`, roleKey: 'SUPER_ADMIN' })
-    await expect(
-      createInvite(owner, { email: `seat2-${run}@t.test`, roleKey: 'SUPER_ADMIN' }),
-    ).rejects.toThrow(/seats are taken/)
+    await db.user.create({ data: { organizationId: orgId, roleId: saRole.id, isOwner: true, email: `own-${run}@t.test`, name: 'O', passwordHash: 'x' } })
+    for (let n = 0; n < 3; n++) await createInvite(superAdmin, { email: `seat${n}-${run}@t.test`, roleKey: 'SUPER_ADMIN' })
   })
 
   it('creates, finds, and accepts an invite exactly once', async () => {
-    const { token } = await createInvite(superAdmin, { email: `NEW-${run}@T.Test`, roleKey: 'ADMIN' })
+    const { token } = await createInvite(superAdmin, { email: `NEW-${run}@T.Test`, roleKey: 'CLOSER' })
 
     const live = await findLiveInvite(token)
     expect(live?.email).toBe(`new-${run}@t.test`) // normalized
@@ -90,7 +69,7 @@ describe('invites', () => {
 
   it('refuses invites for existing users and duplicate pending invites', async () => {
     await expect(
-      createInvite(superAdmin, { email: `sa-${run}@t.test`, roleKey: 'ADMIN' }),
+      createInvite(superAdmin, { email: `sa-${run}@t.test`, roleKey: 'CLOSER' }),
     ).rejects.toThrow(/already exists/)
 
     await createInvite(superAdmin, { email: `pend-${run}@t.test`, roleKey: 'CLOSER' })
@@ -100,7 +79,7 @@ describe('invites', () => {
   })
 
   it('admin cannot grant admin; reset rotates the token; revoke kills it', async () => {
-    await expect(createInvite(admin, { email: `x-${run}@t.test`, roleKey: 'ADMIN' })).rejects.toThrow(/cannot grant/)
+    await expect(createInvite(admin, { email: `x-${run}@t.test`, roleKey: 'CLOSER' })).rejects.toThrow(/cannot grant/)
 
     const { invite, token } = await createInvite(superAdmin, { email: `rot-${run}@t.test`, roleKey: 'CLOSER' })
     const { token: token2 } = await resetInviteLink(superAdmin, invite.id)

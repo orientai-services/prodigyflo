@@ -6,7 +6,7 @@ import { db } from '@/lib/db'
 import { recordAudit } from '@/lib/audit'
 import { ForbiddenError, findClientInScope, requirePermission } from '@/lib/rbac'
 import { moveClientToStage, StageTransitionError } from '@/lib/stage-transitions'
-import { normalizeForCompare } from '@/lib/cys/resolve'
+import { CYS_DOCUMENT_KINDS, normalizeForCompare } from '@/lib/cys/resolve'
 import { generateCysPackage, resolveForClient } from '@/lib/cys/data'
 import { PackageNotAllowedError } from '@/lib/cys/package'
 
@@ -56,10 +56,10 @@ export async function verifyCysFieldAction(input: z.infer<typeof verifySchema>):
       where: { organizationId_key: { organizationId: user.organizationId, key: fieldKey } },
     })
     if (!def || !def.isActive) return { ok: false, error: 'Unknown CYS field.' }
+    if (CYS_DOCUMENT_KINDS[fieldKey]) return { ok: false, error: 'Upload and review the actual file in the document module.' }
 
-    const existing = await db.cysFieldValue.findUnique({
-      where: { clientId_fieldKey: { clientId, fieldKey } },
-    })
+    const workspace = await resolveForClient(user, clientId)
+    const existing = workspace.values.find((row) => row.fieldKey === fieldKey) ?? null
 
     const provided = parsed.data.value
     const value = provided !== undefined && provided !== '' ? provided : (existing?.value ?? '')
@@ -83,6 +83,7 @@ export async function verifyCysFieldAction(input: z.infer<typeof verifySchema>):
         note: note ?? null,
         verifiedById: user.id,
         verifiedAt: now,
+        ...(keepSource ? { sourceLabel: existing.sourceLabel, sourceDocumentId: existing.sourceDocumentId, sourceExtractedFieldId: existing.sourceExtractedFieldId, confidence: existing.confidence } : {}),
       },
       update: {
         value: value.trim(),
@@ -102,8 +103,8 @@ export async function verifyCysFieldAction(input: z.infer<typeof verifySchema>):
       },
     })
 
-    // Refresh the readiness counters (a human-verified row is never clobbered).
-    await resolveForClient(user, clientId)
+    // A changed answer needs a fresh approval. Preserve earlier Submission snapshots.
+    if (corrected) await db.cysReadiness.updateMany({ where: { clientId }, data: { approvedAt: null, approvedById: null, packageGeneratedAt: null } })
 
     await recordAudit(user, {
       action: corrected ? 'cys.field_corrected' : 'cys.field_verified',
@@ -146,7 +147,7 @@ export async function approveCysReadinessAction(
       select: { category: true },
     })
 
-    const { completion, blockers } = await resolveForClient(user, clientId)
+    const { completion, blockers, checklist } = await resolveForClient(user, clientId)
     if (blockers.length > 0) {
       return {
         ok: false,
@@ -167,9 +168,10 @@ export async function approveCysReadinessAction(
     }
 
     const now = new Date()
-    await db.cysReadiness.update({
+    await db.cysReadiness.upsert({
       where: { clientId },
-      data: {
+      create: { clientId, ...completion, checklist, approvedById: user.id, approvedAt: now, approvalNote: note ?? null },
+      update: {
         approvedById: user.id,
         approvedAt: now,
         approvalNote: note ?? null,

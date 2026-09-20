@@ -22,7 +22,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ submis
         select: {
           id: true, firstName: true, lastName: true, email: true, phone: true,
           addresses: { select: { line1: true, line2: true, city: true, state: true, postalCode: true, isPrimary: true } },
-          surveyResponses: { orderBy: { updatedAt: 'desc' }, take: 1, select: { answers: true, completedAt: true } },
+          surveyResponses: { where: { survey: { name: { not: 'ProdigyFlo Final Questionnaire' } } }, orderBy: { updatedAt: 'desc' }, take: 1, select: { answers: true, completedAt: true } },
         },
       },
     },

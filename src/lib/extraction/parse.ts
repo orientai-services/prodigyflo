@@ -55,13 +55,17 @@ const PATTERNS: Record<string, Pattern[]> = {
   monthly_payment: [
     { re: new RegExp(String.raw`monthly\s*(?:payment|amount|rate)\s*[:\-]?\s*${MONEY}`, 'i'), confidence: 92, transform: (m) => `$${m[1]}` },
   ],
+  first_year_monthly_payment: [
+    { re: new RegExp(String.raw`(?:first[ -]year|initial)\s*monthly\s*(?:payment|amount|rate)\s*[:\-]?\s*${MONEY}`, 'i'), confidence: 92, transform: (m) => `$${m[1]}` },
+  ],
   term_months: [
     {
-      re: /(?:term|duration)\s*[:\-]?\s*(\d{1,3})\s*(months?|years?)/i,
+      re: /(?:term|duration)\s*[:\-]?\s*(\d{1,3})\s*months?/i,
       confidence: 90,
-      transform: (m) => String(/year/i.test(m[2]) ? Number(m[1]) * 12 : Number(m[1])),
+      transform: (m) => m[1],
     },
   ],
+  term_years: [{ re: /(?:term|duration)\s*[:\-]?\s*(\d{1,3})\s*years?/i, confidence: 90 }],
   escalator_pct: [{ re: /escalator\s*(?:rate)?\s*[:\-]?\s*(\d{1,2}(?:\.\d{1,2})?)\s*%/i, confidence: 90, transform: (m) => m[1] }],
 }
 
@@ -80,7 +84,11 @@ function snippetAround(page: string, match: RegExpMatchArray): string | null {
  */
 export function extractFieldsFromText(spec: DocTypeSpec, pages: string[]): ParsedField[] {
   return spec.fields.map((field) => {
-    for (const pattern of PATTERNS[field.key] ?? []) {
+    // For solar contracts only an explicitly current amount belongs here.
+    const patterns = spec.key === 'solar_contract' && field.key === 'monthly_payment'
+      ? [{ re: new RegExp(String.raw`current\s+monthly\s*(?:payment|amount|rate)\s*[:\-]?\s*${MONEY}`, 'i'), confidence: 92, transform: (m: RegExpMatchArray) => `$${m[1]}` }]
+      : PATTERNS[field.key] ?? []
+    for (const pattern of patterns) {
       for (let p = 0; p < pages.length; p++) {
         const match = pages[p].match(pattern.re)
         if (match?.[1]) {

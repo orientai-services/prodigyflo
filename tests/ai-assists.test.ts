@@ -188,14 +188,14 @@ let clientId: string
 
 function sessionUser(permissions: PermissionKey[], id?: string): SessionUser {
   return {
-    id: id ?? reviewerId,
+    id: id ?? ownerId,
     name: 'Test Reviewer',
     email: `${stamp}@example.com`,
     organizationId: orgId,
     organizationName: 'AI Test Org',
     roleId,
     isOwner: false,
-    role: 'ADMIN',
+    role: 'CLOSER',
     roleName: 'Admin',
     regionId: null,
     teamId: null,
@@ -212,7 +212,7 @@ const FULL: PermissionKey[] = ['ai:run', 'ai:review', 'clients:read_all']
 beforeAll(async () => {
   const org = await db.organization.create({ data: { name: 'AI Test Org', slug: stamp } })
   orgId = org.id
-  const role = await db.role.create({ data: { organizationId: orgId, key: 'ADMIN', name: 'Admin' } })
+  const role = await db.role.create({ data: { organizationId: orgId, key: 'CLOSER', name: 'Admin' } })
   roleId = role.id
   const reviewer = await db.user.create({
     data: { organizationId: orgId, roleId, email: `${stamp}@example.com`, passwordHash: 'x', name: 'Test Reviewer' },
@@ -282,7 +282,7 @@ describe('runAssist', () => {
   })
 
   it('refuses clients outside the caller scope', async () => {
-    const result = await runAssist(sessionUser(['ai:run']), { clientId, kind: 'summary' })
+    const result = await runAssist(sessionUser(['ai:run'], reviewerId), { clientId, kind: 'summary' })
     expect(result.ok).toBe(false)
   })
 
@@ -334,11 +334,11 @@ describe('reviewAssist', () => {
 
     const tasks = await db.task.findMany({ where: { clientId }, orderBy: { createdAt: 'desc' }, take: suggested })
     expect(tasks.every((t) => t.assigneeId === ownerId)).toBe(true)
-    expect(tasks.every((t) => t.createdById === reviewerId)).toBe(true)
+    expect(tasks.every((t) => t.createdById === ownerId)).toBe(true)
 
     const row = await db.aIRecommendation.findUniqueOrThrow({ where: { id: run.item.id } })
     expect(row.status).toBe('ACCEPTED')
-    expect(row.reviewedById).toBe(reviewerId)
+    expect(row.reviewedById).toBe(ownerId)
     expect(row.reviewedAt).not.toBeNull()
 
     // A second accept is refused and creates nothing further.
@@ -374,7 +374,7 @@ describe('reviewAssist', () => {
 
     const row = await db.aIRecommendation.findUniqueOrThrow({ where: { id: run.item.id } })
     expect(row.status).toBe('DISMISSED')
-    expect(row.reviewedById).toBe(reviewerId)
+    expect(row.reviewedById).toBe(ownerId)
   })
 })
 

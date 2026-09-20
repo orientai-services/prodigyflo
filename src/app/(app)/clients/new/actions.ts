@@ -68,7 +68,7 @@ export async function createClientAction(input: unknown): Promise<CreateClientRe
     }
 
     if (data.ownerId) {
-      const owner = await db.user.findFirst({ where: { AND: [userScope(user), { id: data.ownerId }] } })
+      const owner = await db.user.findFirst({ where: { AND: [userScope(user), { id: data.ownerId, isActive: true, role: { key: 'CLOSER' } }] } })
       if (!owner) return { error: 'That owner is not available to you.' }
     }
 

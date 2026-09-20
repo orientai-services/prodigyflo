@@ -28,12 +28,15 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { missingDocsLabel, type DeskBoard, type DeskChip, type DeskLead } from '@/lib/daily-desk'
+import { civilDate, timeLabel, missingDocsLabel, type DeskBoard, type DeskChip, type DeskLead } from '@/lib/daily-desk'
 import { assignDeskCloserAction, bookAppointmentAction, markNoShowAction } from './actions'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 type MenuState = {
+  startsAt?: string
+  appointmentId?: string
+  status?: string
   clientId: string
   x: number
   y: number
@@ -59,6 +62,7 @@ export function DeskCalendar({
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [assignId, setAssignId] = useState<string | null>(null)
   const [bookId, setBookId] = useState<string | null>(null)
+  const [bookAppointmentId, setBookAppointmentId] = useState<string | undefined>()
   const [bookDate, setBookDate] = useState(board.today)
   const [bookTime, setBookTime] = useState('10:00')
   const [closerId, setCloserId] = useState(board.closers[0]?.id ?? '')
@@ -96,9 +100,9 @@ export function DeskCalendar({
     void runBook(clientId, date, '10:00')
   }
 
-  async function runBook(clientId: string, date: string, time: string) {
+  async function runBook(clientId: string, date: string, time: string, appointmentId?: string) {
     setPending(true)
-    const result = await bookAppointmentAction({ clientId, date, time, timezone: 'America/Los_Angeles' })
+    const result = await bookAppointmentAction({ clientId, date, time, appointmentId, timezone: board.timezone })
     setPending(false)
     if (result.ok) {
       toast.success('Appointment saved.')
@@ -128,10 +132,10 @@ export function DeskCalendar({
     }
   }
 
-  async function runNoShow(clientId: string) {
+  async function runNoShow(clientId: string, appointmentId: string) {
     closeMenu()
     setPending(true)
-    const result = await markNoShowAction({ clientId })
+    const result = await markNoShowAction({ clientId, appointmentId })
     setPending(false)
     if (result.ok) {
       toast.success('Marked no-show.')
@@ -176,7 +180,7 @@ export function DeskCalendar({
         <div className="desk-board">
           <section className="desk-card">
             <div className="desk-cal-head">
-              <h2 className="font-heading">{board.title}</h2>
+              <h2 className="font-heading">{board.title} <small>{board.timezone}</small></h2>
               <div className="desk-cal-nav">
                 <Link href={prevHref} className="desk-btn-secondary">
                   Prev
@@ -206,13 +210,16 @@ export function DeskCalendar({
                 >
                   {day.chips.map((chip) => (
                     <Chip
-                      key={chip.clientId}
+                      key={chip.appointmentId}
                       chip={chip}
                       onOpen={() => openProfile(chip.clientId)}
                       onMenu={(event) => {
                         event.preventDefault()
                         setMenu({
                           clientId: chip.clientId,
+                          appointmentId: chip.appointmentId,
+                          status: chip.status,
+                          startsAt: chip.startsAt,
                           x: event.clientX,
                           y: event.clientY,
                           name: `${chip.firstName} ${chip.lastName}`,
@@ -233,7 +240,7 @@ export function DeskCalendar({
             <p className="desk-muted">
               {board.canBook ? 'Drag onto a day or click the file.' : 'Click a file to open it.'}
             </p>
-            {board.unscheduled.length === 0 && <p className="desk-muted">Everyone on this month has a time.</p>}
+            {board.unscheduled.length === 0 && <p className="desk-muted">All active clients have an upcoming appointment.</p>}
             {board.unscheduled.map((lead) => (
               <UnscheduledLead
                 key={lead.clientId}
@@ -290,24 +297,25 @@ export function DeskCalendar({
               Assign closer
             </button>
           )}
-          {board.canBook && (
+          {board.canBook && (!menu.appointmentId || ['SCHEDULED', 'CONFIRMED'].includes(menu.status ?? '')) && (
             <button
               type="button"
               onClick={() => {
-                setBookDate(board.today)
-                setBookTime('10:00')
+                setBookDate(menu.startsAt ? civilDate(new Date(menu.startsAt), board.timezone) : board.today)
+                setBookTime(menu.startsAt ? timeLabel(new Date(menu.startsAt), board.timezone) : '10:00')
                 setBookId(menu.clientId)
+                setBookAppointmentId(menu.appointmentId)
                 closeMenu()
               }}
             >
-              {chips.has(menu.clientId) ? 'Reschedule' : 'Book'}
+              {menu.appointmentId ? 'Reschedule' : 'Book'}
             </button>
           )}
           <button type="button" onClick={() => copyContact(menu)}>
             Copy contact
           </button>
-          {board.canBook && chips.has(menu.clientId) && (
-            <button type="button" onClick={() => void runNoShow(menu.clientId)}>
+          {board.canBook && menu.appointmentId && ['SCHEDULED', 'CONFIRMED'].includes(menu.status ?? '') && (
+            <button type="button" onClick={() => void runNoShow(menu.clientId, menu.appointmentId!)}>
               Mark no-show
             </button>
           )}
@@ -379,7 +387,7 @@ export function DeskCalendar({
             </Button>
             <Button
               disabled={pending}
-              onClick={() => bookId && void runBook(bookId, bookDate, bookTime || '10:00')}
+              onClick={() => bookId && void runBook(bookId, bookDate, bookTime || '10:00', bookAppointmentId)}
             >
               Save
             </Button>
@@ -437,6 +445,7 @@ function Chip({
         {chip.timeLabel} {chip.firstName}
       </b>
       {chip.ownerName ?? 'Unassigned'}
+      {!['SCHEDULED', 'CONFIRMED'].includes(chip.status) && <span>{chip.status.replaceAll('_', ' ').toLowerCase()}</span>}
       <span className="desk-chip-meta">{missingDocsLabel(chip.missingDocs)}</span>
     </button>
   )

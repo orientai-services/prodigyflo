@@ -1,6 +1,6 @@
 import { str } from '@/lib/packet/schema'
 
-const TYPE_ALIASES: Record<string, string[]> = {
+export const TYPE_ALIASES: Record<string, string[]> = {
   finance_agreement: ['finance_agreement', 'loan_or_til', 'loan_agreement', 'til'],
   solar_contract: [
     'solar_contract',
@@ -13,7 +13,8 @@ const TYPE_ALIASES: Record<string, string[]> = {
   ],
 }
 
-const FIELD_ALIASES: Record<string, string[]> = {
+export const FIELD_ALIASES: Record<string, string[]> = {
+  product_type: ['product_type', 'agreement_type'],
   amount_financed: ['amount_financed', 'total_financed'],
   monthly_payment: ['monthly_payment', 'monthly_solar_payment'],
   term_months: ['term_months', 'payment_term_months'],
@@ -23,7 +24,8 @@ const FIELD_ALIASES: Record<string, string[]> = {
   installer_name: ['installer_name', 'installer'],
   system_size_kw: ['system_size_kw', 'system_size'],
   first_payment_date: ['first_payment_date', 'first_pay_date'],
-  escalator_rate: ['escalator_rate', 'annual_escalator'],
+  escalator_rate: ['escalator_rate', 'annual_escalator', 'escalator_pct'],
+  escalator_pct: ['escalator_pct', 'escalator_rate', 'annual_escalator'],
   buyout_terms: ['buyout_terms', 'buyout'],
   remaining_balance: ['remaining_balance', 'remaining'],
 }
@@ -31,15 +33,16 @@ const FIELD_ALIASES: Record<string, string[]> = {
 export type ExtractableDoc = {
   extractions: {
     detectedTypeKey: string | null
-    fields: { key: string; value: string | null; correctedValue: string | null }[]
+    status?: string
+    fields: { key: string; value: string | null; correctedValue: string | null; verification?: string; sourcePage?: number | null }[]
   }[]
 }
 
-function keysForType(typeKey: string): string[] {
+export function keysForType(typeKey: string): string[] {
   return TYPE_ALIASES[typeKey] ?? [typeKey]
 }
 
-function keysForField(fieldKey: string): string[] {
+export function keysForField(fieldKey: string): string[] {
   return FIELD_ALIASES[fieldKey] ?? [fieldKey]
 }
 
@@ -49,19 +52,64 @@ export function extracted(
   typeKey: string,
   fieldKey: string,
 ): string {
-  const types = new Set(keysForType(typeKey))
-  const fields = keysForField(fieldKey)
-  for (const d of docs) {
-    for (const ex of d.extractions) {
-      if (!types.has(str(ex.detectedTypeKey))) continue
-      for (const key of fields) {
-        const f = ex.fields.find((x) => x.key === key)
-        const v = str(f?.correctedValue) || str(f?.value)
-        if (v) return v
-      }
+  return extractedFact(docs, typeKey, fieldKey)?.value ?? ''
+}
+
+export type ExtractedFact = { value: string; verified: boolean; note: string }
+
+/** Extractions are newest first. A newer blank clears an old suggestion, while
+ * reviewed readings remain available across reruns for correction protection. */
+export function currentExtractionFields<E extends {
+  detectedTypeKey: string | null
+  status?: string
+  fields: { key: string; verification?: string }[]
+}>(extractions: E[]): { extraction: E; field: E['fields'][number] }[] {
+  const seen = new Set<string>()
+  const rows: { extraction: E; field: E['fields'][number] }[] = []
+  for (const extraction of extractions) {
+    if (extraction.status && extraction.status !== 'COMPLETED') continue
+    for (const field of extraction.fields) {
+      const identity = `${extraction.detectedTypeKey}:${field.key}`
+      const reviewed = ['VERIFIED', 'CORRECTED'].includes(field.verification ?? '')
+      if (!seen.has(identity) || reviewed) rows.push({ extraction, field })
+      seen.add(identity)
     }
   }
-  return ''
+  return rows
+}
+
+/** Rejected readings never populate a profile; reviewed values survive later re-extraction. */
+export function extractedFact(docs: ExtractableDoc[], typeKey: string, fieldKey: string): ExtractedFact | null {
+  const types = new Set(keysForType(typeKey))
+  const keys = keysForField(fieldKey)
+  const candidates = docs.flatMap(doc => currentExtractionFields(doc.extractions)
+    .filter(({ extraction, field }) => types.has(str(extraction.detectedTypeKey)) && keys.includes(field.key))
+    .map(({ field }) => field))
+    .filter(field => field.verification !== 'REJECTED' && (str(field.correctedValue) || str(field.value)))
+  const reviewed = candidates.filter(field => ['VERIFIED', 'CORRECTED'].includes(field.verification ?? ''))
+  const field = reviewed[0] ?? candidates[0]
+  if (!field) return null
+  const value = str(field.correctedValue) || str(field.value)
+  if (reviewed.some(other => (str(other.correctedValue) || str(other.value)).toLowerCase() !== value.toLowerCase())) {
+    return { value, verified: false, note: 'Conflicting reviewed readings; resolve in CYS.' }
+  }
+  return { value, verified: reviewed.length > 0, note: `${reviewed.length ? 'Reviewed document' : 'Unverified extraction'}${field.sourcePage ? ` · p. ${field.sourcePage}` : ''}` }
+}
+
+export function normalizeProduct(raw: string): string {
+  const value = raw.trim().toLowerCase()
+  if (/\bppa\b|power purchase agreement/.test(value)) return 'ppa'
+  if (/\blease\b/.test(value)) return 'lease'
+  if (/\bloan\b/.test(value)) return 'loan'
+  if (/\bcash\b/.test(value)) return 'cash'
+  return value
+}
+
+/** A stated year count may be converted; an unknown start date cannot be inferred. */
+export function termMonthsFromYears(raw: string): string {
+  const match = raw.trim().match(/^(\d+(?:\.\d+)?)\s*(?:years?|yrs?)?$/i)
+  const years = match ? Number(match[1]) : NaN
+  return Number.isFinite(years) && years > 0 ? String(years * 12) : ''
 }
 
 const CONTRACT_TYPES = new Set([
@@ -77,16 +125,7 @@ export function extractedFromAnyContract(
   docs: ExtractableDoc[],
   fieldKey: string,
 ): string {
-  const fields = keysForField(fieldKey)
-  for (const d of docs) {
-    for (const ex of d.extractions) {
-      if (!CONTRACT_TYPES.has(str(ex.detectedTypeKey))) continue
-      for (const key of fields) {
-        const f = ex.fields.find((x) => x.key === key)
-        const v = str(f?.correctedValue) || str(f?.value)
-        if (v) return v
-      }
-    }
-  }
-  return ''
+  const contracts = docs.map(doc => ({ extractions: doc.extractions.filter(ex => CONTRACT_TYPES.has(str(ex.detectedTypeKey))) }))
+  const facts = ['finance_agreement', 'solar_contract'].map(type => extractedFact(contracts, type, fieldKey)).filter((fact): fact is ExtractedFact => fact !== null)
+  return (facts.find(fact => fact.verified) ?? facts[0])?.value ?? ''
 }

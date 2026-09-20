@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { recordAudit, redactForAudit } from '@/lib/audit'
 import { normaliseEmail, normalisePhone } from '@/lib/dedupe'
-import type { SessionUser } from '@/lib/rbac'
+import { ForbiddenError, type SessionUser } from '@/lib/rbac'
 
 /** The organization's default pipeline and its entry stage. */
 export async function getDefaultPipeline(organizationId: string) {
@@ -48,9 +48,12 @@ export type NewClientData = {
  * write path shared by the manual form and the CSV importer.
  */
 export async function createClientRecord(user: SessionUser, data: NewClientData, source = 'manual') {
+  if (user.role !== 'SUPER_ADMIN') throw new ForbiddenError()
   const { pipeline, firstStage } = await getDefaultPipeline(user.organizationId)
 
   const client = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`staff:${user.organizationId}`}))`
+    if (data.ownerId && !await tx.user.findFirst({ where: { id: data.ownerId, organizationId: user.organizationId, isActive: true, deletedAt: null, role: { key: 'CLOSER' } } })) throw new ForbiddenError('Assign an active Closer from this workspace.')
     const created = await tx.client.create({
       data: {
         organizationId: user.organizationId,

@@ -251,7 +251,7 @@ describe('digestScopeFor', () => {
 describe('per-recipient stat scoping (clientScope threading)', () => {
   const inWeek = { gte: new Date('2026-08-17T07:00:00Z'), lt: new Date('2026-08-24T07:00:00Z') }
 
-  it("scopes a SALES_MANAGER's clients to their team, excluding other teams", () => {
+  it("denies the retired SALES_MANAGER role", () => {
     const mgr = session(['clients:read_team'], { id: 'mgr', teamId: 'teamA' })
     const scope = clientScope(mgr)
     // Team managers get an OR of their own team / owned / managed clients — a
@@ -259,12 +259,7 @@ describe('per-recipient stat scoping (clientScope threading)', () => {
     expect(scope).toEqual({
       organizationId: 'org1',
       deletedAt: null,
-      OR: [
-        { teamId: 'teamA' },
-        { ownerId: 'mgr' },
-        { owner: { managerId: 'mgr' } },
-        { team: { managerId: 'mgr' } },
-      ],
+      id: '__none__',
     })
     // The digest's qualified where threads that scope through unchanged, so the
     // qualified count is likewise team-bounded.
@@ -275,7 +270,7 @@ describe('per-recipient stat scoping (clientScope threading)', () => {
   })
 
   it('gives an ADMIN the whole org (no team OR), which a manager never gets', () => {
-    const admin = clientScope(session(['clients:read_all']))
+    const admin = clientScope(session(['clients:read_all'], { role: 'SUPER_ADMIN' }))
     expect(admin).toEqual({ organizationId: 'org1', deletedAt: null })
     expect('OR' in admin).toBe(false)
   })

@@ -990,7 +990,7 @@ model AvailabilitySlot {
 model Appointment {
   id                  String            @id @default(cuid())
   clientId            String
-  ownerId             String
+  ownerId             String?
   type                AppointmentType   @default(PRESENTATION)
   status              AppointmentStatus @default(SCHEDULED)
   startsAt            DateTime
@@ -1012,7 +1012,7 @@ model Appointment {
   updatedAt           DateTime          @updatedAt
 
   client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  owner        User          @relation("AppointmentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner        User?         @relation("AppointmentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   presentation Presentation?
 
   @@index([clientId])
@@ -2521,4 +2521,15 @@ model WalletEntry {
 
   @@index([organizationId, createdAt])
   @@index([walletId, createdAt])
+}
+
+/// Operator-only migration snapshots. No organization FK and no application API.
+model WorkspaceMigrationArchive {
+  runId     String
+  tableName String
+  recordId  String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@id([runId, tableName, recordId])
 }
