@@ -102,7 +102,7 @@ export function DeskCalendar({
 
   async function runBook(clientId: string, date: string, time: string, appointmentId?: string) {
     setPending(true)
-    const result = await bookAppointmentAction({ clientId, date, time, appointmentId, timezone: board.timezone })
+    const result = await bookAppointmentAction({ clientId, date, time, appointmentId, expectedUpdatedAt: appointmentId ? chips.get(clientId)?.updatedAt : undefined, requestId: crypto.randomUUID(), timezone: board.timezone })
     setPending(false)
     if (result.ok) {
       toast.success('Appointment saved.')

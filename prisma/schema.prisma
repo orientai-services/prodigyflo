@@ -734,6 +734,7 @@ model Client {
   contracts             Contract[]
   stageHistory          StageHistory[]
   assignments           Assignment[]
+  appointmentReceipts   AppointmentReceipt[]
   appointments          Appointment[]
   presentations         Presentation[]
   paymentMethods        PaymentMethod[]
@@ -1014,10 +1015,31 @@ model Appointment {
   client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   owner        User?         @relation("AppointmentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   presentation Presentation?
+  receipts     AppointmentReceipt[]
 
   @@index([clientId])
   @@index([ownerId])
   @@index([startsAt])
+}
+
+// Durable command outcomes prevent retries from reopening or duplicating calls.
+// IDs are SHA-256 hashes; the reset archives and removes these case-bound receipts.
+model AppointmentReceipt {
+  id            String   @id
+  clientId      String
+  appointmentId String?
+  outcome       String
+  createdAt     DateTime @default(now())
+  client        Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+}
+
+// Only retired source identity hashes survive an approved clean-slate reset.
+model RetiredIdentity {
+  id        String   @id
+  createdAt DateTime @default(now())
 }
 
 model Presentation {

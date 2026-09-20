@@ -76,6 +76,7 @@ export type CaseFileData = {
   canUpload: boolean
   timezone: string
   appointmentId: string | null
+  appointmentUpdatedAt?: string | null
   canRequest: boolean
   canBrief: boolean
   bookDate: string

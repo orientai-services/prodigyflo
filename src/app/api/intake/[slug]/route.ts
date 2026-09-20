@@ -1,6 +1,7 @@
 import { readCohort } from '@/lib/intake/cohort'
 import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { RetiredIntakeError } from '@/lib/retired-identities'
 import { SIGNATURE_HEADER, TOKEN_HEADER, verifySignature, verifyToken } from '@/lib/intake/hmac'
 import { deriveExternalId } from '@/lib/intake/external-id'
 import { processInbound } from '@/lib/intake/apply'
@@ -86,7 +87,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try { control=readCohort(process.env.SCS_IMPORT_EXECUTION_COHORT) } catch { /* expired execution never blocks durable receipt */ }
   if (control?.mode === 'synthetic' && control.organizationId === source.organizationId && control.sourceId === source.id && control.cases.some(x=>x.leadId===stableScsLeadId)) (payload as Record<string, unknown>).stage0_synthetic=true
   const externalId = stableScsLeadId ? `scs:${stableScsLeadId}` : deriveExternalId(payload, preferredKey)
-  const { duplicate, submission } = await processInbound(source, externalId, payload)
+  let result
+  try { result = await processInbound(source, externalId, payload) } catch (error) {
+    if (error instanceof RetiredIntakeError) return Response.json({ status: 'IGNORED', reason: 'retired_test' })
+    throw error
+  }
+  const { duplicate, submission, booking } = result
 
   // Non-destructive recording layer: file this delivery as an InboundEvent (and
   // upsert its document, if any) for the Inbound workspace. Its internal
@@ -94,10 +100,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   await recordInboundEvent({ source, submission, payload, externalId })
 
   if (duplicate) {
-    return Response.json({ duplicate: true, clientId: submission.clientId, status: submission.status })
+    return Response.json({ duplicate: true, clientId: submission.clientId, status: submission.status, booking })
   }
   return Response.json({
     duplicate: false,
+    booking,
     status: submission.status,
     clientId: submission.clientId,
     submissionId: submission.id,

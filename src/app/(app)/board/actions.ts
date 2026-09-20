@@ -1,8 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { AppointmentStatus, AppointmentType, StageKey } from '@prisma/client'
+import { StageKey } from '@prisma/client'
 import { z } from 'zod'
+import { AppointmentStatus } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
+import { scheduleAppointment, type SchedulingResult } from '@/lib/scheduling'
 import { db } from '@/lib/db'
 import { applyAssignment } from '@/lib/assignment'
 import { DESK_TIMEZONE, civilDate, timeLabel, zonedDate } from '@/lib/daily-desk'
@@ -51,7 +54,7 @@ export async function moveCardAction(input: z.infer<typeof moveSchema>): Promise
   }
 }
 
-export type DeskActionResult = { ok?: boolean; error?: string }
+export type DeskActionResult = { ok?: boolean; error?: string; message?: string; appointment?: SchedulingResult }
 
 const assignSchema = z.object({
   clientId: z.string().min(1),
@@ -100,6 +103,8 @@ const bookSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: z.string().regex(/^\d{2}:\d{2}$/),
   timezone: z.string().min(1).optional(),
+  requestId: z.string().uuid().optional(),
+  expectedUpdatedAt: z.string().datetime().optional(),
 })
 
 /**
@@ -124,25 +129,17 @@ export async function bookAppointmentAction(
     try { startsAt = zonedDate(parsed.data.date, parsed.data.time, tz) } catch { return { error: 'Invalid appointment time.' } }
     if (!Number.isFinite(startsAt.getTime()) || civilDate(startsAt, tz) !== parsed.data.date || timeLabel(startsAt, tz) !== parsed.data.time) return { error: 'That local time does not exist. Choose another time.' }
     const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000)
-    await db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Client" WHERE id = ${client.id} FOR UPDATE`
-      const current = await tx.client.findFirst({ where: { AND: [clientScope(user), { id: client.id }] } })
-      if (!current) throw new ForbiddenError('This client is no longer assigned to you.')
-      if (parsed.data.appointmentId) {
-        const updated = await tx.appointment.updateMany({
-          where: { id: parsed.data.appointmentId, clientId: current.id, status: { in: ['SCHEDULED', 'CONFIRMED'] } },
-          data: { startsAt, endsAt, timezone: tz, ownerId: current.ownerId },
-        })
-        if (updated.count !== 1) throw new ForbiddenError('This appointment is no longer available to reschedule.')
-      } else {
-        await tx.appointment.create({ data: { clientId: current.id, ownerId: current.ownerId, type: AppointmentType.PRESENTATION, status: AppointmentStatus.SCHEDULED, startsAt, endsAt, timezone: tz } })
-      }
-    })
+    const appointment = await db.$transaction(tx => scheduleAppointment(tx, {
+      organizationId: user.organizationId, clientId: client.id, scope: clientScope(user),
+      requestKey: `manual:${parsed.data.requestId ?? randomUUID()}`, startsAt, endsAt, timezone: tz,
+      appointmentId: parsed.data.appointmentId, expectedUpdatedAt: parsed.data.expectedUpdatedAt,
+    }))
+    if (!appointment.ok) return { ok: false, error: appointment.error, appointment }
 
-    await maybeAdvanceToScheduled(user, client.id)
+    await maybeAdvanceToScheduled(user, client.id).catch(() => { console.warn('[scheduling] appointment saved; stage transition needs review') })
 
     revalidateDesk()
-    return { ok: true }
+    return { ok: true, appointment }
   } catch (error) {
     if (error instanceof ForbiddenError) return { error: error.message }
     throw error

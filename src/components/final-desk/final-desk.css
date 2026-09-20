@@ -158,3 +158,23 @@
 @media(max-width:980px){.final-desk .login,.final-desk .grid,.final-desk .g2,.final-desk .docs,.final-desk .math{grid-template-columns:1fr}.final-desk .rail{display:none}}
 
 .final-desk { min-height:100vh; line-height:normal; }
+
+/* Approved compact scheduling and client-filter controls. */
+.final-desk .board-grid{align-items:start}
+.final-desk .unscheduled-panel{display:flex;flex-direction:column;min-height:0;overflow:hidden;box-sizing:border-box}
+.final-desk .unscheduled-list{flex:1;min-height:0;overflow:hidden;margin:8px 0}
+.final-desk .view-unscheduled{flex:none;width:100%;white-space:normal}
+.final-desk .filter-box{width:min(1000px,calc(100vw - 32px));max-height:90vh;overflow:auto}
+.final-desk .filter-box .head{padding:0 0 12px;gap:12px}
+.final-desk .filter-box label{display:flex;align-items:center;gap:10px;margin:12px 0}
+.final-desk .filter-box label select{width:auto;margin:0}
+.final-desk .filter-group{border:1px solid var(--line,#d9d4c8);border-radius:8px;padding:12px;margin:14px 0}
+.final-desk .filter-rule{display:grid;grid-template-columns:minmax(140px,2fr) minmax(100px,1fr) minmax(130px,2fr) auto;gap:8px;align-items:center;margin:8px 0}
+.final-desk .filter-rule>button{grid-column:4}
+.final-desk .filter-rule input,.final-desk .filter-rule select{min-width:0;margin:0}
+.final-desk .filter-range{display:flex;gap:6px}
+.final-desk .filter-range input{width:50%}
+.final-desk .filter-expression{background:#f5f2eb;border-radius:6px;padding:12px;line-height:1.7;margin:16px 0;overflow-wrap:anywhere}
+.final-desk .client-pages{gap:14px;justify-content:space-between}
+@media(max-width:980px){.final-desk .board-grid{grid-template-columns:1fr}.final-desk .unscheduled-panel{max-height:400px}}
+@media(max-width:650px){.final-desk .filter-rule{grid-template-columns:1fr 1fr}.final-desk .filter-rule>:first-child{grid-column:1/-1}.final-desk .filter-rule>button{grid-column:2;justify-self:end}.final-desk .filter-box .head{flex-wrap:wrap}}

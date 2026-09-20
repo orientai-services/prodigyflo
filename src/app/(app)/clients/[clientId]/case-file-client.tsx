@@ -57,6 +57,8 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
     const result = await bookAppointmentAction({
       clientId: data.id,
       appointmentId: data.appointmentId ?? undefined,
+      expectedUpdatedAt: data.appointmentUpdatedAt ?? undefined,
+      requestId: crypto.randomUUID(),
       date: bookDate,
       time: bookTime || '10:00',
       timezone: data.timezone,
