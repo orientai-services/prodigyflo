@@ -7,6 +7,7 @@ export const DESK_TIMEZONE = 'America/Los_Angeles'
 
 export type DeskChip = {
   appointmentId: string
+  updatedAt?: string
   startsAt: string
   status: string
   clientId: string
@@ -46,6 +47,7 @@ export type DeskBoard = {
   today: string
   days: DeskDay[]
   unscheduled: DeskLead[]
+  unscheduledTotal: number
   closers: DeskCloser[]
   unassignedCount: number
   canAssign: boolean

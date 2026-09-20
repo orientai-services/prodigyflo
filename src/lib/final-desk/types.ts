@@ -1,3 +1,4 @@
+import type { ClientFilter, FilterField } from './filters'
 import type { DeskBoard } from '@/lib/daily-desk'
 import type { CaseFileData } from '@/lib/daily-desk-case-types'
 import type { QuestionnaireAnswers } from './questions'
@@ -11,6 +12,7 @@ export type FinalSuggestion = { id: string; clientId: string; name: string; titl
 export type FinalStaff = { id: string; name: string; email: string; role: string; status: string; inviteId?: string }
 export type FinalDeskPayload = {
   user: { id: string; name: string; role: 'SUPER_ADMIN' | 'CLOSER' }; queueCount: number;
+  clientList?: { total: number; page: number; pageSize: number; fields: FilterField[]; filters: ClientFilter; scheduling?: string };
   board?: DeskBoard; clients?: FinalClient[]; file?: CaseFileData;
   questionnaire?: { answers: QuestionnaireAnswers; page: number; done: boolean; revision: number };
   suggestions?: FinalSuggestion[]; staff?: FinalStaff[];

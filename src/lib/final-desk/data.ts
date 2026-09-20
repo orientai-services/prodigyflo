@@ -1,5 +1,7 @@
 import 'server-only'
 import { db } from '@/lib/db'
+import { loadFilteredClients } from './filtered-clients'
+import type { ClientQuery } from './filters'
 import { clientScope, type SessionUser } from '@/lib/rbac'
 import { loadCaseFile } from '@/lib/daily-desk-case'
 import { loadDeskBoard } from '@/lib/daily-desk-data'
@@ -34,7 +36,7 @@ async function loadFinalClients(user: SessionUser): Promise<FinalClient[]> {
   const rows = await db.client.findMany({ where: clientScope(user), orderBy: [{ lastActivityAt: 'desc' }, { id: 'asc' }],
     select: { id: true, firstName: true, lastName: true, owner: { select: { name: true } }, currentStage: { select: { name: true } },
       addresses: { where: { isPrimary: true }, take: 1, select: { state: true, postalCode: true } },
-      appointments: { where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, startsAt: { gte: new Date() } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, timezone: true } },
+      appointments: { where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: new Date() } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, timezone: true } },
       surveyResponses: { orderBy: { updatedAt: 'desc' }, select: { answers: true, survey: { select: { name: true } } } },
       documents: { where: { storageKey: { not: null }, status: { notIn: ['REJECTED', 'EXPIRED'] } },
         select: { id: true, label: true, fileName: true, requirement: { select: { key: true } },
@@ -56,13 +58,14 @@ async function loadFinalClients(user: SessionUser): Promise<FinalClient[]> {
   })
 }
 
-export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?: string, month?: string): Promise<FinalDeskPayload> {
+export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?: string, month?: string, query: ClientQuery = {}): Promise<FinalDeskPayload> {
   if ((view === 'engine' || view === 'users') && user.role !== 'SUPER_ADMIN') throw Error('Forbidden')
   const clients = await loadFinalClients(user)
   const queueCount = clients.filter(c => c.extraction === 'unverified' || (c.extraction === 'none' && c.appointment)).length
   const payload: FinalDeskPayload = { user: { id: user.id, name: user.name, role: user.role as 'SUPER_ADMIN' | 'CLOSER' }, queueCount }
   if (view === 'board') payload.board = await loadDeskBoard(user, month)
-  if (['clients', 'queue', 'engine', 'documents', 'submissions'].includes(view)) payload.clients = clients
+  if (['queue', 'engine', 'documents', 'submissions'].includes(view)) payload.clients = clients
+  if (view === 'clients') Object.assign(payload, await loadFilteredClients(user, query))
   if ((view === 'profile' || view === 'questionnaire') && clientId) {
     const [file, questionnaire] = await Promise.all([loadCaseFile(user, clientId), loadFinalQuestionnaire(user, clientId)])
     if (!file || !questionnaire) throw Error('Not found')

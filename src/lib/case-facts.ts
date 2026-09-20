@@ -1,0 +1,131 @@
+import { asRecord, str } from '@/lib/packet/schema'
+import { DESK_TIMEZONE } from '@/lib/daily-desk'
+import { amortize, sourceMoney, sourcePercent, sourceText } from '@/lib/daily-desk-finance'
+import { extracted, extractedFact, normalizeProduct, termMonthsFromYears, type ExtractedFact, type ExtractableDoc } from '@/lib/desk-extract'
+import type { CaseCell } from '@/lib/daily-desk-case-types'
+type Reviewed = { fieldKey: string; value: string | null; status: string; sourceLabel?: string | null; note?: string | null }
+export type CaseFactSource = {
+  organization: { timezone: string }; surveyResponses: { answers: unknown }[];
+  addresses: { line1: string; city: string; state: string; postalCode: string }[];
+  documents: ExtractableDoc[]; contracts: { productType: string | null }[];
+}
+function nestedStr(answers: Record<string, unknown>, group: string, key: string): string { return str(asRecord(answers[group])[key]) }
+/** Shared, read-only profile facts. Filters do not reimplement precedence or finance. */
+export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed[] } | null) {
+  const confirmed = (key: string) => cys?.values.find((value) => value.fieldKey === key && value.status === 'VERIFIED')?.value || ''
+  const timezone = client.organization.timezone || DESK_TIMEZONE
+  const answers = asRecord(client.surveyResponses[0]?.answers)
+  const addr = client.addresses[0]
+  const docs = client.documents
+  const fact = (type: string, key: string, cysKey?: string, answerKey?: string): ExtractedFact | null => {
+    const reviewed = cysKey ? cys?.values.find(value => value.fieldKey === cysKey && value.status === 'VERIFIED') : null
+    if (reviewed?.value) return { value: reviewed.value, verified: true, note: [reviewed.sourceLabel || 'Reviewed CYS value', reviewed.note].filter(Boolean).join(' · ') }
+    const read = extractedFact(docs, type, key)
+    const answer = answerKey ? str(answers[answerKey]) : ''
+    return read ?? (answer ? { value: answer, verified: false, note: 'Intake value · not document verified' } : null)
+  }
+  const productFact = fact('solar_contract', 'product_type', 'product_confirmed', 'product_confirmed')
+    ?? fact('finance_agreement', 'product_type')
+  const product = normalizeProduct(productFact?.value || str(client.contracts[0]?.productType) || str(answers.product_type_guess))
+  const isPpaOrLease = product === 'ppa' || product === 'lease'
+  const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
+  const amountFact = fact('finance_agreement', 'amount_financed', 'contract_value', 'amount_financed')
+  const aprFact = fact('finance_agreement', 'apr', isPpaOrLease ? undefined : 'apr_or_escalator', 'apr')
+  const firstPayFact = fact(type, isPpaOrLease ? 'in_service_date' : 'first_payment_date', 'first_payment_or_install')
+  const dealerFact = fact('finance_agreement', 'dealer_fee', 'dealer_fee', 'dealer_fee')
+  const termFact = fact(type, 'term_months', 'term_months', 'term_months')
+  const yearsFact = fact(type, 'term_years')
+  const term = termFact?.value || termMonthsFromYears(yearsFact?.value || '')
+  const termSource = termFact ?? (term && yearsFact ? { ...yearsFact, value: term, note: `${yearsFact.note} · Derived months = stated years × 12` } : null)
+  const paymentFact = fact(type, 'monthly_payment', undefined, isPpaOrLease ? undefined : 'monthly_payment')
+  const firstYearFact = fact('solar_contract', 'first_year_monthly_payment')
+  const basisFact = fact('solar_contract', 'payment_basis')
+  const startFact = fact('solar_contract', 'term_start_basis')
+  const escalationFact = fact('solar_contract', 'escalator_pct', isPpaOrLease ? 'apr_or_escalator' : undefined)
+  const installerFact = fact('solar_contract', 'installer_name', undefined, 'installer_guess')
+  const providerFact = isPpaOrLease
+    ? fact('solar_contract', 'contract_counterparty', 'lender_confirmed')
+    : fact(type, 'lender_name', 'lender_confirmed', 'lender_confirmed')
+  const kwFact = fact('solar_contract', 'system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
+  const kw = kwFact?.value || ''
+  const creditBand =
+    str(answers.credit_band) ||
+    nestedStr(answers, 'screening', 'credit_band') ||
+    nestedStr(answers, 'stage1_answers', 'credit_band') ||
+    nestedStr(answers, 'solar', 'credit_band')
+  const creditRaw =
+    creditBand || str(answers.credit_score) || str(answers.creditScore) || str(answers.credit)
+  const bankruptcy =
+    str(answers.active_bankruptcy) || nestedStr(answers, 'screening', 'active_bankruptcy')
+  const sourcedCell = (label: string, source: ExtractedFact | null, kind: 'money' | 'percent' | 'text' = 'text', hint?: string): CaseCell => ({
+    label,
+    cell: kind === 'money' ? sourceMoney(source?.value) : kind === 'percent' ? sourcePercent(source?.value) : sourceText(source?.value),
+    hint: [hint, source?.note].filter(Boolean).join(' · ') || undefined,
+    unverified: source ? !source.verified : undefined,
+  })
+  const termNum = Number(String(term).replace(/[^0-9.]/g, ''))
+  const termYears = Number.isFinite(termNum) && termNum > 0 ? { kind: 'value' as const, display: (termNum / 12).toFixed(termNum % 12 === 0 ? 0 : 1) } : { kind: 'missing' as const }
+  // Loan amortization is never a PPA balance, and suggestions cannot generate a
+  // financial estimate before the reviewer has checked the source inputs.
+  const reviewedLoan = product === 'loan' && [firstPayFact, termSource, aprFact, paymentFact].every(source => source?.verified)
+  const amort = amortize({ firstPayDate: reviewedLoan ? firstPayFact?.value : '', termMonths: term, aprPercent: aprFact?.value, monthlyPayment: paymentFact?.value })
+  const amortHint = reviewedLoan ? 'Estimate from reviewed loan terms; not a payoff quote' : 'Requires reviewed loan terms and an actual first payment date'
+  const finance: CaseCell[] = isPpaOrLease ? [
+    sourcedCell('Contract counterparty', providerFact),
+    sourcedCell('First-year monthly payment', firstYearFact, 'money', 'Contract starting amount; not today’s bill'),
+    sourcedCell('Contract-stated monthly payment', paymentFact, 'money', 'Current payment requires a current statement or explicit dated evidence'),
+    sourcedCell('Payment basis', basisFact),
+    sourcedCell('Annual payment escalation', escalationFact, 'percent', 'Annual increase; not loan APR'),
+    { label: 'Term years', cell: termYears, hint: termSource?.note, unverified: termSource ? !termSource.verified : undefined },
+    sourcedCell('Term months', termSource),
+    sourcedCell('Term starts', startFact),
+    sourcedCell('Actual in-service date', firstPayFact),
+    { label: 'Time remaining', cell: { kind: 'cannot_compute', missing: ['actual in-service date and reviewed term'] }, hint: 'No start date inferred from contract signing' },
+    sourcedCell('Contract effective date', fact('solar_contract', 'contract_date')),
+    sourcedCell('Customer signature date', fact('solar_contract', 'customer_signed_date')),
+  ] : [
+    sourcedCell('Total / amount financed', amountFact, 'money'),
+    { label: 'Estimated remaining balance', cell: amort.remaining, hint: amortHint },
+    sourcedCell('Interest rate', aprFact, 'percent'),
+    { label: 'Estimated interest paid', cell: amort.interestPaid, hint: amortHint },
+    { label: 'Term years', cell: termYears, hint: termSource?.note, unverified: termSource ? !termSource.verified : undefined },
+    sourcedCell('Term months', termSource),
+    { label: 'Years remaining', cell: amort.yearsRemaining, hint: amortHint },
+    { label: 'Months remaining', cell: amort.monthsRemaining, hint: amortHint },
+    sourcedCell('Monthly payment', paymentFact, 'money'),
+    sourcedCell('Dealer fee', dealerFact, 'money'),
+    sourcedCell('Lender', providerFact),
+    sourcedCell('First payment date', firstPayFact),
+  ]
+
+  const utility =
+    extracted(docs, 'utility_bill', 'utility_name') || str(answers.utility) || str(answers.utility_name)
+  const usage =
+    extracted(docs, 'production_report', 'production_kwh') ||
+    extracted(docs, 'utility_bill', 'kwh') ||
+    str(answers.usage_kwh) ||
+    str(answers.annual_usage)
+  const roofHome = [str(answers.yearsAtAddress) && `${answers.yearsAtAddress} years at address`, str(answers.line1) || addr?.line1]
+    .filter(Boolean)
+    .join(' · ')
+
+  const solar: CaseCell[] = [
+    sourcedCell('Agreement type', productFact ? { ...productFact, value: product } : product ? { value: product, verified: false, note: 'Intake / contract record · not document verified' } : null),
+    sourcedCell('Actual installer', installerFact),
+    {
+      label: creditBand ? 'Credit range' : 'Credit score',
+      cell: creditRaw ? { kind: 'value', display: creditRaw } : { kind: 'missing' },
+      hint: 'From the solar form · not a bureau pull',
+    },
+    {
+      label: 'Bankruptcy',
+      cell: bankruptcy ? { kind: 'value', display: bankruptcy } : { kind: 'missing' },
+    },
+    { label: 'System size', cell: kw ? { kind: 'value', display: /kw/i.test(kw) ? kw : `${kw} kW` } : { kind: 'missing' }, hint: kwFact?.note, unverified: kwFact ? !kwFact.verified : undefined },
+    { label: 'Utility', cell: sourceText(utility) },
+    { label: 'Usage', cell: usage ? { kind: 'value', display: /kwh/i.test(usage) ? usage : `${usage} kWh` } : { kind: 'missing' } },
+    { label: 'Roof / home', cell: sourceText(roofHome) },
+  ]
+
+  return { confirmed, timezone, answers, addr, creditRaw, creditBand, finance, solar }
+}

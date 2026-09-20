@@ -32,7 +32,11 @@ const SORTS = {
 export type SortKey = keyof typeof SORTS
 
 export default async function ClientsPage({ searchParams }: PageProps<'/clients'>) {
-  if (finalDeskEnabled()) return <FinalDeskPage view="clients" />
+  if (finalDeskEnabled()) {
+    const params = await searchParams
+    const query = Object.fromEntries(['filters','scheduling','page'].flatMap(k => typeof params[k] === 'string' ? [[k, params[k]]] : []))
+    return <FinalDeskPage view="clients" query={query} />
+  }
   const user = await requireUser()
   const params = await searchParams
 

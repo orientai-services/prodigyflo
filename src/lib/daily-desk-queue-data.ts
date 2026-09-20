@@ -54,7 +54,7 @@ export async function loadDeskQueue(user: SessionUser): Promise<DeskQueue> {
         ownerId: true,
         owner: { select: { name: true } },
         appointments: {
-          where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, startsAt: { gte: now } },
+          where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: now } },
           select: { id: true },
           take: 1,
         },

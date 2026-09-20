@@ -15,7 +15,7 @@ export const DOCUMENT_MODULES = [
 
 const missing = (label: string, hint?: string): CaseCell => ({ label, cell: { kind: 'missing' }, hint })
 /** The fixed HTML destinations stay fixed even for PPA/lease cases. */
-export function profileCells(data: CaseFileData): { finance: CaseCell[]; solar: CaseCell[] } {
+export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { finance: CaseCell[]; solar: CaseCell[] } {
   const find = (label: string, ...sources: string[]) => {
     const cell = [...data.finance, ...data.solar].find(c => [label, ...sources].includes(c.label))
     return cell ? { ...cell, label } : missing(label)

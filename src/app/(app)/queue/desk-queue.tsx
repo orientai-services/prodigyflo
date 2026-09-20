@@ -46,6 +46,7 @@ export function DeskQueueView({ queue }: { queue: DeskQueue }) {
     setPending(true)
     const result = await bookAppointmentAction({
       clientId: bookRow.clientId,
+      requestId: crypto.randomUUID(),
       date: bookDate,
       time: bookTime || '10:00',
       timezone: 'America/Los_Angeles',

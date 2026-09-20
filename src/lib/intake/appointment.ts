@@ -1,6 +1,7 @@
 import 'server-only'
-import { AppointmentStatus, AppointmentType, type IntakeSource, type Prisma } from '@prisma/client'
+import { type IntakeSource, type Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { scheduleAppointment, type SchedulingResult } from '@/lib/scheduling'
 
 export type IntakeBooking = {
   startsAt: Date
@@ -53,52 +54,15 @@ export async function upsertIntakeAppointment(opts: {
   clientId: string
   rawPayload: unknown
   store?: Prisma.TransactionClient
-}): Promise<{ id: string } | null> {
+}): Promise<({ id?: string } & SchedulingResult) | null> {
   const booking = parseIntakeBooking(opts.rawPayload)
   if (!booking) return null
   if (!opts.store) return db.$transaction((store) => upsertIntakeAppointment({ ...opts, store }))
-  const store = opts.store
-  await store.$queryRaw`SELECT id FROM "Client" WHERE id = ${opts.clientId} FOR UPDATE`
-
-  const client = await store.client.findFirst({
-    where: { id: opts.clientId, organizationId: opts.source.organizationId, deletedAt: null },
-    select: { id: true, ownerId: true },
+  const result = await scheduleAppointment(opts.store, {
+    organizationId: opts.source.organizationId, clientId: opts.clientId,
+    scope: { organizationId: opts.source.organizationId }, imported: true,
+    requestKey: `external:${booking.externalEventId ?? booking.startsAt.toISOString()}`,
+    ...booking,
   })
-  if (!client) return null
-
-  const ownerId = client.ownerId
-
-  const existing = booking.externalEventId
-    ? await store.appointment.findFirst({
-        where: { clientId: client.id, externalEventId: booking.externalEventId },
-      })
-    : await store.appointment.findFirst({
-        where: {
-          clientId: client.id,
-          status: { in: ['SCHEDULED', 'CONFIRMED'] },
-          startsAt: booking.startsAt,
-        },
-      })
-
-  const data = {
-    ownerId,
-    type: AppointmentType.PRESENTATION,
-    status: AppointmentStatus.SCHEDULED,
-    startsAt: booking.startsAt,
-    endsAt: booking.endsAt,
-    timezone: booking.timezone,
-    meetingUrl: booking.meetingUrl,
-    externalEventId: booking.externalEventId,
-    cancelledAt: null,
-    noShowRecordedAt: null,
-  }
-
-  if (existing) {
-    // A replay must not reopen a completed/cancelled appointment or undo a staff reschedule.
-    return { id: existing.id }
-  }
-  return store.appointment.create({
-    data: { clientId: client.id, ...data },
-    select: { id: true },
-  })
+  return { ...result, id: result.appointmentId }
 }

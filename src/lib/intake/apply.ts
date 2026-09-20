@@ -1,6 +1,9 @@
 import 'server-only'
 import { IntakeStatus, Prisma, type IntakeSource, type IntakeSubmission } from '@prisma/client'
 import { db } from '@/lib/db'
+import { isRetiredIdentity, RetiredIntakeError } from '@/lib/retired-identities'
+import { parseIntakeBooking } from '@/lib/intake/appointment'
+import type { SchedulingResult } from '@/lib/scheduling'
 import { redactForAudit } from '@/lib/audit'
 import {
   applyMapping,
@@ -329,7 +332,7 @@ export async function applyToCrm(
   }
 }
 
-export type InboundResult = { duplicate: boolean; submission: IntakeSubmission }
+export type InboundResult = { duplicate: boolean; submission: IntakeSubmission; booking?: SchedulingResult | null }
 
 /**
  * Idempotent entry point shared by the webhook and the sheet sync. Ordinary
@@ -347,6 +350,7 @@ function sourceTime(packet: Record<string, unknown>): number | null {
 export async function processInbound(
   source: IntakeSource, externalId: string, rawPayload: unknown, actor: IntakeActor = null,
 ): Promise<InboundResult> {
+  if (await isRetiredIdentity([['intake:'+source.id, externalId], ['scs-lead', source.slug === 'scs-website' ? scsLeadId(rawPayload) : null], ['calendly-event', parseIntakeBooking(rawPayload)?.externalEventId]])) throw new RetiredIntakeError()
   const result = source.slug === 'scs-website'
     ? await db.$transaction(
       store => processInboundLocked(source, externalId, rawPayload, actor, store),
@@ -370,6 +374,7 @@ async function processInboundLocked(
   // Transaction-scoped lock serializes this source's updates across processes.
   // No network, document copy or AI runs while the lock is held.
   if (store !== db) await store.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${source.id}, 0))::text`
+  let booking: SchedulingResult | null = null
   const key = { sourceId_externalId: { sourceId: source.id, externalId } }
   // SCS emits a new packet as a homeowner adds documents or confirms extracted
   // values. Those packets share the lead ID, so they must refresh an existing
@@ -411,16 +416,16 @@ async function processInboundLocked(
     if (oldTime !== null && (newTime === null || newTime < oldTime)) {
       if (existing.clientId) {
         const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
-        await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload, store })
+        booking = await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload, store })
       }
-      return { duplicate: true, submission: existing }
+      return { duplicate: true, submission: existing, booking }
     }
     if (completed && newTime === oldTime && typeof packet.id === 'string' && packet.id === old.id) {
       if (existing.clientId) {
         const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
-        await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload, store })
+        booking = await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload, store })
       }
-      return { duplicate: true, submission: existing }
+      return { duplicate: true, submission: existing, booking }
     }
   }
   // A failed SCS document copy must be resumeable. Treating it as a duplicate
@@ -434,7 +439,7 @@ async function processInboundLocked(
     existing.status !== IntakeStatus.FAILED &&
     existing.status !== IntakeStatus.RECEIVED
   ) {
-    return { duplicate: true, submission: existing }
+    return { duplicate: true, submission: existing, booking }
   }
 
   let submission: IntakeSubmission
@@ -482,7 +487,7 @@ async function processInboundLocked(
       await ingestScsPacket({ organizationId: source.organizationId, clientId: outcome.clientId,
         intakeSubmissionId: submission.id, rawPayload }, store)
       const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
-      await upsertIntakeAppointment({ source, clientId: outcome.clientId, rawPayload, store })
+      booking = await upsertIntakeAppointment({ source, clientId: outcome.clientId, rawPayload, store })
     }
     submission = await store.intakeSubmission.update({
       where: { id: submission.id },
@@ -508,7 +513,7 @@ async function processInboundLocked(
     })
     throw error
   }
-  return { duplicate: false, submission }
+  return { duplicate: false, submission, booking }
 }
 
 /**

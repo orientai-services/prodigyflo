@@ -27,18 +27,19 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
     owner: { select: { name: true } },
     documents: { where: { status: { notIn: ['REJECTED', 'EXPIRED'] }, NOT: { storageKey: null } }, select: { requirement: { select: { key: true } } } },
   } satisfies Prisma.ClientSelect
-  const [requirements, closers, appointments, unscheduledRows, unassignedCount] = await Promise.all([
+  const [requirements, closers, appointments, unscheduledRows, unscheduledTotal, unassignedCount] = await Promise.all([
     db.documentRequirement.findMany({ where: { isRequired: true, package: { organizationId: user.organizationId, isDefault: true } }, select: { key: true } }),
     canAssign ? db.user.findMany({ where: { organizationId: user.organizationId, role: { key: 'CLOSER' }, deletedAt: null, isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : Promise.resolve([]),
     db.appointment.findMany({
       where: { client: scope, startsAt: { gte: rangeStart, lt: rangeEnd }, ...(user.role === 'CLOSER' ? { ownerId: user.id } : {}) },
       orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, startsAt: true, status: true, owner: { select: { name: true } }, client: { select: clientSelect } },
+      select: { id: true, startsAt: true, updatedAt: true, status: true, owner: { select: { name: true } }, client: { select: clientSelect } },
     }),
     db.client.findMany({
-      where: { AND: [scope, { status: 'ACTIVE', appointments: { none: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, startsAt: { gte: now } } } }] },
-      orderBy: [{ lastActivityAt: 'desc' }, { id: 'asc' }], select: clientSelect,
+      where: { AND: [scope, { status: 'ACTIVE', appointments: { none: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: now } } } }] },
+      orderBy: [{ lastActivityAt: 'desc' }, { id: 'asc' }], take: 20, select: clientSelect,
     }),
+    db.client.count({ where: { AND: [scope, { status: 'ACTIVE', appointments: { none: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: now } } } }] } }),
     canAssign ? db.client.count({ where: { AND: [scope, { ownerId: null, status: 'ACTIVE' }] } }) : Promise.resolve(0),
   ])
   const canonicalKey = (key: string) => matchDocKind(key)?.key ?? key
@@ -51,13 +52,13 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
   const chipsByDay = new Map<string, DeskChip[]>()
   for (const appointment of appointments) {
     const day = civilDate(appointment.startsAt, timezone)
-    const chip: DeskChip = { ...lead(appointment.client), appointmentId: appointment.id, status: appointment.status,
+    const chip: DeskChip = { ...lead(appointment.client), appointmentId: appointment.id, updatedAt: appointment.updatedAt.toISOString(), status: appointment.status,
       ownerName: appointment.owner?.name ?? null, timeLabel: timeLabel(appointment.startsAt, timezone), startsAt: appointment.startsAt.toISOString() }
     chipsByDay.set(day, [...(chipsByDay.get(day) ?? []), chip])
   }
   return {
     month: key, title: monthTitle(year, monthIndex), timezone, today,
     days: cells.map((cell) => ({ ...cell, isToday: cell.iso === today, chips: chipsByDay.get(cell.iso) ?? [] })),
-    unscheduled: unscheduledRows.map(lead), closers, unassignedCount, canAssign, canBook: can(user, 'appointments:manage'),
+    unscheduled: unscheduledRows.map(lead), unscheduledTotal, closers, unassignedCount, canAssign, canBook: can(user, 'appointments:manage'),
   }
 }
