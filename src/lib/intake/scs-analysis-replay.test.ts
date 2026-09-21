@@ -14,7 +14,7 @@ function reordered(value: unknown): unknown {
   return value
 }
 async function fixture() {
-  const receipt: { id: string; sourceAnalysis: unknown; analysisIdentity: string | null } = { id: 'receipt', sourceAnalysis: null, analysisIdentity: null }
+  const receipt: { id: string; sourceAnalysis: { identity_fingerprint?: string } | null; analysisIdentity: string | null } = { id: 'receipt', sourceAnalysis: null, analysisIdentity: null }
   const update = vi.fn().mockImplementation(async ({ data }) => Object.assign(receipt, { ...data, sourceAnalysis: reordered(data.sourceAnalysis) }))
   const store = { documentExtraction: { updateMany: vi.fn() }, externalDocumentImport: { updateMany: vi.fn(), findFirst: vi.fn().mockResolvedValue(receipt), update } } as unknown as Prisma.TransactionClient
   const submit = (payload: unknown) => queueAnalysisPacket({ organizationId: 'org', clientId: 'client', sourceLeadId: 'lead', rawPayload: raw, analysis: payload }, store)
@@ -24,7 +24,7 @@ async function fixture() {
 describe('same-revision evidence replay across JSONB ordering', () => {
   it('accepts reordered objects without requeuing or changing identity fingerprints', async () => {
     const f = await fixture()
-    expect(f.receipt.sourceAnalysis.identity_fingerprint).toBe(analysis.identity_fingerprint)
+    expect(f.receipt.sourceAnalysis?.identity_fingerprint).toBe(analysis.identity_fingerprint)
     await expect(f.submit(analysis)).resolves.toBeUndefined()
     expect(f.update).toHaveBeenCalledTimes(1)
   })

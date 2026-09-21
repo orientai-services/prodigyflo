@@ -73,13 +73,14 @@ export function mapBatches(batches:{files:BatchFile[];result:AnalyzerBatchResult
         const root=raw; const key=FIELD_MAP[name];
         const alternatives=[root,...(Array.isArray(root.alternatives)?root.alternatives:[])];
         for(const field of alternatives) {
-        if(!key || !field?.evidence || field.evidence.file!==file.name || field.value===null || field.value===undefined) continue;
-        if(classified.some((c)=>c.belongs_to_case==='no' && field.evidence.page>=c.page_start && field.evidence.page<=c.page_end)) continue;
-        if(!Number.isInteger(field.evidence.page) || field.evidence.page<1 || field.evidence.page>file.pages) throw Error('Analyzer citation is outside its source file');
+        const cited=field.evidence
+        if(!key || !cited || cited.file!==file.name || field.value===null || field.value===undefined) continue;
+        if(classified.some((c)=>c.belongs_to_case==='no' && cited.page>=c.page_start && cited.page<=c.page_end)) continue;
+        if(!Number.isInteger(cited.page) || cited.page<1 || cited.page>file.pages) throw Error('Analyzer citation is outside its source file');
         // Amount financed belongs to a loan. Cash/lease/PPA totals are not loan principal.
-        if(key==='total_financed' && (reconciliation?.fields??result.fields).contract_type?.value!=='loan') continue;
+        if(key==='total_financed' && (reconciliation?.fields??result.fields)?.contract_type?.value!=='loan') continue;
         const evidence:Evidence={value:String(field.value),confidence:field.level==='high'?'high':field.level==='medium'?'medium':'low',
-          page:file.pageOffset+field.evidence.page,quote:field.evidence.quote||null,document_id:file.documentId,source:file.originalName,
+          page:file.pageOffset+cited.page,quote:cited.quote||null,document_id:file.documentId,source:file.originalName,
           run_id:field.source_run??result.run.id,provider:'records',model:result.model??null,unresolved:root.value==null && alternatives.length>1,staff_review_required:true};
         const items=candidates.get(file.documentId)![key]??=[];
         if(!items.some(e=>e.value===evidence.value && e.page===evidence.page && e.run_id===evidence.run_id)) {items.push(evidence);d.evidence.push(evidence);}

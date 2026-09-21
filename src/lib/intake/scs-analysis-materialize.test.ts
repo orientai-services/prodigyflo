@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Prisma } from '@prisma/client'
 
-const mock = vi.hoisted(() => ({ db: {} as Record<string, unknown> }))
+const mock = vi.hoisted(() => ({
+  db: {
+    $executeRaw: vi.fn(),
+    documentExtraction: { upsert: vi.fn(), updateMany: vi.fn() },
+  } as {
+    $executeRaw: ReturnType<typeof vi.fn>
+    documentExtraction: { upsert: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> }
+    [key: string]: unknown
+  },
+}))
 vi.mock('@/lib/db', () => ({ db: mock.db }))
 vi.mock('@/lib/rbac', () => ({ findClientInScope: vi.fn().mockResolvedValue({ id: 'client' }), ForbiddenError: class extends Error {} }))
 import { materializeScsAnalysis } from './scs-analysis'
