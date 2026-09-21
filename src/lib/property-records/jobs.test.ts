@@ -3,25 +3,28 @@ vi.mock('@/lib/db',()=>({db:{}}))
 vi.mock('@/lib/storage',()=>({getFileStorage:vi.fn()}))
 vi.mock('@/lib/intake/scs-document-requirements',()=>({scsRequirementId:vi.fn()}))
 vi.mock('@/lib/intake/synthetic',()=>({isSyntheticClient:vi.fn()}))
+import type {Prisma} from '@prisma/client'
 import {queuePropertyRecords} from './jobs'
 const A={line1:'4416 Clear Brook Pl',city:'Las Vegas',state:'NV',postal_code:'89103'},B={...A,line1:'4417 Clear Brook Pl'}
+type Job={id:string;clientId:string;addressVersion:string;status:string;attempts:number;result:unknown;importedFiles:Record<string,unknown>}
+type Doc={id:string;clientId:string;status:string;updatedAt:Date}
 function fixture(){
  let address=A
- const jobs:any[]=[],documents:any[]=[]
- const store:any={
+ const jobs:Job[]=[],documents:Doc[]=[]
+ const store={
   $queryRaw:vi.fn(),clientAddress:{findFirst:async()=>({...address,postalCode:address.postal_code})},
   propertyRecordsJob:{
-   findMany:async({where}:any)=>jobs.filter(j=>j.clientId===where.clientId&&j.addressVersion!==where.addressVersion.not&&j.status!==where.status.not),
-   upsert:async({where,create}:any)=>{const found=jobs.find(j=>j.clientId===where.clientId_addressVersion.clientId&&j.addressVersion===where.clientId_addressVersion.addressVersion);if(found)return found;const job={id:`job${jobs.length}`,status:'PENDING',attempts:0,result:null,importedFiles:{},...create};jobs.push(job);return job},
-   update:async({where,data}:any)=>{const job=jobs.find(j=>j.id===where.id);Object.assign(job,data);return job},
+   findMany:async({where}:{where:{clientId:string;addressVersion:{not:string};status:{not:string}}})=>jobs.filter(j=>j.clientId===where.clientId&&j.addressVersion!==where.addressVersion.not&&j.status!==where.status.not),
+   upsert:async({where,create}:{where:{clientId_addressVersion:{clientId:string;addressVersion:string}};create:Partial<Job>})=>{const found=jobs.find(j=>j.clientId===where.clientId_addressVersion.clientId&&j.addressVersion===where.clientId_addressVersion.addressVersion);if(found)return found;const job={id:`job${jobs.length}`,clientId:'client',addressVersion:'',status:'PENDING',attempts:0,result:null,importedFiles:{},...create};jobs.push(job);return job},
+   update:async({where,data}:{where:{id:string};data:Partial<Job>})=>{const job=jobs.find(j=>j.id===where.id);Object.assign(job!,data);return job},
   },
   clientDocument:{
-   findFirst:async({where}:any)=>documents.find(d=>d.id===where.id&&d.clientId===where.clientId),
-   update:async({where,data}:any)=>{const d=documents.find(d=>d.id===where.id);Object.assign(d,data);return d},
-   updateMany:async({where,data}:any)=>{const d=documents.find(d=>d.id===where.id&&d.clientId===where.clientId&&d.status===where.status&&d.updatedAt.getTime()===where.updatedAt.getTime());if(d)Object.assign(d,data);return {count:d?1:0}},
+   findFirst:async({where}:{where:{id:string;clientId:string}})=>documents.find(d=>d.id===where.id&&d.clientId===where.clientId),
+   update:async({where,data}:{where:{id:string};data:Partial<Doc>})=>{const d=documents.find(d=>d.id===where.id);Object.assign(d!,data);return d},
+   updateMany:async({where,data}:{where:{id:string;clientId:string;status:string;updatedAt:Date};data:Partial<Doc>})=>{const d=documents.find(d=>d.id===where.id&&d.clientId===where.clientId&&d.status===where.status&&d.updatedAt.getTime()===where.updatedAt.getTime());if(d)Object.assign(d,data);return {count:d?1:0}},
   },
  }
- return {jobs,documents,store,queue:async(a:typeof A)=>{address=a;return queuePropertyRecords({organizationId:'org',clientId:'client',address:a},store)}}
+ return {jobs,documents,store:store as unknown as Prisma.TransactionClient,queue:async(a:typeof A)=>{address=a;return queuePropertyRecords({organizationId:'org',clientId:'client',address:a},store as unknown as Prisma.TransactionClient)}}
 }
 describe('property address lifecycle',()=>{
  it('requeues A after A → B → A with the same provider receipt identity',async()=>{

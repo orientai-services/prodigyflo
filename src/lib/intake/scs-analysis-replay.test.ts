@@ -8,13 +8,13 @@ const raw = { data: { stage1_answers: { first_name: 'Example', last_name: 'Perso
 const identity = identityFromAnswers(raw)
 const evidence = { value: '10', confidence: 'high', page: 1, quote: '$10', document_id: 'doc', source: 'test.pdf', run_id: 'run', provider: 'records', model: 'model', staff_review_required: true }
 const analysis = { version: 'records.v1', manifestId: '85f579ea-4d96-4c82-8ebc-3f10b56d401f', status: 'results_available', sourceLeadId: 'lead', manifest_version: 2, evidence_revision: 5, analysis_version: 'v2', source_identity: identity, identity_fingerprint: hash(identity), documents: [{ documentId: 'doc', sha256: 'a'.repeat(64), fields: { total_financed: evidence }, classification: ['loan', 'til'], readableAgreement: true, clientMatch: 'matched', coverage: { complete: true, totalPages: 9, processedPages: 9 }, runs: ['run'], reviewDecisions: { total_financed: { action: 'accepted', accepted: '10', source_evidence: evidence } } }] }
-function reordered(value: any): any {
+function reordered(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(reordered)
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).reverse().map(([key, child]) => [key, reordered(child)]))
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).reverse().map(([key, child]) => [key, reordered(child)]))
   return value
 }
 async function fixture() {
-  const receipt: any = { id: 'receipt', sourceAnalysis: null, analysisIdentity: null }
+  const receipt: { id: string; sourceAnalysis: unknown; analysisIdentity: string | null } = { id: 'receipt', sourceAnalysis: null, analysisIdentity: null }
   const update = vi.fn().mockImplementation(async ({ data }) => Object.assign(receipt, { ...data, sourceAnalysis: reordered(data.sourceAnalysis) }))
   const store = { documentExtraction: { updateMany: vi.fn() }, externalDocumentImport: { updateMany: vi.fn(), findFirst: vi.fn().mockResolvedValue(receipt), update } } as unknown as Prisma.TransactionClient
   const submit = (payload: unknown) => queueAnalysisPacket({ organizationId: 'org', clientId: 'client', sourceLeadId: 'lead', rawPayload: raw, analysis: payload }, store)

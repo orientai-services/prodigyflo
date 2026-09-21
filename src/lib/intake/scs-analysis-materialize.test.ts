@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Prisma } from '@prisma/client'
 
-const mock = vi.hoisted(() => ({ db: {} as Record<string, any> }))
+const mock = vi.hoisted(() => ({ db: {} as Record<string, unknown> }))
 vi.mock('@/lib/db', () => ({ db: mock.db }))
 vi.mock('@/lib/rbac', () => ({ findClientInScope: vi.fn().mockResolvedValue({ id: 'client' }), ForbiddenError: class extends Error {} }))
 import { materializeScsAnalysis } from './scs-analysis'
@@ -15,9 +15,9 @@ function fixture() {
   const source = { documentId: 'doc', sha256: 'a'.repeat(64), fields: {}, classification: ['loan'], readableAgreement: true, clientMatch: 'matched', coverage: { complete: true, totalPages: 9, processedPages: 9 }, runs: ['new-run'], reviewDecisions: {}, manifestId: 'manifest', manifest_version: 1, evidence_revision: 2, identity_fingerprint: hash(identity) }
   const receipt = { id: 'receipt', organizationId: 'org', clientId: 'client', clientDocumentId: 'doc', clientDocument: { checksum: source.sha256 }, sourceAnalysis: source, analysisIdentity: hash(source), analysisPending: true, analysisAttempts: 0 }
   const old = { id: 'old', sourceIdentity: 'old-identity', status: 'COMPLETED', sourceActive: true, detectedTypeKey: 'finance_agreement', fields: [{ id: 'old-account', key: 'account_number', value: '74045', correctedValue: null, verification: 'UNVERIFIED', confidence: 90, sourcePage: 1 }] }
-  const extractions: any[] = [old]
+  const extractions: Array<Record<string, unknown>> = [old]
   const definition = { key: 'account_number', label: 'Account number', groupName: 'GX', position: 28, isRequired: false, dataType: 'string', sourceType: 'DOCUMENT_FIELD', sourcePath: 'document.finance_agreement.account_number' }
-  const saved: any[] = [{ id: 'mirror', clientId: 'client', fieldKey: 'account_number', value: '74045', status: 'SUGGESTED', verifiedById: null }]
+  const saved: Array<Record<string, unknown>> = [{ id: 'mirror', clientId: 'client', fieldKey: 'account_number', value: '74045', status: 'SUGGESTED', verifiedById: null }]
   Object.assign(mock.db, {
     externalDocumentImport: {
       findMany: vi.fn().mockResolvedValue([receipt]), findUniqueOrThrow: vi.fn().mockImplementation(async () => receipt),

@@ -23,6 +23,22 @@ export interface MappedDocument {
   runs:string[]; evidence:unknown[]; summary:string; costUsd:number;
 }
 const AGREEMENTS=new Set(['agreement','loan','lease','ppa']);
+type ClassifiedDoc = { file: string; belongs_to_case: string; kind: string; summary?: string; page_start: number; page_end: number }
+type AnalyzerField = {
+  value?: unknown
+  alternatives?: AnalyzerField[]
+  evidence?: { file: string; page: number; quote?: string }
+  level?: string
+  source_run?: string
+}
+export type AnalyzerBatchResult = {
+  coverage: { complete: boolean; processedPages: number; totalPages: number }
+  run: { id: string }
+  usage?: { cost?: number }
+  documents?: ClassifiedDoc[]
+  fields?: Record<string, AnalyzerField>
+  model?: string
+}
 /** Resolve only equal candidates; differences survive for a human decision. */
 export function resolveCandidates(candidates:Evidence[]):Evidence {
   if(!candidates.length) throw Error('Evidence candidates are required');
@@ -31,7 +47,7 @@ export function resolveCandidates(candidates:Evidence[]):Evidence {
   if(values.size>1 || candidates.some(c=>c.unresolved)) return {...known[0],value:null,confidence:'low',alternatives:known,staff_review_required:true};
   return {...(known[0] ?? candidates[0]),alternatives:known.length>1?known:undefined};
 }
-export function mapBatches(batches:{files:BatchFile[];result:any}[],reconciliation?:any):MappedDocument[] {
+export function mapBatches(batches:{files:BatchFile[];result:AnalyzerBatchResult}[],reconciliation?:{fields?:Record<string, AnalyzerField>}):MappedDocument[] {
   const documents=new Map<string,MappedDocument>();
   const candidates=new Map<string,Record<string,Evidence[]>>();
   const pages=new Map<string,Set<number>>();
@@ -45,7 +61,7 @@ export function mapBatches(batches:{files:BatchFile[];result:any}[],reconciliati
       for(let p=1;p<=file.pages;p++) {if(pages.get(file.documentId)!.has(file.pageOffset+p)) throw Error('A physical page was repeated between analyzer batches');pages.get(file.documentId)!.add(file.pageOffset+p);}
       if(!d.runs.includes(result.run.id)) d.runs.push(result.run.id);
       d.costUsd+=(result.usage?.cost??0)*file.pages/result.coverage.totalPages;
-      const classified=(result.documents??[]).filter((c:any)=>c.file===file.name);
+      const classified=(result.documents??[]).filter((c)=>c.file===file.name);
       for(const c of classified) {
         if(c.belongs_to_case==='no') { if(d.clientMatch!=='matched') d.clientMatch='unrelated'; continue; }
         if(c.belongs_to_case==='yes') d.clientMatch='matched';
@@ -54,11 +70,11 @@ export function mapBatches(batches:{files:BatchFile[];result:any}[],reconciliati
         d.summary ||= c.summary ?? '';
       }
       for(const [name,raw] of Object.entries(reconciliation?.fields??result.fields??{})) {
-        const root=raw as any; const key=FIELD_MAP[name];
+        const root=raw; const key=FIELD_MAP[name];
         const alternatives=[root,...(Array.isArray(root.alternatives)?root.alternatives:[])];
         for(const field of alternatives) {
         if(!key || !field?.evidence || field.evidence.file!==file.name || field.value===null || field.value===undefined) continue;
-        if(classified.some((c:any)=>c.belongs_to_case==='no' && field.evidence.page>=c.page_start && field.evidence.page<=c.page_end)) continue;
+        if(classified.some((c)=>c.belongs_to_case==='no' && field.evidence.page>=c.page_start && field.evidence.page<=c.page_end)) continue;
         if(!Number.isInteger(field.evidence.page) || field.evidence.page<1 || field.evidence.page>file.pages) throw Error('Analyzer citation is outside its source file');
         // Amount financed belongs to a loan. Cash/lease/PPA totals are not loan principal.
         if(key==='total_financed' && (reconciliation?.fields??result.fields).contract_type?.value!=='loan') continue;

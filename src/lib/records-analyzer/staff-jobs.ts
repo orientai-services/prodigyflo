@@ -10,11 +10,11 @@ import {analysisFields,typeFor} from '@/lib/intake/scs-analysis'
 import type {ExtractionRunResult} from '@/lib/extraction/run'
 import {prepareDocumentChunk,makeBatches,type BatchFile,type PreparedDocument} from './prepare'
 import {advanceBatch} from './advance'
-import {mapBatches} from './map'
+import {mapBatches, type AnalyzerBatchResult} from './map'
 import {AnalyzerError,analyzerClient} from './client'
 
-type Batch={id:string;files:BatchFile[];runId:string|null;uploaded:boolean;result?:any}
-type State={sha256:string;batches:Batch[];prepared?:PreparedDocument;reconciliation?:any;identityFingerprint?:string}
+type Batch={id:string;files:BatchFile[];runId:string|null;uploaded:boolean;result?:unknown}
+type State={sha256:string;batches:Batch[];prepared?:PreparedDocument;reconciliation?:unknown;identityFingerprint?:string}
 
 export async function enqueueStaffAnalysis(documentId:string):Promise<ExtractionRunResult> {
   const doc=await db.clientDocument.findUniqueOrThrow({where:{id:documentId},include:{externalImport:true}})
@@ -91,7 +91,7 @@ export async function runStaffAnalysisJobs(limit=1,documentId?:string) {
           await db.recordsAnalysisJob.updateMany({where:{id:job.id,claimToken:token},data:{state:state as unknown as Prisma.InputJsonValue,status:'WORKING',claimedAt:null}})
           result.processed++;continue
         }
-        const mapped=mapBatches(state.batches.map(b=>({files:b.files,result:b.result})),state.reconciliation)[0]
+        const mapped=mapBatches(state.batches.map(b=>({files:b.files,result:b.result as AnalyzerBatchResult})),state.reconciliation as {fields?: AnalyzerBatchResult['fields']}|undefined)[0]
         if(!mapped || mapped.documentId!==doc.id || !mapped.coverage.complete) throw Error('Incomplete staff document coverage')
         const evidence={...mapped,sha256:state.sha256,coverage:{...mapped.coverage,complete:true as const}}
         const fields=analysisFields(evidence as Parameters<typeof analysisFields>[0]),type=typeFor(evidence as Parameters<typeof typeFor>[0])

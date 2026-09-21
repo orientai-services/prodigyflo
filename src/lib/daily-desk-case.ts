@@ -10,7 +10,7 @@ import { listBriefViews } from '@/lib/ai/closeops-ai'
 import { civilDate, timeLabel } from '@/lib/daily-desk'
 import { CASE_DOC_KINDS, classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { resolveCaseFacts } from '@/lib/case-facts'
-import type { CaseCell, CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
+import type { CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 
 export type { CaseCell, CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 
