@@ -33,6 +33,8 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const aprFact = fact('finance_agreement', 'apr', isPpaOrLease ? undefined : 'apr_or_escalator', 'apr')
   const firstPayFact = isPpaOrLease
     ? fact('solar_contract', 'in_service_date', 'first_payment_or_install')
+      ?? fact('solar_contract', 'first_payment_date')
+      ?? fact('solar_contract', 'customer_signed_date')
     : fact('completion_cert', 'first_payment_date')
       ?? fact(type, 'first_payment_date', 'first_payment_or_install')
       ?? fact(type, 'customer_signed_date')
@@ -78,6 +80,10 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   })
   const termNum = Number(String(term).replace(/[^0-9.]/g, ''))
   const termYears = Number.isFinite(termNum) && termNum > 0 ? { kind: 'value' as const, display: (termNum / 12).toFixed(termNum % 12 === 0 ? 0 : 1) } : { kind: 'missing' as const }
+  const start = firstPayFact?.value ? new Date(firstPayFact.value) : null
+  const clock = opts?.now ?? new Date()
+  const elapsed = start && !Number.isNaN(start.getTime()) ? Math.max(0, (clock.getUTCFullYear() - start.getUTCFullYear()) * 12 + (clock.getUTCMonth() - start.getUTCMonth())) : null
+  const monthsLeft = elapsed != null && termNum > 0 ? Math.max(0, termNum - elapsed) : null
   // Loan amortization is never a PPA balance. Client-reviewed SCS values are
   // enough to compute; staff CYS verification is a tag, not a gate.
   const hasLoanInputs = product === 'loan' && Boolean(firstPayFact?.value && term && aprFact?.value && paymentFact?.value)
@@ -108,7 +114,9 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     sourcedCell('Term months', termSource),
     sourcedCell('Term starts', startFact),
     sourcedCell('Actual in-service date', firstPayFact),
-    { label: 'Time remaining', cell: { kind: 'cannot_compute', missing: ['actual in-service date and reviewed term'] }, hint: 'No start date inferred from contract signing' },
+    sourcedCell('First payment date', firstPayFact),
+    { label: 'Months remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: String(monthsLeft) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] }, hint: 'From confirmed start date and term' },
+    { label: 'Years remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: (monthsLeft / 12).toFixed(monthsLeft % 12 === 0 ? 0 : 1) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] } },
     sourcedCell('Contract effective date', fact('solar_contract', 'contract_date')),
     sourcedCell('Customer signature date', fact('solar_contract', 'customer_signed_date')),
   ] : [
