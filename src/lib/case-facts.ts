@@ -31,10 +31,9 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
   const amountFact = fact('finance_agreement', 'amount_financed', 'contract_value', 'amount_financed')
   const aprFact = fact('finance_agreement', 'apr', isPpaOrLease ? undefined : 'apr_or_escalator', 'apr')
+  const inServiceFact = fact('solar_contract', 'in_service_date', 'first_payment_or_install')
   const firstPayFact = isPpaOrLease
-    ? fact('solar_contract', 'in_service_date', 'first_payment_or_install')
-      ?? fact('solar_contract', 'first_payment_date')
-      ?? fact('solar_contract', 'customer_signed_date')
+    ? inServiceFact ?? fact('solar_contract', 'first_payment_date') ?? fact('solar_contract', 'customer_signed_date')
     : fact('completion_cert', 'first_payment_date')
       ?? fact(type, 'first_payment_date', 'first_payment_or_install')
       ?? fact(type, 'customer_signed_date')
@@ -113,7 +112,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     { label: 'Term years', cell: termYears, hint: termSource?.note, unverified: termSource ? !termSource.verified : undefined },
     sourcedCell('Term months', termSource),
     sourcedCell('Term starts', startFact),
-    sourcedCell('Actual in-service date', firstPayFact),
+    sourcedCell('Actual in-service date', inServiceFact),
     sourcedCell('First payment date', firstPayFact),
     { label: 'Months remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: String(monthsLeft) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] }, hint: 'From confirmed start date and term' },
     { label: 'Years remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: (monthsLeft / 12).toFixed(monthsLeft % 12 === 0 ? 0 : 1) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] } },
