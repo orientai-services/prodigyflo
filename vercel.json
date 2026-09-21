@@ -7,7 +7,8 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "codex/prodigy-workspace-01a0b8f2": false
+      "codex/prodigy-workspace-01a0b8f2": false,
+      "codex/complete-intake-records-analyzer-01a0b8f2": false
     }
   }
 }

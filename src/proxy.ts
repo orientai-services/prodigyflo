@@ -59,8 +59,9 @@ export function proxy(request: NextRequest) {
   requestHeaders.set('x-prodigy-path', pathname)
   const next = () => NextResponse.next({ request: { headers: requestHeaders } })
 
-  // Exact operator route has its own fail-closed bearer + cohort authorization.
-  if (pathname === '/api/internal/scs/execute') return next()
+  // Exact service routes enforce their own bearer/cohort authorization. They
+  // must reach that guard without requiring a human session cookie.
+  if (pathname === '/api/internal/scs/execute' || pathname === '/api/internal/records/run') return next()
 
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return next()

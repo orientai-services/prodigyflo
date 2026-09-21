@@ -26,12 +26,13 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   }
   const productFact = fact('solar_contract', 'product_type', 'product_confirmed', 'product_confirmed')
     ?? fact('finance_agreement', 'product_type')
-  const product = normalizeProduct(productFact?.value || str(client.contracts[0]?.productType) || str(answers.product_type_guess))
+  const product = normalizeProduct(productFact?productFact.value:str(client.contracts[0]?.productType)||str(answers.product_type_guess))
   const isPpaOrLease = product === 'ppa' || product === 'lease'
   const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
   const amountFact = fact('finance_agreement', 'amount_financed', 'contract_value', 'amount_financed')
   const aprFact = fact('finance_agreement', 'apr', isPpaOrLease ? undefined : 'apr_or_escalator', 'apr')
   const firstPayFact = fact(type, isPpaOrLease ? 'in_service_date' : 'first_payment_date', 'first_payment_or_install')
+  const remainingFact = fact('finance_agreement','remaining_balance') ?? fact('lender_statement','remaining_balance')
   const dealerFact = fact('finance_agreement', 'dealer_fee', 'dealer_fee', 'dealer_fee')
   const termFact = fact(type, 'term_months', 'term_months', 'term_months')
   const yearsFact = fact(type, 'term_years')
@@ -42,11 +43,11 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const basisFact = fact('solar_contract', 'payment_basis')
   const startFact = fact('solar_contract', 'term_start_basis')
   const escalationFact = fact('solar_contract', 'escalator_pct', isPpaOrLease ? 'apr_or_escalator' : undefined)
-  const installerFact = fact('solar_contract', 'installer_name', undefined, 'installer_guess')
+  const installerFact = fact('solar_contract', 'installer_name') ?? fact('finance_agreement', 'installer_name',undefined,'installer_guess')
   const providerFact = isPpaOrLease
     ? fact('solar_contract', 'contract_counterparty', 'lender_confirmed')
     : fact(type, 'lender_name', 'lender_confirmed', 'lender_confirmed')
-  const kwFact = fact('solar_contract', 'system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
+  const kwFact = fact('solar_contract', 'system_size_kw') ?? fact('finance_agreement','system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
   const kw = kwFact?.value || ''
   const creditBand =
     str(answers.credit_band) ||
@@ -54,7 +55,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     nestedStr(answers, 'stage1_answers', 'credit_band') ||
     nestedStr(answers, 'solar', 'credit_band')
   const creditRaw =
-    creditBand || str(answers.credit_score) || str(answers.creditScore) || str(answers.credit)
+    str(answers.credit_score) || str(answers.creditScore) || str(answers.credit) || creditBand
   const bankruptcy =
     str(answers.active_bankruptcy) || nestedStr(answers, 'screening', 'active_bankruptcy')
   const sourcedCell = (label: string, source: ExtractedFact | null, kind: 'money' | 'percent' | 'text' = 'text', hint?: string): CaseCell => ({
@@ -65,11 +66,11 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   })
   const termNum = Number(String(term).replace(/[^0-9.]/g, ''))
   const termYears = Number.isFinite(termNum) && termNum > 0 ? { kind: 'value' as const, display: (termNum / 12).toFixed(termNum % 12 === 0 ? 0 : 1) } : { kind: 'missing' as const }
-  // Loan amortization is never a PPA balance, and suggestions cannot generate a
-  // financial estimate before the reviewer has checked the source inputs.
-  const reviewedLoan = product === 'loan' && [firstPayFact, termSource, aprFact, paymentFact].every(source => source?.verified)
-  const amort = amortize({ firstPayDate: reviewedLoan ? firstPayFact?.value : '', termMonths: term, aprPercent: aprFact?.value, monthlyPayment: paymentFact?.value })
-  const amortHint = reviewedLoan ? 'Estimate from reviewed loan terms; not a payoff quote' : 'Requires reviewed loan terms and an actual first payment date'
+  // Loan amortization is never a PPA balance. Client-reviewed SCS values are
+  // enough to compute; staff CYS verification is a tag, not a gate.
+  const hasLoanInputs = product === 'loan' && Boolean(firstPayFact?.value && term && aprFact?.value && paymentFact?.value)
+  const amort = amortize({ firstPayDate: hasLoanInputs ? firstPayFact?.value : '', termMonths: term, aprPercent: aprFact?.value, monthlyPayment: paymentFact?.value })
+  const amortHint = hasLoanInputs ? 'Estimate from reviewed loan terms; not a payoff quote' : 'Requires reviewed loan terms and an actual first payment date'
   const finance: CaseCell[] = isPpaOrLease ? [
     sourcedCell('Contract counterparty', providerFact),
     sourcedCell('First-year monthly payment', firstYearFact, 'money', 'Contract starting amount; not today’s bill'),
@@ -85,7 +86,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     sourcedCell('Customer signature date', fact('solar_contract', 'customer_signed_date')),
   ] : [
     sourcedCell('Total / amount financed', amountFact, 'money'),
-    { label: 'Estimated remaining balance', cell: amort.remaining, hint: amortHint },
+    remainingFact?.value?sourcedCell('Remaining balance',remainingFact,'money','Documented balance as of its source statement; not an inferred current payoff'):{ label: 'Estimated remaining balance', cell: amort.remaining, hint: amortHint },
     sourcedCell('Interest rate', aprFact, 'percent'),
     { label: 'Estimated interest paid', cell: amort.interestPaid, hint: amortHint },
     { label: 'Term years', cell: termYears, hint: termSource?.note, unverified: termSource ? !termSource.verified : undefined },
@@ -113,9 +114,9 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     sourcedCell('Agreement type', productFact ? { ...productFact, value: product } : product ? { value: product, verified: false, note: 'Intake / contract record · not document verified' } : null),
     sourcedCell('Actual installer', installerFact),
     {
-      label: creditBand ? 'Credit range' : 'Credit score',
+      label: 'Credit score',
       cell: creditRaw ? { kind: 'value', display: creditRaw } : { kind: 'missing' },
-      hint: 'From the solar form · not a bureau pull',
+      hint: 'SCS intake only · not a bureau pull',
     },
     {
       label: 'Bankruptcy',

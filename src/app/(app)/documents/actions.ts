@@ -1,5 +1,6 @@
 'use server'
 
+import {currentExtractionFields} from '@/lib/desk-extract'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { FieldVerification } from '@prisma/client'
@@ -62,7 +63,6 @@ async function recomputeDocumentStatus(documentId: string) {
       extractions: {
         where: { status: 'COMPLETED' },
         orderBy: { createdAt: 'desc' },
-        take: 1,
         include: { fields: true },
       },
     },
@@ -73,7 +73,7 @@ async function recomputeDocumentStatus(documentId: string) {
 
   const spec = specForType(extraction.detectedTypeKey)
   // A human decision counts as full confidence; otherwise the AI confidence stands.
-  const fields = extraction.fields.map((f) => ({
+  const fields = currentExtractionFields(doc.extractions).map(({field})=>field).map((f) => ({
     key: f.key,
     value: f.verification === 'REJECTED' ? null : effectiveFieldValue(f),
     confidence: f.verification === 'VERIFIED' || f.verification === 'CORRECTED' ? 100 : f.confidence,
@@ -168,13 +168,13 @@ export async function bulkVerifyHighConfidence(documentId: string): Promise<Acti
   const doc = await db.clientDocument.findFirst({
     where: { AND: [documentScope(user), { id: documentId }] },
     include: {
-      extractions: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, take: 1, include: { fields: true } },
+      extractions: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, include: { fields: true } },
     },
   })
   const extraction = doc?.extractions[0]
   if (!doc || !extraction) return { ok: false, error: 'Document not found or has no completed extraction.' }
 
-  const eligible = extraction.fields.filter(
+  const eligible = currentExtractionFields(doc.extractions).map(({field})=>field).filter(
     (f) =>
       f.verification === 'UNVERIFIED' &&
       f.confidence >= BULK_VERIFY_THRESHOLD &&
@@ -212,7 +212,7 @@ export async function approveDocument(documentId: string): Promise<ActionResult>
   const doc = await db.clientDocument.findFirst({
     where: { AND: [documentScope(user), { id: documentId }] },
     include: {
-      extractions: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, take: 1, include: { fields: true } },
+      extractions: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, include: { fields: true } },
     },
   })
   if (!doc) return { ok: false, error: 'Document not found or outside your scope.' }
@@ -224,7 +224,7 @@ export async function approveDocument(documentId: string): Promise<ActionResult>
   if (!extraction) return { ok: false, error: 'This document has no completed extraction to review.' }
 
   const spec = specForType(extraction.detectedTypeKey)
-  const check = canApproveDocument(spec, extraction.fields as ReviewableField[])
+  const check = canApproveDocument(spec, currentExtractionFields(doc.extractions).map(({field})=>field) as ReviewableField[])
   if (!check.ok) {
     return {
       ok: false,
@@ -354,7 +354,7 @@ export async function rerunExtraction(documentId: string): Promise<ActionResult>
     return { ok: false, error: 'Finished documents are not re-extracted.' }
   }
 
-  const result = await runExtraction(doc.id)
+  const result = process.env.DOCUMENT_ANALYZER==='records' ? await (await import('@/lib/records-analyzer/staff-jobs')).resumeStaffAnalysis(doc.id) : await runExtraction(doc.id)
   await recordAudit(user, {
     action: 'document.extraction_rerun',
     entityType: 'ClientDocument',
@@ -363,6 +363,7 @@ export async function rerunExtraction(documentId: string): Promise<ActionResult>
     after: { extractionId: result.extractionId, status: result.status },
   })
   revalidate(doc.clientId, doc.id)
+  if(result.status==='PENDING') return {ok:true,message:'Analysis queued. The original file is saved; progress appears in document review.'}
   return result.status === 'COMPLETED'
     ? { ok: true, message: 'Extraction completed.' }
     : { ok: false, error: result.error ?? 'Extraction failed.' }

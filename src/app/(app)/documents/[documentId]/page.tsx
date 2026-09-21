@@ -1,3 +1,4 @@
+import {currentExtractionFields} from '@/lib/desk-extract'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { AlertTriangle, ArrowLeft, Download } from 'lucide-react'
@@ -44,7 +45,7 @@ export default async function DocumentReviewPage({ params }: PageProps<'/documen
   const extraction = doc.extractions.find((e) => e.status === 'COMPLETED') ?? doc.extractions[0] ?? null
   const spec = specForType(extraction?.detectedTypeKey)
   const specOrder = new Map(spec.fields.map((f, i) => [f.key, i]))
-  const fields = [...(extraction?.fields ?? [])].sort(
+  const fields = currentExtractionFields(doc.extractions).map(({field})=>field).sort(
     (a, b) => (specOrder.get(a.key) ?? 99) - (specOrder.get(b.key) ?? 99),
   )
 

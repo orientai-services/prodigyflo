@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Prisma } from '@prisma/client'
+import { flattenSurveyAnswers, resolveField } from '@/lib/cys/resolve'
 
 const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
@@ -27,6 +29,26 @@ const documentRef = {
 }
 
 describe('ingestScsPacket document import queue', () => {
+  it('clears a prior automatic mailing answer when the customer explicitly leaves it unknown', async () => {
+    const update = vi.fn()
+    const store = {
+      survey: { findFirst: vi.fn().mockResolvedValue({ id: 'survey_1' }) },
+      surveyResponse: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'response_1', answers: { mailing_same_as_property: true }, completedAt: null }),
+        update,
+      },
+    } as unknown as Prisma.TransactionClient
+    await ingestScsPacket({ organizationId: 'org_1', clientId: 'client_1', intakeSubmissionId: 'submission_1', rawPayload: {
+      lead_id: 'lead_1', data: { stage1_answers: { mailing_same_as_property: null }, stage1_provenance: { mailing_same_as_property: { source: 'homeowner' } } },
+    } }, store)
+    const answers = update.mock.calls[0][0].data.answers
+    expect(answers.mailing_same_as_property).toBeNull()
+    expect(resolveField({ key: 'mailing_same_as_property', label: 'Mailing same as property', groupName: 'Contact', position: 1, isRequired: false, dataType: 'boolean', sourceType: 'SURVEY_FIELD', sourcePath: 'survey.mailing_same_as_property' }, {
+      client: {}, address: null, documentFields: [], survey: flattenSurveyAnswers(answers),
+    })).toMatchObject({ value: null, status: 'MISSING' })
+    // Intake updates source answers only. The separate staff CYS review is not written here.
+    expect(Object.keys(store)).toEqual(['survey', 'surveyResponse'])
+  })
   it('preserves homeowner and reviewed answers without presenting extraction as a survey answer', () => {
     const answers = intakeAnswersFromPacket({ data: {
       stage1_answers: { first_name: 'Example', product_confirmed: 'ppa', term_months: '240', monthly_guess: '120' },

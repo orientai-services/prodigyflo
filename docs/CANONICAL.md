@@ -15,10 +15,10 @@ The two apps stay separate. Do not merge the repositories or share databases.
 | Vercel project | `scs-intake-42` | `prodigyflo-42` |
 | Vercel project ID | `prj_faemfrbbaFkP2ReLTyhFksFqyOnb` | `prj_SIPQJtji6NWlfyuK5l5tyvwC5GE8` |
 | Public site | `https://solarcontractservices.com` | `https://prodigyflo.ai` |
-| Canonical local checkout | `/Users/dakotahanshew/Developer/SCS/scsintake` | `/Users/dakotahanshew/Developer/products/ProdigyFlo/prodigyflo-42` |
+| Active recovery worktree | `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/scs-e2e-01a0b8f2` | `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/implementation-01a0b8f2` |
 | Database | Supabase `vspmjtdwlcqfclkgksel` (us-east-1) | Supabase `acgmcenrbwabmpxzgwqb` (us-west-2) |
 
-`main` is the only branch that may deploy to those Vercel projects. Work on a
+`main` is the only branch that may deploy to production domains. Recovery branches may deploy protected previews with isolated databases and storage. Work on a
 short-lived branch, open a pull request into `main`, and let the GitHub
 connection deploy. Direct Vercel deploys are recovery-only and must be followed
 by a fast-forward of `main` so GitHub and live do not drift.
@@ -49,4 +49,8 @@ These still exist. They are not production.
 
 `/Users/dakotahanshew/Developer/SCS/prodigyflo` is an empty placeholder. Until
 it holds a checkout, ProdigyFlo work stays in
-`/Users/dakotahanshew/Developer/products/ProdigyFlo/prodigyflo-42`.
+`/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/implementation-01a0b8f2`.
+
+## Recovery checkpoint — 2026-09-20
+
+The active recovery branch is `codex/complete-intake-records-analyzer-01a0b8f2` in both worktrees above. The older Developer checkouts remain preserved but are stale and must not be used for this cutover. `stage0/`, assessment copies, and historical test artifacts are evidence only. The Records Worker source is captured in the SCS repository under `integrations/records/`; its production domain is `records.prodigyflo.ai`. Validate isolated acceptance before switching production readers.

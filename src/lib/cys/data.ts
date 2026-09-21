@@ -83,7 +83,7 @@ export async function loadSourcesForClients(clientIds: string[]): Promise<Map<st
         extractions: {
           where: { status: 'COMPLETED' },
           orderBy: { createdAt: 'desc' },
-          select: { detectedTypeKey: true, fields: true },
+          select: { detectedTypeKey: true, sourceActive:true, fields: true },
         },
       },
     }),
@@ -172,7 +172,9 @@ export const resolveForClient = cache(async (
   const now = new Date()
   const values: CysValueRow[] = resolveAll(definitions, sources).map((resolved) => {
     const saved = byKey.get(resolved.fieldKey)
-    if (saved?.verifiedById && saved.status === 'VERIFIED') return saved
+    // Preserve the review record, but historical/expired-property documents
+    // cannot supply a verified current-property value.
+    if (saved?.verifiedById && saved.status === 'VERIFIED' && (!saved.sourceDocumentId || sources.documents?.some(doc=>doc.id===saved.sourceDocumentId))) return saved
     const source = sources.documentFields.find((field) => field.extractedFieldId === resolved.sourceExtractedFieldId)
     return {
       ...resolved,

@@ -7,7 +7,7 @@ import { loadCaseFile } from '@/lib/daily-desk-case'
 import { loadDeskBoard } from '@/lib/daily-desk-data'
 import { classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { asRecord, str } from '@/lib/packet/schema'
-import { DOCUMENT_MODULES, mergeQuestionnaire, prefillQuestionnaire, prefillFromDocuments, profileCells } from './mapping'
+import { DOCUMENT_MODULES, mergeQuestionnaire, prefillQuestionnaire, prefillFromDocuments, applyQuestionnaireDispositions, profileCells } from './mapping'
 import { QUESTIONNAIRE_NAME, QUESTIONNAIRE_VERSION, answerCount } from './questions'
 import type { FinalClient, FinalDeskPayload, DeskView } from './types'
 
@@ -18,7 +18,7 @@ export async function loadFinalQuestionnaire(user: SessionUser, clientId: string
     where: { AND: [clientScope(user), { id: clientId }] },
     select: { firstName: true, lastName: true, phone: true, email: true,
       addresses: { where: { isPrimary: true }, take: 1 },
-      documents: { where: { status: { notIn: ['REJECTED', 'EXPIRED'] }, storageKey: { not: null } }, orderBy: { receivedAt: 'desc' }, select: { extractions: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, select: { detectedTypeKey: true, status: true, fields: { select: { key: true, value: true, correctedValue: true, verification: true, sourcePage: true } } } } } },
+      documents: { where: { status: { notIn: ['REJECTED', 'EXPIRED'] }, storageKey: { not: null } }, orderBy: { receivedAt: 'desc' }, select: { extractions: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, select: { detectedTypeKey: true, sourceActive:true, status: true, fields: { select: { key: true, value: true, correctedValue: true, verification: true, sourcePage: true } } } } } },
       surveyResponses: { orderBy: { updatedAt: 'desc' }, include: { survey: { select: { name: true, version: true } } } } },
   })
   if (!client) return null
@@ -27,7 +27,7 @@ export async function loadFinalQuestionnaire(user: SessionUser, clientId: string
   const address = client.addresses[0]
   const prefill = prefillQuestionnaire({ name: `${client.firstName} ${client.lastName}`.trim(), phone: client.phone, email: client.email,
     address: address ? [address.line1, address.line2, address.city, address.state, address.postalCode].filter(Boolean).join(', ') : '', intake: asRecord(intake?.answers) })
-  const answers = mergeQuestionnaire(prefillFromDocuments(prefill, client.documents), asRecord(saved?.answers))
+  const answers = mergeQuestionnaire(applyQuestionnaireDispositions(prefillFromDocuments(prefill, client.documents),asRecord(asRecord(intake?.answers)._scs_questionnaire_dispositions)), asRecord(saved?.answers))
   return { answers, page: saved?.currentStep ?? 0, done: saved?.status === 'COMPLETED' && answerCount(answers) === 42,
     revision: Number(asRecord(saved?.answers)._revision ?? 0), responseId: saved?.id ?? null }
 }
@@ -40,7 +40,7 @@ async function loadFinalClients(user: SessionUser): Promise<FinalClient[]> {
       surveyResponses: { orderBy: { updatedAt: 'desc' }, select: { answers: true, survey: { select: { name: true } } } },
       documents: { where: { storageKey: { not: null }, status: { notIn: ['REJECTED', 'EXPIRED'] } },
         select: { id: true, label: true, fileName: true, requirement: { select: { key: true } },
-          extractions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, detectedTypeKey: true, fields: { select: { verification: true } } } } } } } })
+          extractions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, detectedTypeKey: true, sourceActive:true, fields: { select: { verification: true } } } } } } } })
   return rows.map(c => {
     const source = asRecord(c.surveyResponses.find(r => r.survey.name !== QUESTIONNAIRE_NAME)?.answers)
     const saved = asRecord(c.surveyResponses.find(r => r.survey.name === QUESTIONNAIRE_NAME)?.answers)
@@ -71,7 +71,7 @@ export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?
     if (!file || !questionnaire) throw Error('Not found')
     const cells = profileCells(file)
     const docs = DOCUMENT_MODULES.map(([key, label]) => ({ ...file.docs.find(d => d.key === key)!, key, label }))
-    payload.file = { ...file, ...cells, docs, docsPresent: docs.filter(d => d.state !== 'missing').length }
+    payload.file = { ...file, ...cells, availableFiles: file.docs.flatMap(d=>d.files), docs, docsPresent: docs.filter(d => d.state !== 'missing').length }
     payload.questionnaire = questionnaire
   }
   if (view === 'engine') {

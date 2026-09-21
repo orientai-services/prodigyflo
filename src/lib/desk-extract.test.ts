@@ -105,3 +105,29 @@ describe('re-extraction clears unsupported suggestions', () => {
     expect(extractedFact(docs, 'solar_contract', 'installer_name')?.verified).toBe(true)
   })
 })
+
+
+describe('protected review decisions', () => {
+  it('does not resurrect a rejection after a newer automatic reading under an alias', () => {
+    expect(extracted([{extractions:[
+      {detectedTypeKey:'finance_agreement',fields:[{key:'amount_financed',value:'20000',correctedValue:null,verification:'UNVERIFIED'}]},
+      {detectedTypeKey:'loan_or_til',fields:[{key:'total_financed',value:'30000',correctedValue:null,verification:'REJECTED'}]},
+    ]}], 'finance_agreement','amount_financed')).toBe('')
+  })
+  it('preserves an explicit cleared correction', () => {
+    expect(extracted([{extractions:[
+      {detectedTypeKey:'solar_contract',fields:[{key:'installer_name',value:'New guess',correctedValue:null,verification:'UNVERIFIED'}]},
+      {detectedTypeKey:'solar_contract',fields:[{key:'installer_name',value:'Old guess',correctedValue:'',verification:'CORRECTED'}]},
+    ]}], 'solar_contract','installer_name')).toBe('')
+  })
+})
+
+
+describe('superseded source manifest',()=>{
+ it('hides stale automatic values but retains staff corrections',()=>{
+  const extraction={detectedTypeKey:'solar_contract',sourceActive:false,fields:[{key:'installer_name',value:'Old installer',correctedValue:null as string|null,verification:'UNVERIFIED'}]}
+  expect(extracted([{extractions:[extraction]}],'solar_contract','installer_name')).toBe('')
+  extraction.fields[0].verification='CORRECTED';extraction.fields[0].correctedValue='Reviewed installer'
+  expect(extracted([{extractions:[extraction]}],'solar_contract','installer_name')).toBe('Reviewed installer')
+ })
+})

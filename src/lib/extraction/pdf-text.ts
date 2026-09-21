@@ -1,4 +1,4 @@
-import { extractText, getDocumentProxy } from 'unpdf'
+import { extractPdfPages, openPdfDocument } from '@/lib/records-analyzer/pdf-runtime'
 
 export type PdfText = {
   /** One entry per physical page, including blank pages. Never compact this array. */
@@ -28,10 +28,10 @@ export function hasSignedFormLayout(text: string): boolean {
 /** PDF.js resolves fonts, object streams and the page tree rather than guessing from content streams. */
 export async function extractPdfText(buf: Buffer): Promise<PdfText> {
   if (!buf.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error('The uploaded file is not a PDF.')
-  let pdf: Awaited<ReturnType<typeof getDocumentProxy>> | undefined
+  let pdf: Awaited<ReturnType<typeof openPdfDocument>> | undefined
   try {
-    pdf = await getDocumentProxy(new Uint8Array(buf))
-    const { text } = await extractText(pdf, { mergePages: false })
+    pdf = await openPdfDocument(new Uint8Array(buf))
+    const { text } = await extractPdfPages(pdf)
     const pages = text.map((page) => page.trim())
     if (pages.length !== pdf.numPages || pdf.numPages === 0) throw new Error('PDF page coverage could not be verified.')
     const unreadable = pages.flatMap((page, i) => hasReadablePdfText(page) ? [] : [i + 1])

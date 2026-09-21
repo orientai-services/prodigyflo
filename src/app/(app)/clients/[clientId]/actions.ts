@@ -177,8 +177,15 @@ export async function updateOverviewAction(input: unknown): Promise<ActionResult
         } else {
           await tx.clientAddress.create({ data: { clientId: client.id, isPrimary: true, ...address } })
         }
+        const source=await tx.externalDocumentImport.findFirst({where:{clientId:client.id,sourceLeadId:{not:null}},select:{sourceLeadId:true}})
+        await (await import('@/lib/property-records/jobs')).queuePropertyRecords({organizationId:user.organizationId,clientId:client.id,sourceLeadId:source?.sourceLeadId??undefined,address:{line1:address.line1,city:address.city,state:address.state,postal_code:address.postalCode}},tx)
+      }
+      if(data.firstName!==client.firstName||data.lastName!==client.lastName||data.line1&&(data.line1!==primaryAddress?.line1||data.city!==primaryAddress?.city||data.state!==primaryAddress?.state||data.postalCode!==primaryAddress?.postalCode)) {
+        await tx.documentExtraction.updateMany({where:{provider:'records',document:{clientId:client.id}},data:{sourceActive:false}})
+        await tx.externalDocumentImport.updateMany({where:{clientId:client.id,analysisPending:true},data:{analysisPending:false,analysisError:'Client identity/property changed; current evidence must be reviewed again.'}})
       }
     })
+    try {(await import('next/server')).after(async()=>{await (await import('@/lib/records-analyzer/continuation')).requestRecordsContinuation({clientId:client.id})})} catch { /* durable scheduler */ }
 
     await recordAudit(user, {
       action: 'client.updated',
