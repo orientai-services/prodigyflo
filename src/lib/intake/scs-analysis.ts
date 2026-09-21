@@ -100,9 +100,13 @@ export function analysisFields(doc:z.infer<typeof document>) {
       const sources=[source,...(Array.isArray(source.alternatives)?source.alternatives.map(asRecord):[])]
       const bound=sources.some(s=>s.document_id===doc.documentId&&doc.runs.includes(str(s.run_id)))
       const edited=bound&&review.action==='edited', accepted=bound&&review.action==='accepted', rejected=review.action==='rejected'
-      // Records proposals stay in sourceEvidence for inspection. Only the
-      // client's explicit decision may populate existing business fields.
-      const value=(edited||accepted)&&typeof review.accepted==='string'?review.accepted.trim()||null:null
+      const extracted=f.value==null||f.value===''?null:String(f.value)
+      const decided=review.action==='accepted'||review.action==='edited'||review.action==='rejected'
+      // Bound accept/edit wins. Unreviewed Document Intelligence values still
+      // land on the desk as unverified so loan/install tiles are not blank.
+      const value=rejected||doc.clientMatch==='unclear'||(decided&&!bound)?null
+        :(edited||accepted)&&typeof review.accepted==='string'?review.accepted.trim()||null
+        :extracted
       return [{key,label:spec.fields.find(x=>x.key===key)?.label??key.replaceAll('_',' '),value,normalizedValue:value,
         confidence:f.confidence==='high'?90:f.confidence==='medium'?65:25,
         sourcePage:edited?null:f.page,sourceSnippet:edited?null:f.quote,verification:'UNVERIFIED' as const,
