@@ -13,8 +13,11 @@ describe('PF evidence field mapping',()=>{
  it('imports the customer-selected alternative but keeps it unverified by staff',()=>{
   expect(analysisFields({...doc,fields:{escalator_rate:{...fact,value:null}},reviewDecisions:{escalator_rate:review('1.9')}})[0]).toMatchObject({value:'1.9',verification:'UNVERIFIED'})
  })
- it('leaves unreviewed, rejected and incorrectly bound proposals out of business values',()=>{
-  for(const reviewDecisions of [{},{escalator_rate:review('2.9','rejected')},{escalator_rate:{action:'accepted',accepted:'2.9'}},{escalator_rate:{...review('2.9'),source_evidence:{...fact,run_id:'old-run'}}}]) {
+ it('shows unreviewed Document Intelligence values as unverified desk proposals',()=>{
+  expect(analysisFields({...doc,reviewDecisions:{}})[0].value).toBe('2.9')
+ })
+ it('leaves rejected and incorrectly bound proposals out of business values',()=>{
+  for(const reviewDecisions of [{escalator_rate:review('2.9','rejected')},{escalator_rate:{action:'accepted',accepted:'2.9'}},{escalator_rate:{...review('2.9'),source_evidence:{...fact,run_id:'old-run'}}}]) {
    expect(analysisFields({...doc,reviewDecisions})[0].value).toBeNull()
    expect(doc.fields.escalator_rate.value).toBe('2.9')
   }

@@ -73,7 +73,7 @@ export function currentExtractionFields<E extends {
   detectedTypeKey: string | null
   status?: string
   sourceActive?: boolean
-  fields: { key: string; verification?: string }[]
+  fields: { key: string; verification?: string; value?: string | null; correctedValue?: string | null }[]
 }>(extractions: E[]): { extraction: E; field: E['fields'][number] }[] {
   const rows: { extraction: E; field: E['fields'][number] }[] = []
   const selected = new Map<string, { reviewed: boolean; extraction: E; index: number }>()
@@ -96,6 +96,13 @@ export function currentExtractionFields<E extends {
         selected.set(identity, {reviewed, extraction, index:prior.index})
       } else if (reviewed && prior.reviewed && prior.extraction === extraction) {
         rows.push({extraction, field}) // malformed/conflicting same-run reviews remain visible
+      } else if (!reviewed && !prior.reviewed && prior.extraction === extraction) {
+        const priorVal = str(rows[prior.index].field.correctedValue ?? rows[prior.index].field.value)
+        const nextVal = str(field.correctedValue ?? field.value)
+        if (!priorVal && nextVal) {
+          rows[prior.index] = {extraction, field}
+          selected.set(identity, {reviewed, extraction, index:prior.index})
+        }
       }
     }
   }

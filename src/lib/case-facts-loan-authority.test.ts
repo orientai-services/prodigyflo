@@ -107,6 +107,23 @@ describe('loan-map document authority on FinalDesk cells', () => {
     expect(cell(facts, 'Remaining balance')?.hint).toMatch(/statement/i)
   })
 
+  it('uses a first-year / install-agreement payment when the loan monthly field is empty', () => {
+    const docs = [{
+      extractions: [{
+        detectedTypeKey: 'finance_agreement',
+        status: 'COMPLETED',
+        fields: [
+          field('total_financed', '58927.5'),
+          field('interest_rate', '6'),
+          field('term_years', '25'),
+          field('first_year_monthly_payment', '263.22'),
+        ],
+      }],
+    }]
+    const facts = resolveCaseFacts(source(docs), null, { now })
+    expect(JSON.stringify(cell(facts, 'Monthly payment')?.cell)).toMatch(/263\.22/)
+  })
+
   it('proposal writes system size; RIC never does', () => {
     expect(extracted(source([ric]).documents, 'finance_agreement', 'system_size_kw')).toBe('')
     const facts = resolveCaseFacts(source([ric, proposal]), null, { now })
