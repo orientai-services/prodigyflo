@@ -1,7 +1,7 @@
 import { str } from '@/lib/packet/schema'
 
 export const TYPE_ALIASES: Record<string, string[]> = {
-  finance_agreement: ['finance_agreement', 'loan_or_til', 'loan_agreement', 'til'],
+  finance_agreement: ['finance_agreement', 'loan_or_til', 'loan_agreement', 'til', 'ric'],
   solar_contract: [
     'solar_contract',
     'signed_contract',
@@ -11,6 +11,9 @@ export const TYPE_ALIASES: Record<string, string[]> = {
     'solar_agreement',
     'power_purchase_agreement',
   ],
+  lender_statement: ['lender_statement', 'loan_statement', 'statement'],
+  completion_cert: ['completion_cert', 'completion_certificate'],
+  proposal: ['proposal', 'savings_estimate'],
 }
 
 export const FIELD_ALIASES: Record<string, string[]> = {
@@ -31,6 +34,9 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   escalator_pct: ['escalator_pct', 'escalator_rate', 'annual_escalator'],
   buyout_terms: ['buyout_terms', 'buyout'],
   remaining_balance: ['remaining_balance', 'remaining'],
+  interest_paid_to_date: ['interest_paid_to_date', 'interest_paid'],
+  months_remaining: ['months_remaining', 'payments_remaining'],
+  years_remaining: ['years_remaining'],
 }
 
 export type ExtractableDoc = {

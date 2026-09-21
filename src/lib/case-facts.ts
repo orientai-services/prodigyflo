@@ -11,7 +11,7 @@ export type CaseFactSource = {
 }
 function nestedStr(answers: Record<string, unknown>, group: string, key: string): string { return str(asRecord(answers[group])[key]) }
 /** Shared, read-only profile facts. Filters do not reimplement precedence or finance. */
-export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed[] } | null) {
+export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed[] } | null, opts?: { now?: Date }) {
   const confirmed = (key: string) => cys?.values.find((value) => value.fieldKey === key && value.status === 'VERIFIED')?.value || ''
   const timezone = client.organization.timezone || DESK_TIMEZONE
   const answers = asRecord(client.surveyResponses[0]?.answers)
@@ -31,8 +31,15 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
   const amountFact = fact('finance_agreement', 'amount_financed', 'contract_value', 'amount_financed')
   const aprFact = fact('finance_agreement', 'apr', isPpaOrLease ? undefined : 'apr_or_escalator', 'apr')
-  const firstPayFact = fact(type, isPpaOrLease ? 'in_service_date' : 'first_payment_date', 'first_payment_or_install')
-  const remainingFact = fact('finance_agreement','remaining_balance') ?? fact('lender_statement','remaining_balance')
+  const firstPayFact = isPpaOrLease
+    ? fact('solar_contract', 'in_service_date', 'first_payment_or_install')
+    : fact('completion_cert', 'first_payment_date') ?? fact(type, 'first_payment_date', 'first_payment_or_install')
+  const statementRemaining = fact('lender_statement', 'remaining_balance')
+  const remainingFact = statementRemaining ?? fact('finance_agreement', 'remaining_balance')
+  const statementInterest = fact('lender_statement', 'interest_paid_to_date')
+  const statementMonths = fact('lender_statement', 'months_remaining')
+  const statementYears = fact('lender_statement', 'years_remaining')
+  const useStatement = Boolean(statementRemaining?.value)
   const dealerFact = fact('finance_agreement', 'dealer_fee', 'dealer_fee', 'dealer_fee')
   const termFact = fact(type, 'term_months', 'term_months', 'term_months')
   const yearsFact = fact(type, 'term_years')
@@ -47,7 +54,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const providerFact = isPpaOrLease
     ? fact('solar_contract', 'contract_counterparty', 'lender_confirmed')
     : fact(type, 'lender_name', 'lender_confirmed', 'lender_confirmed')
-  const kwFact = fact('solar_contract', 'system_size_kw') ?? fact('finance_agreement','system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
+  const kwFact = fact('proposal', 'system_size_kw') ?? fact('solar_contract', 'system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
   const kw = kwFact?.value || ''
   const creditBand =
     str(answers.credit_band) ||
@@ -69,7 +76,14 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   // Loan amortization is never a PPA balance. Client-reviewed SCS values are
   // enough to compute; staff CYS verification is a tag, not a gate.
   const hasLoanInputs = product === 'loan' && Boolean(firstPayFact?.value && term && aprFact?.value && paymentFact?.value)
-  const amort = amortize({ firstPayDate: hasLoanInputs ? firstPayFact?.value : '', termMonths: term, aprPercent: aprFact?.value, monthlyPayment: paymentFact?.value })
+  const amort = amortize({
+    firstPayDate: hasLoanInputs ? firstPayFact?.value : '',
+    termMonths: term,
+    aprPercent: aprFact?.value,
+    monthlyPayment: paymentFact?.value,
+    principal: amountFact?.value,
+    now: opts?.now,
+  })
   const amortHint = hasLoanInputs ? 'Estimate from reviewed loan terms; not a payoff quote' : 'Requires reviewed loan terms and an actual first payment date'
   const finance: CaseCell[] = isPpaOrLease ? [
     sourcedCell('Contract counterparty', providerFact),
@@ -86,13 +100,19 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     sourcedCell('Customer signature date', fact('solar_contract', 'customer_signed_date')),
   ] : [
     sourcedCell('Total / amount financed', amountFact, 'money'),
-    remainingFact?.value?sourcedCell('Remaining balance',remainingFact,'money','Documented balance as of its source statement; not an inferred current payoff'):{ label: 'Estimated remaining balance', cell: amort.remaining, hint: amortHint },
+    remainingFact?.value?sourcedCell('Remaining balance',remainingFact,'money',useStatement?'Documented balance as of its source statement; not an inferred current payoff':'Documented balance; not an inferred current payoff'):{ label: 'Estimated remaining balance', cell: amort.remaining, hint: amortHint },
     sourcedCell('Interest rate', aprFact, 'percent'),
-    { label: 'Estimated interest paid', cell: amort.interestPaid, hint: amortHint },
+    useStatement && statementInterest?.value
+      ? sourcedCell('Interest paid to date', statementInterest, 'money', 'From lender statement; not an amortized estimate')
+      : { label: 'Estimated interest paid', cell: amort.interestPaid, hint: amortHint },
     { label: 'Term years', cell: termYears, hint: termSource?.note, unverified: termSource ? !termSource.verified : undefined },
     sourcedCell('Term months', termSource),
-    { label: 'Years remaining', cell: amort.yearsRemaining, hint: amortHint },
-    { label: 'Months remaining', cell: amort.monthsRemaining, hint: amortHint },
+    useStatement && (statementYears?.value || statementMonths?.value)
+      ? sourcedCell('Years remaining', statementYears ?? (statementMonths ? { ...statementMonths, value: String(Number(statementMonths.value) / 12) } : null), 'text', 'From lender statement')
+      : { label: 'Years remaining', cell: amort.yearsRemaining, hint: amortHint },
+    useStatement && statementMonths?.value
+      ? sourcedCell('Months remaining', statementMonths, 'text', 'From lender statement')
+      : { label: 'Months remaining', cell: amort.monthsRemaining, hint: amortHint },
     sourcedCell('Monthly payment', paymentFact, 'money'),
     sourcedCell('Dealer fee', dealerFact, 'money'),
     sourcedCell('Lender', providerFact),

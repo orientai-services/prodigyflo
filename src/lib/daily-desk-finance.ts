@@ -59,6 +59,7 @@ export type AmortizationInput = {
   termMonths: string | number | null | undefined
   aprPercent: string | number | null | undefined
   monthlyPayment: string | number | null | undefined
+  principal?: string | number | null | undefined
   now?: Date
 }
 
@@ -99,10 +100,26 @@ export function amortize(input: AmortizationInput): Amortization {
   const paid = Math.min(elapsed, n)
   const left = Math.max(0, n - paid)
 
-  const original = presentValue(payment, r, n)
-  const remainingAmt = presentValue(payment, r, left)
-  const principalPaid = Math.max(0, original - remainingAmt)
-  const interestPaidAmt = Math.max(0, paid * payment - principalPaid)
+  const principal = parseNumber(input.principal)
+  let remainingAmt: number
+  let interestPaidAmt: number
+  if (principal != null && principal > 0) {
+    let bal = principal
+    let interestPaid = 0
+    for (let i = 0; i < paid; i++) {
+      const interest = bal * r
+      const prin = Math.min(payment - interest, bal)
+      interestPaid += interest
+      bal = Math.max(0, bal - prin)
+    }
+    remainingAmt = Math.round(bal * 100) / 100
+    interestPaidAmt = Math.round(interestPaid * 100) / 100
+  } else {
+    const original = presentValue(payment, r, n)
+    remainingAmt = presentValue(payment, r, left)
+    const principalPaid = Math.max(0, original - remainingAmt)
+    interestPaidAmt = Math.max(0, paid * payment - principalPaid)
+  }
 
   return {
     remaining: { kind: 'value', display: MONEY.format(remainingAmt), amount: remainingAmt },
@@ -120,7 +137,7 @@ function presentValue(pmt: number, r: number, periods: number): number {
 }
 
 function monthDiff(from: Date, to: Date): number {
-  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth())
+  return (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + (to.getUTCMonth() - from.getUTCMonth())
 }
 
 export function cellDisplay(cell: ComputedCell): string {
