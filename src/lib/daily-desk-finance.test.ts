@@ -44,6 +44,21 @@ describe('amortize', () => {
     expect(cellDisplay(out.interestPaid)).not.toBe('$0.00')
   })
 
+  it('uses intro then ongoing payments when a stepped schedule is supplied', () => {
+    const out = amortize({
+      firstPayDate: '2023-04-21',
+      termMonths: 300,
+      aprPercent: 6,
+      monthlyPayment: 374.94,
+      principal: 58927.5,
+      introPayment: 263.22,
+      introCount: 17,
+      now: new Date('2026-09-21T12:00:00Z'),
+    })
+    expect(out.remaining).toMatchObject({ kind: 'value', amount: 57511.96 })
+    expect(out.monthsRemaining).toMatchObject({ kind: 'value', display: '259' })
+  })
+
   it('computes remaining and interest when every input is present', () => {
     const out = amortize({
       firstPayDate: '2024-01-15',
