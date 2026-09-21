@@ -68,7 +68,7 @@ it('filters before pagination, shares manual answers, and prevents cross-closer 
  const result=await loadFilteredClients(admin,{filters:JSON.stringify(raw),scheduling:'unscheduled'})
  expect(result.clients.map(c=>c.id)).toEqual([client]);expect(result.clientList.total).toBe(1)
  const q=await loadFinalQuestionnaire(closer,client);expect(q?.answers.mo_pay).toBe('57.97')
- expect(result.clients[0].docs[0].state).toBe('failed');expect(result.clients[0].credit).toBeNull()
+ expect(result.clients[0].docs[0].state).toBe('failed');expect(result.clients[0].credit).toBe('650-699')
  const mine=await loadFilteredClients(closer,{});expect(mine.clientList.total).toBe(1)
  const theirs=await loadFilteredClients(other,{});expect(theirs.clientList.total).toBe(44);expect(theirs.clientList.fields.some(f=>f.key==='intake.private_other')).toBe(false)
  const second=await loadFilteredClients(admin,{page:'2'});expect(second.clients).toHaveLength(5);expect(second.clientList.total).toBe(45)
