@@ -1,3 +1,4 @@
+import {currentExtractionFields} from '@/lib/desk-extract'
 import 'server-only'
 import { db } from '@/lib/db'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
@@ -9,7 +10,7 @@ import { listBriefViews } from '@/lib/ai/closeops-ai'
 import { civilDate, timeLabel } from '@/lib/daily-desk'
 import { CASE_DOC_KINDS, classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { resolveCaseFacts } from '@/lib/case-facts'
-import type { CaseCell, CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
+import type { CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 
 export type { CaseCell, CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 
@@ -124,7 +125,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     const extras = extrasByKind.get(kind.key) ?? []
     const req = reqByKind.get(kind.key)
     const extraction = doc?.extractions[0]
-    const fields = extraction?.fields ?? []
+    const fields = doc?currentExtractionFields(doc.extractions).map(({field})=>field):[]
     const verified = fields.filter((f) => f.verification === 'VERIFIED' || f.verification === 'CORRECTED').length
     const hasFile = Boolean(doc?.storageKey)
     const state = tileState({
@@ -135,7 +136,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     })
     const fileUrl = doc ? await signedDocumentFileUrl(doc) : null
     const extractFields = fields.filter((field) => field.verification !== 'REJECTED')
-      .map((f) => ({ label: f.label || f.key, value: str(f.correctedValue) || str(f.value) }))
+      .map((f) => ({ label: f.label || f.key, value: str(f.correctedValue ?? f.value) }))
       .filter((f) => f.value)
     const extraNote = extras.length > 0 ? `Also on file: ${extras.join(', ')}.` : ''
     const verifyNote = verified === fields.length && fields.length > 0 ? 'Verified extract.' : extractFields.length > 0 ? 'Unverified extract.' : ''

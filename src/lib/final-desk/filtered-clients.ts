@@ -26,7 +26,7 @@ export async function loadFilteredClients(user: SessionUser, query: ClientQuery)
         surveyResponses:{orderBy:{updatedAt:'desc'},include:{survey:{select:{name:true,version:true}}}},
         cysFieldValues:{where:{status:'VERIFIED',verifiedById:{not:null}}},
         documents:{where:{status:{notIn:['REJECTED','EXPIRED']}},orderBy:{receivedAt:'desc'},select:{id:true,fileName:true,label:true,storageKey:true,requirement:{select:{key:true}},
-          extractions:{orderBy:{createdAt:'desc'},select:{detectedTypeKey:true,status:true,fields:{select:{key:true,value:true,correctedValue:true,verification:true,sourcePage:true}}}}}},
+          extractions:{orderBy:{createdAt:'desc'},select:{detectedTypeKey:true,sourceActive:true,status:true,fields:{select:{key:true,value:true,correctedValue:true,verification:true,sourcePage:true}}}}}},
       } }), loadDefinitions(user.organizationId),
   ])
   const sources = await loadSourcesForClients(rows.map(r=>r.id))

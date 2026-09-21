@@ -265,7 +265,9 @@ describe('runPendingScsDocumentImports', () => {
     await runPendingScsDocumentExtractions()
     expect(mocks.importFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        AND: [{}, { OR: [{ sourceDocumentType: null }, { sourceDocumentType: { not: 'public_record_summary' } }] }],
+        AND: [{}, expect.objectContaining({
+          OR: [{ sourceDocumentType: null }, { sourceDocumentType: { not: 'public_record_summary' } }],
+        })],
       }),
     }))
     expect(mocks.runExtraction).not.toHaveBeenCalled()

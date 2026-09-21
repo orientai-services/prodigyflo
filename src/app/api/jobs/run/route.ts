@@ -112,13 +112,15 @@ async function run(request: NextRequest) {
   const startedAt = Date.now()
   // Documents are client-visible and must not wait behind unrelated automation
   // work (messages, scores, or billing renewal) in a shared cron invocation.
+  const scsDocumentImports = await runPendingScsDocumentImports()
   const scsDocumentExtractions = await runPendingScsDocumentExtractions()
+  const propertyRecords=await (await import('@/lib/property-records/jobs')).runPropertyRecordsJobs(1)
+  const recordsStaff=process.env.DOCUMENT_ANALYZER==='records' ? await (await import('@/lib/records-analyzer/staff-jobs')).runStaffAnalysisJobs(1) : null
   if (new URL(request.url).searchParams.get('scope') === 'scs-document-extractions') {
     return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentExtractions })
   }
   if (process.env.PRODIGYFLO_FINAL_DESK === 'true') {
-    const scsDocumentImports = await runPendingScsDocumentImports()
-    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
+    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, recordsStaff, propertyRecords, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
   }
   const counts = await runDueWork(new Date())
   const scores = await freshenScores()
@@ -130,7 +132,6 @@ async function run(request: NextRequest) {
   // month per line. A wallet that cannot cover it suspends the line (never
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
-  const scsDocumentImports = await runPendingScsDocumentImports()
   return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine: { status: 'RETIRED' }, telephony, scsDocumentImports, scsDocumentExtractions })
 }
 

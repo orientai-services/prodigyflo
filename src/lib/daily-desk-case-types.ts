@@ -31,6 +31,7 @@ export type CaseDocTile = {
 }
 
 export type CaseFileData = {
+  availableFiles?: CaseDocFile[]
   id: string
   firstName: string
   lastName: string

@@ -665,6 +665,7 @@ model StageHistory {
 // ─────────────────────────────────────────────────────────────
 
 model Client {
+  propertyRecordsJobs PropertyRecordsJob[]
   id             String  @id @default(cuid())
   organizationId String
   pipelineId     String
@@ -1160,6 +1161,7 @@ model DocumentRequirement {
 }
 
 model ClientDocument {
+  recordsJob RecordsAnalysisJob?
   id                   String         @id @default(cuid())
   clientId             String
   requirementId        String?
@@ -1699,6 +1701,12 @@ model IntakeSubmission {
 /// Durable provenance and retry ledger for files copied from SCS. The SCS
 /// storage path and its temporary URLs never live in this table.
 model ExternalDocumentImport {
+  sourceAnalysis      Json?
+  analysisIdentity    String?
+  analysisPending     Boolean @default(false)
+  analysisError       String?
+  analysisAttempts    Int @default(0)
+  analysisNextAttemptAt DateTime @default(now())
   id                  String                       @id @default(cuid())
   organizationId      String
   intakeSubmissionId String
@@ -1776,6 +1784,9 @@ enum FieldVerification {
 /// One AI pass over one document version. Never mutated after COMPLETED — a
 /// re-run creates a new row so the review history stays intact.
 model DocumentExtraction {
+  sourceActive Boolean @default(true)
+  sourceIdentity    String? @unique
+  sourceEvidence    Json?
   id                String           @id @default(cuid())
   documentId        String
   status            ExtractionStatus @default(PENDING)
@@ -2554,4 +2565,45 @@ model WorkspaceMigrationArchive {
   createdAt DateTime @default(now())
 
   @@id([runId, tableName, recordId])
+}
+
+/// One durable Records analysis per stored staff-uploaded document version.
+model RecordsAnalysisJob {
+  id String @id @default(cuid())
+  documentId String @unique
+  extractionId String @unique
+  status String @default("PENDING")
+  state Json?
+  attempts Int @default(0)
+  error String?
+  nextAttemptAt DateTime @default(now())
+  claimedAt DateTime?
+  claimToken String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  document ClientDocument @relation(fields:[documentId],references:[id],onDelete:Cascade)
+  @@index([status,nextAttemptAt])
+}
+
+/// ProdigyFlo owns lookup scheduling; the worker executes supported provider APIs.
+model PropertyRecordsJob {
+  id String @id @default(cuid())
+  organizationId String
+  clientId String
+  caseKey String
+  addressVersion String
+  address Json
+  status String @default("PENDING")
+  result Json?
+  importedFiles Json @default("{}")
+  attempts Int @default(0)
+  error String?
+  nextAttemptAt DateTime @default(now())
+  claimedAt DateTime?
+  claimToken String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  client Client @relation(fields:[clientId],references:[id],onDelete:Cascade)
+  @@unique([clientId,addressVersion])
+  @@index([status,nextAttemptAt])
 }

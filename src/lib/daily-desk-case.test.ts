@@ -49,3 +49,17 @@ describe('PPA client profile population', () => {
     expect(profile?.finance.find(cell => cell.label === 'Term months')).toMatchObject({ cell: { display: '252' }, unverified: false, hint: 'Reviewed CYS value' })
   })
 })
+
+
+describe('reviewed product Unknown blocks intake guesses',()=>{
+ it.each(['REJECTED','CORRECTED'])('does not resurrect product_type_guess after %s',async verification=>{
+  const client=fixture()
+  client.surveyResponses[0].answers=({...client.surveyResponses[0].answers,product_type_guess:'loan'} as typeof client.surveyResponses[0]['answers'])
+  const product=client.documents[0].extractions[0].fields.find(f=>f.key==='product_type')!
+  product.verification=verification
+  if(verification==='CORRECTED') product.correctedValue='' as unknown as null
+  mock.client.mockResolvedValue(client);mock.cys.mockResolvedValue({values:[],readiness:{},blockers:[]})
+  const profile=await loadCaseFile(user,'client-test')
+  expect(profile?.solar.find(c=>c.label==='Agreement type')?.cell.kind).toBe('missing')
+ })
+})

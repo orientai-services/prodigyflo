@@ -1,4 +1,5 @@
 import 'server-only'
+import { queueAnalysisPacket } from './scs-analysis'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
@@ -34,7 +35,8 @@ export function intakeAnswersFromPacket(raw: Record<string, unknown>): Record<st
   const provenance = asRecord(data.stage1_provenance ?? raw.stage1_provenance)
   const humanAnswers = Object.fromEntries(Object.entries(stage1).filter(([key]) => !key.startsWith('_') && str(asRecord(provenance[key]).source) !== 'document_extraction'))
   const answerProvenance = Object.fromEntries(Object.keys(humanAnswers).filter(key => provenance[key]).map(key => [key, provenance[key]]))
-  return Object.keys(answerProvenance).length ? { ...humanAnswers, _scs_answer_provenance: answerProvenance } : humanAnswers
+  const dispositions=asRecord(data.questionnaire_dispositions??raw.questionnaire_dispositions)
+  return {...humanAnswers,...(Object.keys(answerProvenance).length?{_scs_answer_provenance:answerProvenance}:{}),...(Object.keys(dispositions).length?{_scs_questionnaire_dispositions:dispositions}:{})}
 }
 
 function documentsFrom(raw: Record<string, unknown>): DocumentRef[] {
@@ -103,18 +105,14 @@ export async function ingestScsPacket(opts: {
   const street = str(answers.property_street)
   const city = str(answers.city)
   if (street && city) {
-    const has = await store.clientAddress.findFirst({ where: { clientId: opts.clientId } })
-    if (!has) {
-      await store.clientAddress.create({
-        data: {
-          clientId: opts.clientId,
-          line1: street,
-          city,
-          state: str(answers.state),
-          postalCode: str(answers.zip),
-          isPrimary: true,
-        },
-      })
+    await store.$queryRaw`SELECT id FROM "Client" WHERE id=${opts.clientId} FOR UPDATE`
+    const has = await store.clientAddress.findFirst({ where: { clientId: opts.clientId, isPrimary:true } })
+    const address={line1:street,city,state:str(answers.state),postalCode:str(answers.zip),isPrimary:true}
+    if(has) await store.clientAddress.update({where:{id:has.id},data:address})
+    else await store.clientAddress.create({data:{clientId:opts.clientId,...address}})
+    if(address.state&&address.postalCode) {
+      const {queuePropertyRecords}=await import('@/lib/property-records/jobs')
+      await queuePropertyRecords({organizationId:opts.organizationId,clientId:opts.clientId,sourceLeadId:str(raw.lead_id),address:{line1:street,city,state:address.state,postal_code:address.postalCode}},store)
     }
   }
 
@@ -126,6 +124,8 @@ export async function ingestScsPacket(opts: {
     sourceLeadId: str(raw.lead_id) || null,
     documents: files,
   }, store)
+
+  await queueAnalysisPacket({...opts, sourceLeadId: str(raw.lead_id), analysis: asRecord(raw.data).analysis, rawPayload:raw},store)
 
   if (store !== db) return
   try {

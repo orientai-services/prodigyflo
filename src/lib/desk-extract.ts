@@ -14,6 +14,7 @@ export const TYPE_ALIASES: Record<string, string[]> = {
 }
 
 export const FIELD_ALIASES: Record<string, string[]> = {
+  full_name: ['full_name', 'customer_name', 'borrower_name'],
   product_type: ['product_type', 'agreement_type'],
   amount_financed: ['amount_financed', 'total_financed'],
   monthly_payment: ['monthly_payment', 'monthly_solar_payment'],
@@ -21,6 +22,8 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   apr: ['apr', 'interest_rate'],
   interest_rate: ['interest_rate', 'apr'],
   lender_name: ['lender_name', 'lender_servicer'],
+  contract_counterparty: ['contract_counterparty', 'lender_servicer'],
+  servicer_name: ['servicer_name', 'servicer'],
   installer_name: ['installer_name', 'installer'],
   system_size_kw: ['system_size_kw', 'system_size'],
   first_payment_date: ['first_payment_date', 'first_pay_date'],
@@ -34,6 +37,7 @@ export type ExtractableDoc = {
   extractions: {
     detectedTypeKey: string | null
     status?: string
+    sourceActive?: boolean
     fields: { key: string; value: string | null; correctedValue: string | null; verification?: string; sourcePage?: number | null }[]
   }[]
 }
@@ -62,17 +66,31 @@ export type ExtractedFact = { value: string; verified: boolean; note: string }
 export function currentExtractionFields<E extends {
   detectedTypeKey: string | null
   status?: string
+  sourceActive?: boolean
   fields: { key: string; verification?: string }[]
 }>(extractions: E[]): { extraction: E; field: E['fields'][number] }[] {
-  const seen = new Set<string>()
   const rows: { extraction: E; field: E['fields'][number] }[] = []
+  const selected = new Map<string, { reviewed: boolean; extraction: E; index: number }>()
   for (const extraction of extractions) {
     if (extraction.status && extraction.status !== 'COMPLETED') continue
     for (const field of extraction.fields) {
-      const identity = `${extraction.detectedTypeKey}:${field.key}`
-      const reviewed = ['VERIFIED', 'CORRECTED'].includes(field.verification ?? '')
-      if (!seen.has(identity) || reviewed) rows.push({ extraction, field })
-      seen.add(identity)
+      const type = Object.entries(TYPE_ALIASES).find(([, aliases]) => aliases.includes(extraction.detectedTypeKey ?? ''))?.[0] ?? extraction.detectedTypeKey
+      const key = Object.entries(FIELD_ALIASES).find(([, aliases]) => aliases.includes(field.key))?.[0] ?? field.key
+      const identity = `${type}:${key}`
+      const reviewed = ['VERIFIED', 'CORRECTED', 'REJECTED'].includes(field.verification ?? '')
+      if(extraction.sourceActive===false&&!reviewed) continue
+      const prior = selected.get(identity)
+      if (!prior) {
+        selected.set(identity, {reviewed, extraction, index:rows.length})
+        rows.push({extraction, field})
+      } else if (reviewed && !prior.reviewed) {
+        // A rejection and an intentional blank are decisions, too. They must
+        // suppress every later automatic reading, not only a nonempty value.
+        rows[prior.index] = {extraction, field}
+        selected.set(identity, {reviewed, extraction, index:prior.index})
+      } else if (reviewed && prior.reviewed && prior.extraction === extraction) {
+        rows.push({extraction, field}) // malformed/conflicting same-run reviews remain visible
+      }
     }
   }
   return rows
@@ -85,12 +103,14 @@ export function extractedFact(docs: ExtractableDoc[], typeKey: string, fieldKey:
   const candidates = docs.flatMap(doc => currentExtractionFields(doc.extractions)
     .filter(({ extraction, field }) => types.has(str(extraction.detectedTypeKey)) && keys.includes(field.key))
     .map(({ field }) => field))
-    .filter(field => field.verification !== 'REJECTED' && (str(field.correctedValue) || str(field.value)))
-  const reviewed = candidates.filter(field => ['VERIFIED', 'CORRECTED'].includes(field.verification ?? ''))
+
+  const reviewed = candidates.filter(field => ['VERIFIED', 'CORRECTED','REJECTED'].includes(field.verification ?? ''))
   const field = reviewed[0] ?? candidates[0]
   if (!field) return null
-  const value = str(field.correctedValue) || str(field.value)
-  if (reviewed.some(other => (str(other.correctedValue) || str(other.value)).toLowerCase() !== value.toLowerCase())) {
+  const value = str(field.correctedValue ?? field.value)
+  if(field.verification==='REJECTED') return {value:'',verified:true,note:'Staff rejected this value; follow-up required.'}
+  if (!value) return reviewed.length?{value:'',verified:true,note:'Staff explicitly left this value unknown.'}:null
+  if (reviewed.some(other => str(other.correctedValue ?? other.value).toLowerCase() !== value.toLowerCase())) {
     return { value, verified: false, note: 'Conflicting reviewed readings; resolve in CYS.' }
   }
   return { value, verified: reviewed.length > 0, note: `${reviewed.length ? 'Reviewed document' : 'Unverified extraction'}${field.sourcePage ? ` · p. ${field.sourcePage}` : ''}` }

@@ -1,10 +1,11 @@
 import { selectCohort } from './cohort'
 import 'server-only'
 import { randomUUID } from 'node:crypto'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getFileStorage } from '@/lib/storage'
 import { runExtraction } from '@/lib/extraction/run'
+import { materializeScsAnalysis } from './scs-analysis'
 import { sha256, validateUpload } from '@/lib/extraction/sniff'
 import type { DocumentRef } from '@/lib/packet/schema'
 import { scsRequirementId } from './scs-document-requirements'
@@ -262,7 +263,7 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
 }
 
 /** Bounded worker used by the existing Vercel five-minute job runner. */
-export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: string; documentId: string }) {
+export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: string; documentId: string }, clientId?:string) {
   const cohort = selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true', exact)
   if (process.env.SCS_IMPORT_REQUIRE_COHORT === 'true' && cohort === undefined) throw Error('Execution cohort required')
   if (cohort === null) return { attempted: 0, imported: 0, failed: 0, skipped: 0 }
@@ -274,6 +275,7 @@ export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: 
         OR: cohort.cases.map(x => ({ sourceLeadId: x.leadId, sourceDocumentId: { in: x.documentIds } })),
       }
     : {}
+  if(clientId) scope.clientId=clientId
   // Older than the maximum serverless invocation: reclaim only abandoned
   // claims. Exhausted work remains FAILED and requires an explicit decision.
   await db.externalDocumentImport.updateMany({
@@ -306,7 +308,7 @@ export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: 
  * changed. Each call to runExtraction creates a new immutable run, preserving
  * the original mock result for audit.
  */
-export async function runPendingScsDocumentExtractions(limit = 5) {
+export async function runPendingScsDocumentExtractions(limit = 5, clientId?:string) {
   const empty = { attempted: 0, completed: 0, failed: 0, skipped: 0 }
   const cohort = selectCohort(process.env.SCS_IMPORT_EXECUTION_COHORT, process.env.SCS_DOCUMENT_IMPORTS_PAUSED === 'true')
   if (process.env.SCS_IMPORT_REQUIRE_COHORT === 'true' && cohort === undefined) throw Error('Execution cohort required')
@@ -317,11 +319,14 @@ export async function runPendingScsDocumentExtractions(limit = 5) {
     intakeSubmission: { sourceId: cohort.sourceId },
     OR: cohort.cases.map((item) => ({ sourceLeadId: item.leadId, sourceDocumentId: { in: item.documentIds } })),
   } : {}
+  if(clientId) scope.clientId=clientId
+  const records=await materializeScsAnalysis(limit, scope)
+  if (process.env.DOCUMENT_ANALYZER === 'records') return { ...empty, records }
   // Generated search summaries remain accessible files, but cannot supply
   // extracted facts or masquerade as an official public record. Preserve
   // eligibility for historical imports whose source type was not supplied.
   const extractionScope: Prisma.ExternalDocumentImportWhereInput = {
-    AND: [scope, { OR: [{ sourceDocumentType: null }, { sourceDocumentType: { not: PUBLIC_RECORD_SUMMARY } }] }],
+    AND: [scope, {sourceAnalysis:{equals:Prisma.DbNull}, OR: [{ sourceDocumentType: null }, { sourceDocumentType: { not: PUBLIC_RECORD_SUMMARY } }] }],
   }
   if (process.env.AI_PROVIDER !== 'anthropic') return { ...empty, blockedReason: 'SCS document extraction requires the live Anthropic provider; mock processing is not an end-to-end test.' }
   const staleBefore = new Date(Date.now() - 5 * 60_000)

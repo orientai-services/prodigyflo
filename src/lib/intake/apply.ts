@@ -339,17 +339,11 @@ export type InboundResult = { duplicate: boolean; submission: IntakeSubmission; 
  * replays are returned as-is; schema-42 SCS packets intentionally refresh the
  * same submission as their homeowner data and documents evolve.
  */
-function sourceTime(packet: Record<string, unknown>): number | null {
-  const data = packet.data as Record<string, unknown> | undefined
-  const value = data?.last_activity_at
-  if (typeof value !== 'string') return null
-  const time = Date.parse(value)
-  return Number.isFinite(time) ? time : null
-}
 
 export async function processInbound(
   source: IntakeSource, externalId: string, rawPayload: unknown, actor: IntakeActor = null,
 ): Promise<InboundResult> {
+  if(source.slug==='scs-website') rawPayload=await (await import('./scs-analysis-artifact')).resolveScsAnalysisArtifact(rawPayload)
   if (await isRetiredIdentity([['intake:'+source.id, externalId], ['scs-lead', source.slug === 'scs-website' ? scsLeadId(rawPayload) : null], ['calendly-event', parseIntakeBooking(rawPayload)?.externalEventId]])) throw new RetiredIntakeError()
   const result = source.slug === 'scs-website'
     ? await db.$transaction(
@@ -360,6 +354,9 @@ export async function processInbound(
   if (!result.duplicate && result.submission.clientId && source.slug === 'scs-website') {
     const { refreshCysMirror } = await import('@/lib/cys/data')
     try { await refreshCysMirror(source.organizationId, result.submission.clientId) } catch { /* derived view; receipt is durable */ }
+  }
+  if(result.submission.clientId&&source.slug==='scs-website') {
+    try {(await import('next/server')).after(async()=>{await (await import('@/lib/records-analyzer/continuation')).requestRecordsContinuation({clientId:result.submission.clientId!})})} catch { /* durable cron recovers outside HTTP */ }
   }
   return result
 }
@@ -396,11 +393,8 @@ async function processInboundLocked(
     })
     const ids = new Set(candidates.map(row => row.clientId).filter(Boolean))
     if (ids.size > 1) throw new Error('Conflicting historical SCS bindings; reconcile before retry.')
-    const incomingTime = sourceTime(packet)
-    if (candidates.some(row => {
-      const knownTime = sourceTime(row.rawPayload as Record<string, unknown>)
-      return knownTime !== null && (incomingTime === null || knownTime > incomingTime)
-    })) throw new Error('Stale historical SCS packet; reconcile the newest receipt before retry.')
+    const {shouldSkipScsPacket}=await import('./analysis-contract')
+    if (candidates.some(row => shouldSkipScsPacket(packet,row.rawPayload,false))) throw new Error('Stale historical SCS packet; reconcile the newest receipt before retry.')
     boundClientId = candidates.find(row => row.clientId)?.clientId ?? null
     // Reuse the earliest receipt, retaining first receipt time and document FKs.
     if (candidates.length) {
@@ -410,22 +404,14 @@ async function processInboundLocked(
   if (existing && isScsPacket) {
     const old = existing.rawPayload as Record<string, unknown>
     if (old.stage0_synthetic === true) packet.stage0_synthetic = true
-    const oldTime = sourceTime(old)
-    const newTime = sourceTime(packet)
+    const {shouldSkipScsPacket}=await import('./analysis-contract')
     const completed = !['FAILED', 'RECEIVED', 'NEEDS_MAPPING'].includes(existing.status)
-    if (oldTime !== null && (newTime === null || newTime < oldTime)) {
-      if (existing.clientId) {
-        const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
-        booking = await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload, store })
+    if(shouldSkipScsPacket(packet,old,completed)) {
+      if(existing.clientId) {
+        const {upsertIntakeAppointment}=await import('@/lib/intake/appointment')
+        booking=await upsertIntakeAppointment({source,clientId:existing.clientId,rawPayload,store})
       }
-      return { duplicate: true, submission: existing, booking }
-    }
-    if (completed && newTime === oldTime && typeof packet.id === 'string' && packet.id === old.id) {
-      if (existing.clientId) {
-        const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
-        booking = await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload, store })
-      }
-      return { duplicate: true, submission: existing, booking }
+      return {duplicate:true,submission:existing,booking}
     }
   }
   // A failed SCS document copy must be resumeable. Treating it as a duplicate

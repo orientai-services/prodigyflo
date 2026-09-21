@@ -9,7 +9,7 @@ const ORG_TABLES = [
   'ConnectorCredential', 'CysFieldDefinition', 'DeployRun', 'DocumentPackage', 'EngineRun',
   'ExternalDocumentImport', 'HotLeadReview', 'InboundDocument', 'InboundEvent', 'Insight',
   'IntakeSource', 'IntakeSubmission', 'Invite', 'LeadSource', 'MessageTemplate', 'Notification',
-  'NurtureTouch', 'PhoneNumber', 'Pipeline', 'Region', 'Role', 'SavedFilter', 'ScheduledMessage',
+  'NurtureTouch', 'PhoneNumber', 'Pipeline', 'PropertyRecordsJob', 'Region', 'Role', 'SavedFilter', 'ScheduledMessage',
   'Sequence', 'Survey', 'Team', 'TelephonyWallet', 'User', 'WalletEntry',
 ].sort()
 const q = (name: string) => '"' + name.replaceAll('"', '""') + '"'

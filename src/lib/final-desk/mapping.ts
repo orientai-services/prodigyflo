@@ -42,9 +42,8 @@ export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { f
     isPpa ? missing('Lender', 'PPA/lease counterparty is recorded in the contract evidence; no loan lender inferred') : find('Lender'),
     isPpa ? missing('First payment date', 'No first payment date inferred from signing or service commencement') : find('First payment date')]
   if (isPpa) for (const index of [0, 1, 2, 3]) finance[index] = missing(finance[index].label, 'Not applicable to a PPA/lease loan calculation')
-  const credit = find('Credit score')
-  // A range is not a numeric credit score. Preserve the range in intake evidence.
-  if (credit.cell.kind === 'value' && !/^\d{3}$/.test(credit.cell.display)) credit.cell = { kind: 'missing' }
+  const credit = find('Credit score', 'Credit range')
+  credit.label = 'Credit score'
   return { finance, solar: [find('Agreement type'), find('Installer', 'Actual installer'), credit, find('System size')] }
 }
 
@@ -87,7 +86,7 @@ export function prefillFromDocuments(answers: QuestionnaireAnswers, docs: import
   const product = fact('product_type')?.value.toLowerCase()
   const products: Record<string, string> = { loan:'Loan', lease:'Lease', ppa:'PPA (Power Purchase Agreement)', cash:'Cash purchase' }
   if (product && products[product] && !out.agree_type?.length) out.agree_type = [products[product]]
-  put('on_contract', fact('customer_name')?.value ?? fact('borrower_name')?.value)
+  put('on_contract', fact('full_name')?.value)
   put('sales_co', fact('sales_company')?.value)
   put('install_co', fact('installer_name')?.value)
   // A PPA counterparty is not a loan lender.
@@ -102,4 +101,12 @@ export function prefillFromDocuments(answers: QuestionnaireAnswers, docs: import
   const escalation = fact('escalator_pct')?.value
   if (escalation && /^\d+(\.\d+)?%?$/.test(escalation.trim())) put('escalator', Number(escalation.replace('%','')) > 0 ? 'Yes' : 'No')
   return out
+}
+
+
+/** An explicit Unknown/N/A is not permission to refill the answer from an old guess. */
+export function applyQuestionnaireDispositions(answers:QuestionnaireAnswers, dispositions:Record<string,unknown>):QuestionnaireAnswers {
+  const result={...answers}
+  for(const q of QUESTIONS) if(['unknown','not_applicable'].includes(String(dispositions[q.id]))) result[q.id]=q.ty==='multi'?[]:''
+  return result
 }

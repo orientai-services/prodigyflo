@@ -24,6 +24,7 @@ describe('matchDocKind', () => {
 })
 
 describe('classifyDeskKind', () => {
+  it('uses analyzed loan classification over the original agreement upload category',()=>expect(classifyDeskKind({requirementKey:'solar_contract',detectedType:'finance_agreement'})?.key).toBe('finance_agreement'))
   it('never counts generated lookup summaries as original records', () => {
     expect(classifyDeskKind({detectedType: 'public_record_summary', fileName: 'County-Permit-Record.pdf'})?.key).toBe('other')
     expect(classifyDeskKind({fileName: 'UCC-Fixture-Search-Summary.pdf'})?.key).toBe('other')

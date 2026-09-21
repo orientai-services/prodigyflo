@@ -74,8 +74,8 @@ export function classifyDeskKind(input: {
     return CASE_DOC_KINDS.find(k => k.key === 'other') ?? null
   }
   const direct =
-    matchDocKind(input.requirementKey) ||
     matchDocKind(input.detectedType) ||
+    matchDocKind(input.requirementKey) ||
     matchDocKind(input.label) ||
     matchDocKind(input.fileName)
   if (direct) return direct

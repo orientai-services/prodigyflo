@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { requireUser } from '@/lib/rbac'
 import { loadFinalDesk } from '@/lib/final-desk/data'
@@ -10,6 +11,6 @@ export async function FinalDeskPage({ view, clientId, month, query }: { view: De
   if (['engine', 'users'].includes(view) && user.role !== 'SUPER_ADMIN') redirect('/forbidden')
   let initial
   try { initial = await loadFinalDesk(user, view, clientId, month, query) }
-  catch (error) { if(error instanceof InvalidFilterError) return <div role="alert" style={{padding:32}}>Invalid client filter: {error.message} <a href="/clients">Clear filters</a></div>; if (error instanceof Error && error.message === 'Not found') notFound(); throw error }
+  catch (error) { if(error instanceof InvalidFilterError) return <div role="alert" style={{padding:32}}>Invalid client filter: {error.message} <Link href="/clients">Clear filters</Link></div>; if (error instanceof Error && error.message === 'Not found') notFound(); throw error }
   return <FinalDesk key={`${view}:${clientId ?? ''}:${JSON.stringify(query??{})}`} view={view} clientId={clientId} initial={initial} query={query} />
 }

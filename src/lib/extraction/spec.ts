@@ -346,7 +346,7 @@ export type ReviewableField = {
 
 /** The value downstream code may read: the human correction wins, always. */
 export function effectiveFieldValue(f: { value: string | null; correctedValue: string | null }): string | null {
-  return f.correctedValue?.trim() ? f.correctedValue : f.value
+  return f.correctedValue !== null ? f.correctedValue : f.value
 }
 
 export type ApprovalCheck = { ok: boolean; blocking: { key: string; label: string; reason: string }[] }

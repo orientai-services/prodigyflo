@@ -30,13 +30,17 @@ const MAX_RAW_TEXT = 400_000
 
 export type ExtractionRunResult = {
   extractionId: string
-  status: 'COMPLETED' | 'FAILED'
+  status: 'COMPLETED' | 'FAILED' | 'PENDING'
   documentStatus: DocumentStatus
   missingFieldKeys: string[]
   error?: string
 }
 
 export async function runExtraction(documentId: string): Promise<ExtractionRunResult> {
+  if(process.env.DOCUMENT_ANALYZER==='records') {
+    const {enqueueStaffAnalysis}=await import('@/lib/records-analyzer/staff-jobs')
+    return enqueueStaffAnalysis(documentId)
+  }
   const doc = await db.clientDocument.findUnique({
     where: { id: documentId },
     include: {

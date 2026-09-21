@@ -90,7 +90,7 @@ function pathTail(path: string, prefix: string): string {
  * value, when present, is what the reviewer said the document really says.
  */
 function effectiveValue(field: DocumentFieldInput): string | null {
-  return isBlank(field.correctedValue) ? field.value : field.correctedValue
+  return field.correctedValue !== null ? field.correctedValue : field.value
 }
 
 function docSource(field: DocumentFieldInput) {
