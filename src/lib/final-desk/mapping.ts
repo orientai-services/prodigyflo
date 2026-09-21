@@ -38,10 +38,9 @@ export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { f
     ? find('Monthly payment', 'First-year monthly payment') : payment
   const finance = [amt, find('Remaining balance', 'Estimated remaining balance'), find('Interest rate'),
     find('Interest paid to date', 'Estimated interest paid'), find('Annual Escalator Rate %', 'Annual payment escalation'),
-    find('Term years'), find('Term months'), find('Years remaining'), find('Months remaining'), shownPayment, benchmark,
-    isPpa ? missing('Lender', 'PPA/lease counterparty is recorded in the contract evidence; no loan lender inferred') : find('Lender'),
-    isPpa ? missing('First payment date', 'No first payment date inferred from signing or service commencement') : find('First payment date')]
-  if (isPpa) for (const index of [0, 1, 2, 3]) finance[index] = missing(finance[index].label, 'Not applicable to a PPA/lease loan calculation')
+    find('Term years'), find('Term months'), find('Years remaining', 'Time remaining'), find('Months remaining', 'Time remaining'), shownPayment, benchmark,
+    find('Lender', 'Contract counterparty'),
+    find('First payment date', 'Actual in-service date', 'Customer signature date')]
   const credit = find('Credit score', 'Credit range')
   credit.label = 'Credit score'
   return completeDeskCells({
@@ -74,10 +73,10 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
   const termNum = termCell?.cell.kind === 'value' ? Number(String(termCell.cell.display).replace(/[^\d.]/g, '')) : NaN
   const na = 'Not applicable to this agreement type'
   const finance = input.finance.map(cell => {
-    if (input.isPpa && (cell.cell.kind === 'missing' || cell.cell.kind === 'cannot_compute')) {
+    if (cell.cell.kind === 'value') return cell
+    if (input.isPpa && ['Total / amount financed', 'Remaining balance', 'Interest rate', 'Interest paid to date', '30% Dealer Fee'].includes(cell.label)) {
       return fill(cell, 'N/A', cell.hint || na)
     }
-    if (cell.cell.kind === 'value') return cell
     if (cell.label === 'First payment date') {
       return fill(cell, 'Not started', 'No signing date or completion certificate on file.')
     }
