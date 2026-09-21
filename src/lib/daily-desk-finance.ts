@@ -60,6 +60,8 @@ export type AmortizationInput = {
   aprPercent: string | number | null | undefined
   monthlyPayment: string | number | null | undefined
   principal?: string | number | null | undefined
+  introPayment?: string | number | null | undefined
+  introCount?: string | number | null | undefined
   now?: Date
 }
 
@@ -101,14 +103,17 @@ export function amortize(input: AmortizationInput): Amortization {
   const left = Math.max(0, n - paid)
 
   const principal = parseNumber(input.principal)
+  const introPmt = parseNumber(input.introPayment)
+  const introN = Math.max(0, Math.trunc(parseNumber(input.introCount) ?? 0))
   let remainingAmt: number
   let interestPaidAmt: number
   if (principal != null && principal > 0) {
     let bal = principal
     let interestPaid = 0
     for (let i = 0; i < paid; i++) {
+      const thisPmt = introPmt != null && i < introN ? introPmt : payment
       const interest = bal * r
-      const prin = Math.min(payment - interest, bal)
+      const prin = Math.min(thisPmt - interest, bal)
       interestPaid += interest
       bal = Math.max(0, bal - prin)
     }

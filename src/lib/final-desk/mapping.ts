@@ -44,7 +44,67 @@ export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { f
   if (isPpa) for (const index of [0, 1, 2, 3]) finance[index] = missing(finance[index].label, 'Not applicable to a PPA/lease loan calculation')
   const credit = find('Credit score', 'Credit range')
   credit.label = 'Credit score'
-  return { finance, solar: [find('Agreement type'), find('Installer', 'Actual installer'), credit, find('System size')] }
+  return completeDeskCells({
+    finance,
+    solar: [find('Agreement type'), find('Installer', 'Actual installer'), credit, find('System size')],
+    isPpa,
+  })
+}
+
+function money(n: number): string {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+function fill(cell: CaseCell, display: string, hint: string, amount?: number): CaseCell {
+  if (cell.cell.kind === 'value') return cell
+  return {
+    ...cell,
+    cell: amount == null ? { kind: 'value', display } : { kind: 'value', display, amount },
+    hint: [cell.hint, hint].filter(Boolean).join(' · ') || hint,
+  }
+}
+
+/** After Review, finance/solar tiles stay filled. Signing date is first-pay when no cert. */
+export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[]; isPpa: boolean }): { finance: CaseCell[]; solar: CaseCell[] } {
+  const amountCell = input.finance.find(c => c.label === 'Total / amount financed')
+  const amount = amountCell?.cell.kind === 'value'
+    ? (amountCell.cell.amount ?? Number(String(amountCell.cell.display).replace(/[^\d.-]/g, '')))
+    : NaN
+  const termCell = input.finance.find(c => c.label === 'Term months')
+  const termNum = termCell?.cell.kind === 'value' ? Number(String(termCell.cell.display).replace(/[^\d.]/g, '')) : NaN
+  const na = 'Not applicable to this agreement type'
+  const finance = input.finance.map(cell => {
+    if (input.isPpa && (cell.cell.kind === 'missing' || cell.cell.kind === 'cannot_compute')) {
+      return fill(cell, 'N/A', cell.hint || na)
+    }
+    if (cell.cell.kind === 'value') return cell
+    if (cell.label === 'First payment date') {
+      return fill(cell, 'Not started', 'No signing date or completion certificate on file.')
+    }
+    if (cell.label === 'Remaining balance' && Number.isFinite(amount) && amount > 0) {
+      return fill(cell, money(amount), 'Payments not started · original amount financed', amount)
+    }
+    if (cell.label === 'Interest paid to date') {
+      return fill(cell, '$0.00', 'Payments not started', 0)
+    }
+    if (cell.label === 'Months remaining' && Number.isFinite(termNum) && termNum > 0) {
+      return fill(cell, String(Math.round(termNum)), 'Full term until first payment starts')
+    }
+    if (cell.label === 'Years remaining' && Number.isFinite(termNum) && termNum > 0) {
+      const years = termNum / 12
+      return fill(cell, years.toFixed(termNum % 12 === 0 ? 0 : 1), 'Full term until first payment starts')
+    }
+    if (cell.label === 'Annual Escalator Rate %') return fill(cell, '0%', 'Loan has no yearly payment increase')
+    if (cell.label === '30% Dealer Fee') return fill(cell, 'Not in paperwork', 'Needs amount financed')
+    return fill(cell, 'Not in paperwork', 'Confirm or enter this on SCS Review')
+  })
+  const solar = input.solar.map(cell => {
+    if (cell.cell.kind === 'value') return cell
+    if (cell.label === 'System size') return fill(cell, 'Not in paperwork', 'Needs a proposal/kW or a value typed on Review')
+    if (cell.label === 'Credit score') return fill(cell, 'Not collected', 'Intake form only · never from the PDF')
+    return fill(cell, 'Not in paperwork', 'Confirm or enter this on SCS Review')
+  })
+  return { finance, solar }
 }
 
 const text = (v: unknown): string => typeof v === 'string' || typeof v === 'number' ? String(v).trim() : ''

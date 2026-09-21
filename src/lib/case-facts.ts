@@ -33,7 +33,9 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const aprFact = fact('finance_agreement', 'apr', isPpaOrLease ? undefined : 'apr_or_escalator', 'apr')
   const firstPayFact = isPpaOrLease
     ? fact('solar_contract', 'in_service_date', 'first_payment_or_install')
-    : fact('completion_cert', 'first_payment_date') ?? fact(type, 'first_payment_date', 'first_payment_or_install')
+    : fact('completion_cert', 'first_payment_date')
+      ?? fact(type, 'first_payment_date', 'first_payment_or_install')
+      ?? fact(type, 'customer_signed_date')
   const statementRemaining = fact('lender_statement', 'remaining_balance')
   const remainingFact = statementRemaining ?? fact('finance_agreement', 'remaining_balance')
   const statementInterest = fact('lender_statement', 'interest_paid_to_date')
@@ -79,15 +81,23 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   // Loan amortization is never a PPA balance. Client-reviewed SCS values are
   // enough to compute; staff CYS verification is a tag, not a gate.
   const hasLoanInputs = product === 'loan' && Boolean(firstPayFact?.value && term && aprFact?.value && paymentFact?.value)
+  const introFact = fact('finance_agreement', 'first_year_monthly_payment')
+  const introCountFact = fact('finance_agreement', 'intro_payment_count')
   const amort = amortize({
     firstPayDate: hasLoanInputs ? firstPayFact?.value : '',
     termMonths: term,
     aprPercent: aprFact?.value,
     monthlyPayment: paymentFact?.value,
     principal: amountFact?.value,
+    introPayment: introFact?.value,
+    introCount: introCountFact?.value ?? (introFact?.value ? 12 : null),
     now: opts?.now,
   })
-  const amortHint = hasLoanInputs ? 'Estimate from reviewed loan terms; not a payoff quote' : 'Requires reviewed loan terms and an actual first payment date'
+  const amortHint = hasLoanInputs
+    ? (firstPayFact?.note?.toLowerCase().includes('signed') || firstPayFact?.note?.toLowerCase().includes('unverified')
+      ? 'Estimate from signing date and contract terms; not a payoff quote'
+      : 'Estimate from reviewed loan terms; not a payoff quote')
+    : 'Requires reviewed loan terms and a first payment date'
   const finance: CaseCell[] = isPpaOrLease ? [
     sourcedCell('Contract counterparty', providerFact),
     sourcedCell('First-year monthly payment', firstYearFact, 'money', 'Contract starting amount; not today’s bill'),
