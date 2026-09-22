@@ -1,4 +1,5 @@
 import { extractedFact } from '@/lib/desk-extract'
+import { ppaPaymentSchedule } from '@/lib/daily-desk-finance'
 import { emptyAnswers, QUESTIONS, type QuestionnaireAnswers } from './questions'
 import type { CaseCell, CaseFileData } from '@/lib/daily-desk-case-types'
 
@@ -24,9 +25,11 @@ export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { f
   const isPpa = type.kind === 'value' && /ppa|lease/i.test(type.display)
   const amt = find('Total / amount financed')
   const amount = amt.cell.kind === 'value' ? Number(amt.cell.display.replace(/[^\d.-]/g, '')) : NaN
-  const benchmark: CaseCell = {
+  const benchmark: CaseCell = isPpa
+    ? (find('30% Dealer Fee').cell.kind === 'value' ? find('30% Dealer Fee') : { label: '30% Dealer Fee', cell: { kind: 'value', display: 'None' }, hint: 'PPA/lease has no dealer fee on a loan principal.' })
+    : {
     label: '30% Dealer Fee',
-    cell: !isPpa && Number.isFinite(amount) && amount > 0
+    cell: Number.isFinite(amount) && amount > 0
       ? { kind: 'value', display: (Math.round(amount * 30) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) }
       : { kind: 'cannot_compute', missing: ['supported amount financed'] },
     hint: 'Internal 30% benchmark · not the documented dealer fee',
@@ -36,7 +39,7 @@ export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { f
   // Historical starting price is useful only with its explicit period qualifier.
   const shownPayment = payment.cell.kind === 'missing'
     ? find('Monthly payment', 'First-year monthly payment') : payment
-  const finance = [amt, find('Remaining balance', 'Estimated remaining balance'), find('Interest rate', 'Annual payment escalation'),
+  const finance = [amt, find('Remaining balance', 'Estimated remaining balance'), find('Interest rate'),
     find('Interest paid to date', 'Estimated interest paid'), find('Annual Escalator Rate %', 'Annual payment escalation'),
     find('Term years'), find('Term months'), find('Years remaining', 'Time remaining'), find('Months remaining', 'Time remaining'), shownPayment, benchmark,
     find('Lender', 'Contract counterparty'),
@@ -71,15 +74,31 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
     : NaN
   const termCell = input.finance.find(c => c.label === 'Term months')
   const termNum = termCell?.cell.kind === 'value' ? Number(String(termCell.cell.display).replace(/[^\d.]/g, '')) : NaN
-  const na = 'Not applicable to this agreement type'
+  const yearOne = input.finance.find(c => c.label === 'Monthly payment' || c.label === 'First-year monthly payment' || c.label === 'Contract-stated monthly payment')
+  const yearOneAmt = yearOne?.cell.kind === 'value' ? (yearOne.cell.amount ?? Number(String(yearOne.cell.display).replace(/[^\d.]/g, ''))) : NaN
+  const escCell = input.finance.find(c => c.label === 'Annual Escalator Rate %')
+  const escPct = escCell?.cell.kind === 'value' ? Number(String(escCell.cell.display).replace(/[^\d.]/g, '')) : 0
+  const firstPay = input.finance.find(c => c.label === 'First payment date' || c.label === 'Customer signature date')
+  const firstPayDate = firstPay?.cell.kind === 'value' ? new Date(String(firstPay.cell.display)) : null
+  const elapsed = firstPayDate && !Number.isNaN(firstPayDate.getTime())
+    ? Math.max(0, (new Date().getUTCFullYear() - firstPayDate.getUTCFullYear()) * 12 + (new Date().getUTCMonth() - firstPayDate.getUTCMonth()))
+    : 0
+  const ppaSched = input.isPpa && yearOneAmt > 0 && termNum > 0
+    ? ppaPaymentSchedule({ yearOneMonthly: yearOneAmt, escalatorPct: Number.isFinite(escPct) ? escPct : 0, termMonths: termNum, monthsElapsed: elapsed })
+    : null
   const finance = input.finance.map(cell => {
     if (cell.cell.kind === 'value') return cell
     if (input.isPpa && cell.label === 'Interest rate') {
-      const esc = input.finance.find(c => c.label === 'Annual Escalator Rate %' && c.cell.kind === 'value')
-      if (esc) return { ...cell, cell: esc.cell, hint: 'Annual escalator; not a loan APR' }
+      return fill(cell, 'None', 'PPA/lease has no APR. Yearly increase is Annual Escalator Rate %.')
     }
-    if (input.isPpa && ['Total / amount financed', 'Remaining balance', 'Interest paid to date', '30% Dealer Fee'].includes(cell.label)) {
-      return fill(cell, 'Not a loan', cell.hint || na)
+    if (input.isPpa && cell.label === 'Total / amount financed' && ppaSched) {
+      return fill(cell, money(ppaSched.total), 'Sum of scheduled PPA payments; not a loan principal', ppaSched.total)
+    }
+    if (input.isPpa && cell.label === 'Remaining balance' && ppaSched) {
+      return fill(cell, money(ppaSched.remaining), 'Remaining scheduled PPA payments with the yearly increase', ppaSched.remaining)
+    }
+    if (input.isPpa && cell.label === 'Interest paid to date') {
+      return fill(cell, '$0.00', 'PPA/lease has no loan interest', 0)
     }
     if (cell.label === 'First payment date') {
       return fill(cell, 'Not started', 'No signing date or completion certificate on file.')

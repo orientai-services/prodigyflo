@@ -54,6 +54,27 @@ export function parseFirstPayDate(raw: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+/** Remaining PPA/lease payments. Escalator is a yearly increase, never APR. */
+export function ppaPaymentSchedule(input: {
+  yearOneMonthly: number
+  escalatorPct: number
+  termMonths: number
+  monthsElapsed: number
+}): { total: number; remaining: number; paid: number } {
+  const e = Math.max(0, input.escalatorPct) / 100
+  const n = Math.max(0, Math.trunc(input.termMonths))
+  const elapsed = Math.max(0, Math.min(Math.trunc(input.monthsElapsed), n))
+  let total = 0
+  let paid = 0
+  for (let m = 0; m < n; m++) {
+    const pmt = input.yearOneMonthly * Math.pow(1 + e, Math.floor(m / 12))
+    total += pmt
+    if (m < elapsed) paid += pmt
+  }
+  const round = (v: number) => Math.round(v * 100) / 100
+  return { total: round(total), remaining: round(total - paid), paid: round(paid) }
+}
+
 export type AmortizationInput = {
   firstPayDate: string | null | undefined
   termMonths: string | number | null | undefined

@@ -1,6 +1,6 @@
 import { asRecord, str } from '@/lib/packet/schema'
 import { DESK_TIMEZONE } from '@/lib/daily-desk'
-import { amortize, sourceMoney, sourcePercent, sourceText } from '@/lib/daily-desk-finance'
+import { amortize, ppaPaymentSchedule, sourceMoney, sourcePercent, sourceText } from '@/lib/daily-desk-finance'
 import { extracted, extractedFact, normalizeProduct, termMonthsFromYears, type ExtractedFact, type ExtractableDoc } from '@/lib/desk-extract'
 import type { CaseCell } from '@/lib/daily-desk-case-types'
 type Reviewed = { fieldKey: string; value: string | null; status: string; sourceLabel?: string | null; note?: string | null }
@@ -29,8 +29,10 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const product = normalizeProduct(productFact?productFact.value:str(client.contracts[0]?.productType)||str(answers.product_type_guess))
   const isPpaOrLease = product === 'ppa' || product === 'lease'
   const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
-  const amountFact = fact('finance_agreement', 'amount_financed', 'contract_value', 'amount_financed')
-  const aprFact = fact('finance_agreement', 'apr', isPpaOrLease ? undefined : 'apr_or_escalator', 'apr')
+  const amountFact = isPpaOrLease
+    ? fact('solar_contract', 'cash_price') ?? fact('solar_contract', 'amount_financed') ?? fact('finance_agreement', 'amount_financed')
+    : fact('finance_agreement', 'amount_financed', 'contract_value', 'amount_financed')
+  const aprFact = isPpaOrLease ? null : fact('finance_agreement', 'apr', 'apr', 'apr')
   const inServiceFact = fact('solar_contract', 'in_service_date', 'first_payment_or_install')
   const firstPayFact = isPpaOrLease
     ? inServiceFact ?? fact('solar_contract', 'first_payment_date') ?? fact('solar_contract', 'customer_signed_date')
@@ -38,7 +40,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
       ?? fact(type, 'first_payment_date', 'first_payment_or_install')
       ?? fact(type, 'customer_signed_date')
   const statementRemaining = fact('lender_statement', 'remaining_balance')
-  const remainingFact = statementRemaining ?? fact('finance_agreement', 'remaining_balance')
+  const remainingFact = statementRemaining ?? fact('finance_agreement', 'remaining_balance') ?? fact('solar_contract', 'remaining_balance')
   const statementInterest = fact('lender_statement', 'interest_paid_to_date')
   const statementMonths = fact('lender_statement', 'months_remaining')
   const statementYears = fact('lender_statement', 'years_remaining')
@@ -98,24 +100,39 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     introCount: introCountFact?.value ?? (introFact?.value ? 12 : null),
     now: opts?.now,
   })
+  const yearOnePay = Number(String(firstYearFact?.value || paymentFact?.value || '').replace(/[^0-9.]/g, ''))
+  const escPct = Number(String(escalationFact?.value || '0').replace(/[^0-9.]/g, ''))
+  const ppaSched = isPpaOrLease && yearOnePay > 0 && termNum > 0
+    ? ppaPaymentSchedule({ yearOneMonthly: yearOnePay, escalatorPct: Number.isFinite(escPct) ? escPct : 0, termMonths: termNum, monthsElapsed: elapsed ?? 0 })
+    : null
   const amortHint = hasLoanInputs
     ? (firstPayFact?.note?.toLowerCase().includes('signed') || firstPayFact?.note?.toLowerCase().includes('unverified')
       ? 'Estimate from signing date and contract terms; not a payoff quote'
       : 'Estimate from reviewed loan terms; not a payoff quote')
     : 'Requires reviewed loan terms and a first payment date'
   const finance: CaseCell[] = isPpaOrLease ? [
-    sourcedCell('Contract counterparty', providerFact),
-    sourcedCell('First-year monthly payment', firstYearFact, 'money', 'Contract starting amount; not today’s bill'),
-    sourcedCell('Contract-stated monthly payment', paymentFact, 'money', 'Current payment requires a current statement or explicit dated evidence'),
-    sourcedCell('Payment basis', basisFact),
+    amountFact?.value
+      ? sourcedCell('Total / amount financed', amountFact, 'money', 'PPA/lease contract value; not a loan principal')
+      : { label: 'Total / amount financed', cell: sourceMoney(ppaSched?.total ?? null), hint: 'Sum of scheduled PPA payments; not a loan principal' },
+    remainingFact?.value
+      ? sourcedCell('Remaining balance', remainingFact, 'money', 'From the contract; not a loan payoff')
+      : { label: 'Estimated remaining balance', cell: sourceMoney(ppaSched?.remaining ?? null), hint: 'Remaining scheduled PPA payments with the yearly increase; not loan interest' },
+    { label: 'Interest rate', cell: { kind: 'value' as const, display: 'None' }, hint: 'PPA/lease has no APR. The yearly increase is Annual Escalator Rate %.' },
+    { label: 'Interest paid to date', cell: { kind: 'value' as const, display: '$0.00', amount: 0 }, hint: 'PPA/lease has no loan interest.' },
     sourcedCell('Annual payment escalation', escalationFact, 'percent', 'Annual increase; not loan APR'),
     { label: 'Term years', cell: termYears, hint: termSource?.note, unverified: termSource ? !termSource.verified : undefined },
     sourcedCell('Term months', termSource),
+    { label: 'Years remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: (monthsLeft / 12).toFixed(monthsLeft % 12 === 0 ? 0 : 1) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] } },
+    { label: 'Months remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: String(monthsLeft) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] }, hint: 'From confirmed start date and term' },
+    sourcedCell('Contract-stated monthly payment', paymentFact, 'money', 'Current payment requires a current statement or explicit dated evidence'),
+    sourcedCell('First-year monthly payment', firstYearFact, 'money', 'Contract starting amount; not today’s bill'),
+    { label: '30% Dealer Fee', cell: { kind: 'value' as const, display: 'None' }, hint: 'PPA/lease has no dealer fee on a loan principal.' },
+    sourcedCell('Lender', providerFact),
+    sourcedCell('Contract counterparty', providerFact),
+    sourcedCell('First payment date', firstPayFact),
+    sourcedCell('Payment basis', basisFact),
     sourcedCell('Term starts', startFact),
     sourcedCell('Actual in-service date', inServiceFact),
-    sourcedCell('First payment date', firstPayFact),
-    { label: 'Months remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: String(monthsLeft) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] }, hint: 'From confirmed start date and term' },
-    { label: 'Years remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: (monthsLeft / 12).toFixed(monthsLeft % 12 === 0 ? 0 : 1) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] } },
     sourcedCell('Contract effective date', fact('solar_contract', 'contract_date')),
     sourcedCell('Customer signature date', fact('solar_contract', 'customer_signed_date')),
   ] : [
