@@ -50,7 +50,7 @@ describe('final HTML questionnaire and projection', () => {
     ],solar:[{label:'Agreement type',cell:{kind:'value',display:'ppa'}},{label:'Credit range',cell:{kind:'value',display:'650–699'}}]} as CaseFileData
     const {finance,solar}=profileCells(fixture)
     expect(finance).toHaveLength(13);expect(solar).toHaveLength(4)
-    expect(finance.find(c=>c.label==='Interest rate')?.cell).toMatchObject({kind:'value',display:'None'})
+    expect(finance.find(c=>c.label==='Interest rate')?.cell).toMatchObject({kind:'value',display:'No APR'})
     expect(finance.find(c=>c.label==='Annual Escalator Rate %')?.cell).toMatchObject({display:'1.9%'})
     expect(finance.find(c=>c.label==='Interest paid to date')?.cell).toMatchObject({kind:'value',display:'$0.00',amount:0})
     expect(finance.find(c=>c.label==='Total / amount financed')?.cell.kind).toBe('value')

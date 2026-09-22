@@ -117,7 +117,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     remainingFact?.value
       ? sourcedCell('Remaining balance', remainingFact, 'money', 'From the contract; not a loan payoff')
       : { label: 'Estimated remaining balance', cell: sourceMoney(ppaSched?.remaining ?? null), hint: 'Remaining scheduled PPA payments with the yearly increase; not loan interest' },
-    { label: 'Interest rate', cell: { kind: 'value' as const, display: 'None' }, hint: 'PPA/lease has no APR. The yearly increase is Annual Escalator Rate %.' },
+    { label: 'Interest rate', cell: { kind: 'value' as const, display: 'No APR' }, hint: 'PPA/lease has no APR. The yearly increase is Annual Escalator Rate %.' },
     { label: 'Interest paid to date', cell: { kind: 'value' as const, display: '$0.00', amount: 0 }, hint: 'PPA/lease has no loan interest.' },
     sourcedCell('Annual payment escalation', escalationFact, 'percent', 'Annual increase; not loan APR'),
     { label: 'Term years', cell: termYears, hint: termSource?.note, unverified: termSource ? !termSource.verified : undefined },
@@ -126,7 +126,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     { label: 'Months remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: String(monthsLeft) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] }, hint: 'From confirmed start date and term' },
     sourcedCell('Contract-stated monthly payment', paymentFact, 'money', 'Current payment requires a current statement or explicit dated evidence'),
     sourcedCell('First-year monthly payment', firstYearFact, 'money', 'Contract starting amount; not today’s bill'),
-    { label: '30% Dealer Fee', cell: { kind: 'value' as const, display: 'None' }, hint: 'PPA/lease has no dealer fee on a loan principal.' },
+    { label: '30% Dealer Fee', cell: { kind: 'value' as const, display: '$0.00', amount: 0 }, hint: 'PPA/lease has no dealer fee on a loan principal.' },
     sourcedCell('Lender', providerFact),
     sourcedCell('Contract counterparty', providerFact),
     sourcedCell('First payment date', firstPayFact),
