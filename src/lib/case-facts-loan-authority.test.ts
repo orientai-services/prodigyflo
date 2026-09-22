@@ -82,7 +82,7 @@ describe('loan-map document authority on FinalDesk cells', () => {
     expect(cell(facts, 'Annual Escalator Rate %')?.cell).toMatchObject({ kind: 'value', display: '0%' })
     expect(cell(facts, '30% Dealer Fee')?.cell).toMatchObject({ kind: 'value' })
     expect(cell(facts, '30% Dealer Fee')?.hint).toMatch(/benchmark/i)
-    expect(cell(facts, 'Credit score')?.cell).toMatchObject({ kind: 'value', display: '740_plus' })
+    expect(cell(facts, 'Credit score')?.cell).toMatchObject({ kind: 'value', display: '740+' })
     expect(cell(facts, 'System size')?.cell).toMatchObject({ kind: 'value', display: 'Not in paperwork' })
     expect(cells.finance).toHaveLength(13)
     for (const item of cells.finance.concat(cells.solar)) {

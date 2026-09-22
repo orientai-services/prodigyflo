@@ -1,6 +1,6 @@
 import 'server-only'
 import { queueAnalysisPacket, materializeScsAnalysis } from './scs-analysis'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
 import { refreshCysMirror } from '@/lib/cys/data'
@@ -34,9 +34,16 @@ export function intakeAnswersFromPacket(raw: Record<string, unknown>): Record<st
   const stage1 = Object.keys(answers).length ? answers : nested
   const provenance = asRecord(data.stage1_provenance ?? raw.stage1_provenance)
   const humanAnswers = Object.fromEntries(Object.entries(stage1).filter(([key]) => !key.startsWith('_') && str(asRecord(provenance[key]).source) !== 'document_extraction'))
-  const answerProvenance = Object.fromEntries(Object.keys(humanAnswers).filter(key => provenance[key]).map(key => [key, provenance[key]]))
+  const money = asRecord(data.money)
+  const screening = asRecord(data.screening)
+  const extras: Record<string, unknown> = {}
+  if (humanAnswers.monthly_utility_bill == null && money.monthly_utility_bill != null) extras.monthly_utility_bill = money.monthly_utility_bill
+  if (humanAnswers.credit_band == null && screening.credit_band != null) extras.credit_band = screening.credit_band
+  if (humanAnswers.payment_status == null && money.payment_status != null) extras.payment_status = money.payment_status
+  const merged = { ...extras, ...humanAnswers }
+  const answerProvenance = Object.fromEntries(Object.keys(merged).filter(key => provenance[key]).map(key => [key, provenance[key]]))
   const dispositions=asRecord(data.questionnaire_dispositions??raw.questionnaire_dispositions)
-  return {...humanAnswers,...(Object.keys(answerProvenance).length?{_scs_answer_provenance:answerProvenance}:{}),...(Object.keys(dispositions).length?{_scs_questionnaire_dispositions:dispositions}:{})}
+  return {...merged,...(Object.keys(answerProvenance).length?{_scs_answer_provenance:answerProvenance}:{}),...(Object.keys(dispositions).length?{_scs_questionnaire_dispositions:dispositions}:{})}
 }
 
 function documentsFrom(raw: Record<string, unknown>): DocumentRef[] {
@@ -126,6 +133,16 @@ export async function ingestScsPacket(opts: {
   }, store)
 
   await queueAnalysisPacket({...opts, sourceLeadId: str(raw.lead_id), analysis: asRecord(raw.data).analysis, rawPayload:raw},store)
+  await store.externalDocumentImport.updateMany({
+    where: {
+      clientId: opts.clientId,
+      sourceLeadId: str(raw.lead_id),
+      status: 'IMPORTED',
+      clientDocumentId: { not: null },
+      NOT: { sourceAnalysis: { equals: Prisma.DbNull } },
+    },
+    data: { analysisPending: true, analysisAttempts: 0, analysisError: null, analysisNextAttemptAt: new Date() },
+  })
 
   if (store !== db) return
   try {

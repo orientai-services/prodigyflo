@@ -45,6 +45,29 @@ describe('extracted aliases', () => {
     expect(extracted(docs, 'finance_agreement', 'lender_name')).toBe('GoodLeap')
   })
 
+  it('reads PPA cash_price and utility usage aliases', () => {
+    const docs = [{
+      extractions: [{
+        detectedTypeKey: 'solar_contract',
+        fields: [{ key: 'cash_price', value: '68259.51', correctedValue: null }],
+      }],
+    }, {
+      extractions: [{
+        detectedTypeKey: 'utility_bill',
+        fields: [
+          { key: 'annual_usage_kwh', value: '11200', correctedValue: null },
+          { key: 'monthly_utility_bill', value: '142.18', correctedValue: null },
+          { key: 'utility_name', value: 'NV Energy', correctedValue: null },
+        ],
+      }],
+    }]
+    expect(extracted(docs, 'solar_contract', 'cash_price')).toBe('68259.51')
+    expect(extracted(docs, 'solar_contract', 'amount_financed')).toBe('68259.51')
+    expect(extracted(docs, 'utility_bill', 'annual_usage_kwh')).toBe('11200')
+    expect(extracted(docs, 'utility_bill', 'amount_due')).toBe('142.18')
+    expect(extracted(docs, 'utility_bill', 'utility_name')).toBe('NV Energy')
+  })
+
   it('does not invent a missing amount', () => {
     const docs = [{
       extractions: [{

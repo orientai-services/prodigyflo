@@ -19,7 +19,7 @@ export const TYPE_ALIASES: Record<string, string[]> = {
 export const FIELD_ALIASES: Record<string, string[]> = {
   full_name: ['full_name', 'customer_name', 'borrower_name'],
   product_type: ['product_type', 'agreement_type'],
-  amount_financed: ['amount_financed', 'total_financed'],
+  amount_financed: ['amount_financed', 'total_financed', 'cash_price'],
   monthly_payment: ['monthly_payment', 'monthly_solar_payment'],
   term_months: ['term_months', 'payment_term_months'],
   apr: ['apr', 'interest_rate'],
@@ -40,6 +40,11 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   interest_paid_to_date: ['interest_paid_to_date', 'interest_paid'],
   months_remaining: ['months_remaining', 'payments_remaining'],
   years_remaining: ['years_remaining'],
+  cash_price: ['cash_price', 'amount_financed', 'total_financed'],
+  annual_usage_kwh: ['annual_usage_kwh', 'kwh', 'annual_usage'],
+  monthly_usage_kwh: ['monthly_usage_kwh', 'monthly_usage'],
+  amount_due: ['amount_due', 'monthly_utility_bill'],
+  utility_name: ['utility_name', 'utility'],
 }
 
 export type ExtractableDoc = {

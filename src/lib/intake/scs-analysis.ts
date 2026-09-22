@@ -1,7 +1,7 @@
 import 'server-only'
 import {createHash} from 'node:crypto'
 import {z} from 'zod'
-import type {Prisma} from '@prisma/client'
+import {Prisma} from '@prisma/client'
 import {db} from '@/lib/db'
 import {specForType} from '@/lib/extraction/spec'
 import {asRecord,str} from '@/lib/packet/schema'
@@ -29,15 +29,19 @@ export async function queueAnalysisPacket(opts:{organizationId:string;clientId:s
     if(receipt.analysisIdentity!==identity) await store.externalDocumentImport.update({where:{id:receipt.id},data:{sourceAnalysis:payload as Prisma.InputJsonValue,analysisIdentity:identity,analysisPending:true,analysisError:null,analysisAttempts:0,analysisNextAttemptAt:new Date()}})
   }
 }
-const KEYS:Record<string,string>={agreement_type:'product_type',customer_signed_date:'customer_signed_date',effective_date:'contract_date',in_service_date:'in_service_date',first_payment_date:'first_payment_date',installer:'installer_name',sales_company:'sales_company',lender_servicer:'contract_counterparty',system_size:'system_size_kw',interest_rate:'apr',escalator_rate:'escalator_pct',annual_escalation_rate:'escalator_pct',monthly_solar_payment:'monthly_payment',first_year_monthly_payment:'first_year_monthly_payment',intro_payment_count:'intro_payment_count',payment_basis:'payment_basis',remaining_balance:'remaining_balance',interest_paid_to_date:'interest_paid_to_date',months_remaining:'months_remaining',years_remaining:'years_remaining',total_financed:'amount_financed',finance_account_number:'account_number',production_kwh:'production_kwh',signer_name:'full_name',address_line1:'property_address',utility_account_number:'account_number',annual_usage_kwh:'annual_usage_kwh',monthly_usage_kwh:'monthly_usage_kwh',production_guarantee:'production_guarantee',buyout_terms:'buyout_terms',balloon_amount:'balloon_amount',term_start_basis:'term_start_basis',account_number:'account_number',full_name:'full_name',customer_name:'full_name',property_address:'property_address',service_address:'service_address',utility_name:'utility_name',lender_name:'lender_name',servicer:'servicer_name',servicer_name:'servicer_name',contract_counterparty:'contract_counterparty',term_years:'term_years',payment_term_months:'term_months',dealer_fee:'dealer_fee',cash_price:'cash_price',monthly_utility_bill:'amount_due'}
+const KEYS:Record<string,string>={agreement_type:'product_type',customer_signed_date:'customer_signed_date',effective_date:'contract_date',in_service_date:'in_service_date',first_payment_date:'first_payment_date',installer:'installer_name',sales_company:'sales_company',lender_servicer:'contract_counterparty',system_size:'system_size_kw',interest_rate:'apr',escalator_rate:'escalator_pct',annual_escalation_rate:'escalator_pct',monthly_solar_payment:'monthly_payment',first_year_monthly_payment:'first_year_monthly_payment',intro_payment_count:'intro_payment_count',payment_basis:'payment_basis',remaining_balance:'remaining_balance',interest_paid_to_date:'interest_paid_to_date',months_remaining:'months_remaining',years_remaining:'years_remaining',total_financed:'amount_financed',finance_account_number:'account_number',production_kwh:'production_kwh',signer_name:'full_name',address_line1:'property_address',utility_account_number:'account_number',annual_usage_kwh:'annual_usage_kwh',monthly_usage_kwh:'monthly_usage_kwh',kwh:'annual_usage_kwh',production_guarantee:'production_guarantee',buyout_terms:'buyout_terms',balloon_amount:'balloon_amount',term_start_basis:'term_start_basis',account_number:'account_number',full_name:'full_name',customer_name:'full_name',property_address:'property_address',service_address:'service_address',utility_name:'utility_name',utility:'utility_name',lender_name:'lender_name',servicer:'servicer_name',servicer_name:'servicer_name',contract_counterparty:'contract_counterparty',term_years:'term_years',payment_term_months:'term_months',dealer_fee:'dealer_fee',cash_price:'cash_price',monthly_utility_bill:'amount_due',billing_period:'billing_period'}
+const LOAN_KINDS=new Set(['loan','til','loan_statement','loan_or_til','ric'])
+const SOLAR_KINDS=new Set(['agreement','ppa','lease','solar_contract','signed_contract','solar_agreement','power_purchase_agreement'])
 export function typeFor(doc:z.infer<typeof document>) {
   const product=String(doc.fields.agreement_type?.value??'').toLowerCase()
-  if(doc.classification.some(k=>['loan','til','loan_statement'].includes(k)) || /\bloan\b/.test(product)) return 'finance_agreement'
-  if(doc.classification.some(k=>['agreement','ppa','lease'].includes(k)) || /\bppa\b|\blease\b/.test(product)) return 'solar_contract'
-  if(doc.classification.includes('utility_bill')) return 'utility_bill'
-  if(doc.classification.includes('ucc_or_lien')) return 'lien_filing'
-  if(doc.classification.includes('permit')) return 'permit'
-  if(doc.classification.includes('monitoring')) return 'production_report'
+  const kinds=doc.classification.map(k=>String(k).toLowerCase())
+  const hay=`${kinds.join(' ')} ${product}`
+  if(kinds.includes('utility_bill') || /utility_bill|electric(?:ity)?\s*bill/.test(hay)) return 'utility_bill'
+  if(kinds.some(k=>LOAN_KINDS.has(k)) || /\bloan\b|\btil\b|\bric\b|installment/.test(product)) return 'finance_agreement'
+  if(kinds.some(k=>SOLAR_KINDS.has(k)) || /\bppa\b|\blease\b|power purchase/.test(product)) return 'solar_contract'
+  if(kinds.includes('ucc_or_lien') || kinds.includes('lien_filing')) return 'lien_filing'
+  if(kinds.includes('permit') || kinds.includes('permits')) return 'permit'
+  if(kinds.includes('monitoring') || kinds.includes('production')) return 'production_report'
   return 'other'
 }
 export async function materializeScsAnalysis(limit=20,scope:Prisma.ExternalDocumentImportWhereInput={}) {
@@ -65,12 +69,21 @@ export async function materializeScsAnalysis(limit=20,scope:Prisma.ExternalDocum
       const a=live.addresses[0]
       if(hash({first_name:live.firstName.trim().toLowerCase(),last_name:live.lastName.trim().toLowerCase(),address_line1:(a?.line1??'').trim().toLowerCase(),city:(a?.city??'').trim().toLowerCase(),state:(a?.state??'').trim().toLowerCase(),zip:(a?.postalCode??'').trim().toLowerCase()})!==source.identity_fingerprint) throw Error('Contact/property changed during evidence materialization')
       await store.documentExtraction.updateMany({where:{documentId:row.clientDocumentId!,provider:'records',sourceIdentity:{not:identity}},data:{sourceActive:false}})
-      await store.documentExtraction.upsert({where:{sourceIdentity:identity},update:{},create:{
+      const warnings=['Imported from the same private Records analysis; no second extraction.']
+      const model=Object.values(doc.fields).find(f=>f.model)?.model??null
+      await store.documentExtraction.upsert({where:{sourceIdentity:identity},update:{
+        sourceActive:true,sourceEvidence:row.sourceAnalysis as Prisma.InputJsonValue,status:'COMPLETED',provider:'records',model,
+        detectedTypeKey:type,detectedTypeLabel:spec.label,pageCount:doc.coverage.totalPages,summary:doc.summary,completedAt:new Date(),warnings,
+      },create:{
         documentId:row.clientDocumentId!,sourceIdentity:identity,sourceEvidence:row.sourceAnalysis as Prisma.InputJsonValue,
-        status:'COMPLETED',provider:'records',model:Object.values(doc.fields).find(f=>f.model)?.model??null,
-        detectedTypeKey:type,detectedTypeLabel:spec.label,pageCount:doc.coverage.totalPages,
-        summary:doc.summary,completedAt:new Date(),fields:{create:fields},warnings:['Imported from the same private Records analysis; no second extraction.'],
+        status:'COMPLETED',provider:'records',model,detectedTypeKey:type,detectedTypeLabel:spec.label,pageCount:doc.coverage.totalPages,
+        summary:doc.summary,completedAt:new Date(),fields:{create:fields},warnings,
       }})
+      const extraction=await store.documentExtraction.findUniqueOrThrow({where:{sourceIdentity:identity},include:{fields:true}})
+      const locked=new Set(extraction.fields.filter(f=>['VERIFIED','CORRECTED','REJECTED'].includes(f.verification)).map(f=>f.key))
+      await store.extractedField.deleteMany({where:{extractionId:extraction.id,verification:'UNVERIFIED'}})
+      const incoming=fields.filter(f=>!locked.has(f.key))
+      if(incoming.length) await store.extractedField.createMany({data:incoming.map(f=>({extractionId:extraction.id,...f}))})
       await store.externalDocumentImport.update({where:{id:row.id},data:{analysisPending:false,analysisError:null,analysisAttempts:0}})
       await store.clientDocument.updateMany({where:{id:row.clientDocumentId!,status:{notIn:['APPROVED','REJECTED','EXPIRED']}},data:{status:fields.some(f=>f.value)?'RECEIVED':'MISSING_INFORMATION'}})
       return true
@@ -87,6 +100,15 @@ export async function materializeScsAnalysis(limit=20,scope:Prisma.ExternalDocum
     }
   }
   return {applied,failed}
+}
+
+/** Re-apply stored SCS analysis onto desk fields after mapping changes. */
+export async function requeueImportedScsAnalysis(scope:Prisma.ExternalDocumentImportWhereInput={}) {
+  const result=await db.externalDocumentImport.updateMany({
+    where:{AND:[scope,{status:'IMPORTED',clientDocumentId:{not:null},NOT:{sourceAnalysis:{equals:Prisma.DbNull}}}]},
+    data:{analysisPending:true,analysisAttempts:0,analysisError:null,analysisNextAttemptAt:new Date()},
+  })
+  return result.count
 }
 
 export function analysisFields(doc:z.infer<typeof document>) {

@@ -11,6 +11,7 @@ vi.mock('@/lib/db', () => ({
   db: {
     survey: { findFirst: vi.fn().mockResolvedValue(null) },
     clientAddress: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn() },
+    externalDocumentImport: { updateMany: vi.fn() },
   },
 }))
 vi.mock('@/lib/cys/data', () => ({ refreshCysMirror: mocks.refresh }))
@@ -37,6 +38,7 @@ describe('ingestScsPacket document import queue', () => {
         findFirst: vi.fn().mockResolvedValue({ id: 'response_1', answers: { mailing_same_as_property: true }, completedAt: null }),
         update,
       },
+      externalDocumentImport: { updateMany: vi.fn() },
     } as unknown as Prisma.TransactionClient
     await ingestScsPacket({ organizationId: 'org_1', clientId: 'client_1', intakeSubmissionId: 'submission_1', rawPayload: {
       lead_id: 'lead_1', data: { stage1_answers: { mailing_same_as_property: null }, stage1_provenance: { mailing_same_as_property: { source: 'homeowner' } } },
@@ -47,7 +49,7 @@ describe('ingestScsPacket document import queue', () => {
       client: {}, address: null, documentFields: [], survey: flattenSurveyAnswers(answers),
     })).toMatchObject({ value: null, status: 'MISSING' })
     // Intake updates source answers only. The separate staff CYS review is not written here.
-    expect(Object.keys(store)).toEqual(['survey', 'surveyResponse'])
+    expect(Object.keys(store)).toEqual(['survey', 'surveyResponse', 'externalDocumentImport'])
   })
   it('preserves homeowner and reviewed answers without presenting extraction as a survey answer', () => {
     const answers = intakeAnswersFromPacket({ data: {
@@ -64,6 +66,15 @@ describe('ingestScsPacket document import queue', () => {
     expect(answers.term_months).toBeUndefined()
     expect(answers.amount_financed).toBeUndefined()
     expect(answers._scs_answer_provenance).toMatchObject({ product_confirmed: { source: 'document_review' } })
+  })
+  it('carries typed utility bill and credit from intake money/screening onto the profile', () => {
+    const answers = intakeAnswersFromPacket({ data: {
+      stage1_answers: { first_name: 'Example' },
+      stage1_provenance: { first_name: { source: 'homeowner' } },
+      money: { monthly_utility_bill: 187.44, payment_status: 'current' },
+      screening: { credit_band: '740_plus' },
+    } })
+    expect(answers).toMatchObject({ first_name: 'Example', monthly_utility_bill: 187.44, credit_band: '740_plus', payment_status: 'current' })
   })
   beforeEach(() => {
     vi.clearAllMocks()

@@ -29,4 +29,23 @@ describe('PF evidence field mapping',()=>{
   expect(analysisFields({...doc,clientMatch:'unclear'})[0].value).toBeNull()
   expect(typeFor({...doc,classification:['loan']})).toBe('finance_agreement')
  })
+ it('classifies install, lender, and utility packets onto the matching desk type',()=>{
+  expect(typeFor({...doc,classification:['loan_or_til'],fields:{}})).toBe('finance_agreement')
+  expect(typeFor({...doc,classification:['ric'],fields:{agreement_type:{...fact,value:'Retail Installment Contract'}}})).toBe('finance_agreement')
+  expect(typeFor({...doc,classification:['signed_contract'],fields:{}})).toBe('solar_contract')
+  expect(typeFor({...doc,classification:['solar_contract'],fields:{agreement_type:{...fact,value:'ppa'}}})).toBe('solar_contract')
+  expect(typeFor({...doc,classification:['utility_bill'],fields:{}})).toBe('utility_bill')
+ })
+ it('materializes remaining, cash price, and utility bill amount from unreviewed extracts',()=>{
+  const fields=analysisFields({...doc,classification:['ppa'],fields:{
+    remaining_balance:{...fact,value:'64212.83'},
+    cash_price:{...fact,value:'68259.51'},
+    monthly_utility_bill:{...fact,value:'166.53'},
+  },reviewDecisions:{}})
+  expect(fields).toEqual(expect.arrayContaining([
+    expect.objectContaining({key:'remaining_balance',value:'64212.83'}),
+    expect.objectContaining({key:'cash_price',value:'68259.51'}),
+    expect.objectContaining({key:'amount_due',value:'166.53'}),
+  ]))
+ })
 })

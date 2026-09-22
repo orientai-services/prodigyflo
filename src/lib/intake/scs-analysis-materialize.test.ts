@@ -35,8 +35,13 @@ function fixture() {
     client: { findUniqueOrThrow: vi.fn().mockResolvedValue(client), findMany: vi.fn().mockResolvedValue([client]) },
     documentExtraction: {
       updateMany: vi.fn().mockImplementation(async () => { old.sourceActive = false }),
-      upsert: vi.fn().mockImplementation(async ({ create }) => { extractions.unshift({ ...create, sourceActive: true, fields: create.fields.create }) }),
+      upsert: vi.fn().mockImplementation(async ({ create }) => { extractions.unshift({ id: 'extraction-new', ...create, sourceActive: true, fields: create.fields.create }) }),
+      findUniqueOrThrow: vi.fn().mockImplementation(async () => {
+        const created = extractions[0] as { fields?: { key: string; verification?: string }[] }
+        return { id: 'extraction-new', fields: (created.fields ?? []).map(field => ({ ...field, verification: field.verification ?? 'UNVERIFIED' })) }
+      }),
     },
+    extractedField: { deleteMany: vi.fn(), createMany: vi.fn() },
     clientDocument: {
       updateMany: vi.fn(), findMany: vi.fn().mockImplementation(async () => [{ id: 'doc', clientId: 'client', fileName: 'test.pdf', label: null, status: 'RECEIVED', storageKey: 'original', requirement: { key: 'finance_agreement', name: 'Finance agreement' }, extractions }]),
     },
