@@ -322,11 +322,9 @@ export async function runPendingScsDocumentExtractions(limit = 5, clientId?:stri
   if(clientId) scope.clientId=clientId
   const records=await materializeScsAnalysis(limit, scope)
   if (process.env.DOCUMENT_ANALYZER === 'records') return { ...empty, records }
-  // Generated search summaries remain accessible files, but cannot supply
-  // extracted facts or masquerade as an official public record. Preserve
-  // eligibility for historical imports whose source type was not supplied.
+  // SCS uploads: Document Intelligence on SCS is the only extractor. Never Anthropic those files.
   const extractionScope: Prisma.ExternalDocumentImportWhereInput = {
-    AND: [scope, {sourceAnalysis:{equals:Prisma.DbNull}, OR: [{ sourceDocumentType: null }, { sourceDocumentType: { not: PUBLIC_RECORD_SUMMARY } }] }],
+    AND: [scope, {sourceLeadId:null, sourceAnalysis:{equals:Prisma.DbNull}, OR: [{ sourceDocumentType: null }, { sourceDocumentType: { not: PUBLIC_RECORD_SUMMARY } }] }],
   }
   if (process.env.AI_PROVIDER !== 'anthropic') return { ...empty, blockedReason: 'SCS document extraction requires the live Anthropic provider; mock processing is not an end-to-end test.' }
   const staleBefore = new Date(Date.now() - 5 * 60_000)

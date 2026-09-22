@@ -41,6 +41,12 @@ export async function runExtraction(documentId: string): Promise<ExtractionRunRe
     const {enqueueStaffAnalysis}=await import('@/lib/records-analyzer/staff-jobs')
     return enqueueStaffAnalysis(documentId)
   }
+  const imported = await db.externalDocumentImport.findFirst({where:{clientDocumentId:documentId},select:{id:true,sourceLeadId:true,sourceAnalysis:true}})
+  if (imported?.sourceLeadId) {
+    const {materializeScsAnalysis}=await import('@/lib/intake/scs-analysis')
+    if (imported.sourceAnalysis) await materializeScsAnalysis(1,{id:imported.id})
+    return { extractionId: documentId, status: imported.sourceAnalysis ? 'COMPLETED' : 'PENDING', documentStatus: 'PROCESSING', missingFieldKeys: [] }
+  }
   const doc = await db.clientDocument.findUnique({
     where: { id: documentId },
     include: {

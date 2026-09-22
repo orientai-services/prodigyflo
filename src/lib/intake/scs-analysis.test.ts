@@ -35,6 +35,8 @@ describe('PF evidence field mapping',()=>{
   expect(typeFor({...doc,classification:['signed_contract'],fields:{}})).toBe('solar_contract')
   expect(typeFor({...doc,classification:['solar_contract'],fields:{agreement_type:{...fact,value:'ppa'}}})).toBe('solar_contract')
   expect(typeFor({...doc,classification:['utility_bill'],fields:{}})).toBe('utility_bill')
+  expect(typeFor({...doc,classification:['proposal'],fields:{}})).toBe('solar_contract')
+  expect(typeFor({...doc,classification:['install_agreement'],fields:{}})).toBe('solar_contract')
  })
  it('maps a larger-payment flag from SCS without changing desk routing',()=>{
   const fields=analysisFields({...doc,classification:['ppa'],fields:{balloon_expected:{...fact,value:'yes'}},reviewDecisions:{}})
