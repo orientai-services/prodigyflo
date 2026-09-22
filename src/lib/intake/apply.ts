@@ -356,7 +356,15 @@ export async function processInbound(
     try { await refreshCysMirror(source.organizationId, result.submission.clientId) } catch { /* derived view; receipt is durable */ }
   }
   if(result.submission.clientId&&source.slug==='scs-website') {
-    try {(await import('next/server')).after(async()=>{await (await import('@/lib/records-analyzer/continuation')).requestRecordsContinuation({clientId:result.submission.clientId!})})} catch { /* durable cron recovers outside HTTP */ }
+    const clientId=result.submission.clientId
+    try {(await import('next/server')).after(async()=>{
+      try {
+        const {runPendingScsDocumentImports,runPendingScsDocumentExtractions}=await import('@/lib/intake/scs-document-import')
+        await runPendingScsDocumentImports(5, undefined, clientId)
+        await runPendingScsDocumentExtractions(5, clientId)
+      } catch { /* GET /api/jobs/run remains the retry */ }
+      await (await import('@/lib/records-analyzer/continuation')).requestRecordsContinuation({clientId})
+    })} catch { /* durable cron recovers outside HTTP */ }
   }
   return result
 }
