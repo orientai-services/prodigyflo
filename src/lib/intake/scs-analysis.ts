@@ -5,6 +5,7 @@ import {Prisma} from '@prisma/client'
 import {db} from '@/lib/db'
 import {specForType} from '@/lib/extraction/spec'
 import {asRecord,str} from '@/lib/packet/schema'
+import { scsRequirementId } from './scs-document-requirements'
 
 import {analysisDocument as document,validateAnalysis,compareAnalysisRevision,hash,evidenceHash} from './analysis-contract'
 
@@ -32,6 +33,7 @@ export async function queueAnalysisPacket(opts:{organizationId:string;clientId:s
 const KEYS:Record<string,string>={agreement_type:'product_type',customer_signed_date:'customer_signed_date',effective_date:'contract_date',in_service_date:'in_service_date',first_payment_date:'first_payment_date',installer:'installer_name',sales_company:'sales_company',lender_servicer:'contract_counterparty',system_size:'system_size_kw',interest_rate:'apr',escalator_rate:'escalator_pct',annual_escalation_rate:'escalator_pct',monthly_solar_payment:'monthly_payment',first_year_monthly_payment:'first_year_monthly_payment',intro_payment_count:'intro_payment_count',payment_basis:'payment_basis',remaining_balance:'remaining_balance',interest_paid_to_date:'interest_paid_to_date',months_remaining:'months_remaining',years_remaining:'years_remaining',total_financed:'amount_financed',finance_account_number:'account_number',production_kwh:'production_kwh',signer_name:'full_name',address_line1:'property_address',utility_account_number:'account_number',annual_usage_kwh:'annual_usage_kwh',monthly_usage_kwh:'monthly_usage_kwh',kwh:'annual_usage_kwh',production_guarantee:'production_guarantee',buyout_terms:'buyout_terms',balloon_amount:'balloon_amount',balloon_expected:'balloon_expected',term_start_basis:'term_start_basis',account_number:'account_number',full_name:'full_name',customer_name:'full_name',property_address:'property_address',service_address:'service_address',utility_name:'utility_name',utility:'utility_name',lender_name:'lender_name',servicer:'servicer_name',servicer_name:'servicer_name',contract_counterparty:'contract_counterparty',term_years:'term_years',payment_term_months:'term_months',dealer_fee:'dealer_fee',cash_price:'cash_price',monthly_utility_bill:'amount_due',billing_period:'billing_period'}
 const LOAN_KINDS=new Set(['loan','til','loan_statement','loan_or_til','ric'])
 const SOLAR_KINDS=new Set(['agreement','ppa','lease','solar_contract','signed_contract','solar_agreement','power_purchase_agreement','install_agreement','proposal'])
+const TYPE_SOURCE={finance_agreement:'loan_or_til',solar_contract:'agreement',utility_bill:'utility_bill'} as const
 export function typeFor(doc:z.infer<typeof document>) {
   const product=String(doc.fields.agreement_type?.value??'').toLowerCase()
   const kinds=doc.classification.map(k=>String(k).toLowerCase())
@@ -60,6 +62,8 @@ export async function materializeScsAnalysis(limit=20,scope:Prisma.ExternalDocum
     if(hash(liveIdentity)!==source.identity_fingerprint) throw Error('Contact/property changed before evidence materialization')
     const type=typeFor(doc), spec=specForType(type)
     const fields=analysisFields(doc)
+    const slotSource=TYPE_SOURCE[type as keyof typeof TYPE_SOURCE]
+    const slotRequirementId=slotSource?await scsRequirementId(row.organizationId,slotSource):null
     const materialized=await db.$transaction(async store=>{
       await store.$queryRaw`SELECT id FROM "Client" WHERE id=${row.clientId} FOR UPDATE`
       await store.$queryRaw`SELECT id FROM "ExternalDocumentImport" WHERE id=${row.id} FOR UPDATE`
@@ -85,7 +89,11 @@ export async function materializeScsAnalysis(limit=20,scope:Prisma.ExternalDocum
       const incoming=fields.filter(f=>!locked.has(f.key))
       if(incoming.length) await store.extractedField.createMany({data:incoming.map(f=>({extractionId:extraction.id,...f}))})
       await store.externalDocumentImport.update({where:{id:row.id},data:{analysisPending:false,analysisError:null,analysisAttempts:0}})
-      await store.clientDocument.updateMany({where:{id:row.clientDocumentId!,status:{notIn:['APPROVED','REJECTED','EXPIRED']}},data:{status:fields.some(f=>f.value)?'RECEIVED':'MISSING_INFORMATION'}})
+      const occupied=slotRequirementId?await store.clientDocument.findFirst({where:{clientId:row.clientId,requirementId:slotRequirementId,id:{not:row.clientDocumentId!},storageKey:{not:null},status:{notIn:['REJECTED','EXPIRED']}},select:{id:true}}):null
+      await store.clientDocument.updateMany({where:{id:row.clientDocumentId!,status:{notIn:['APPROVED','REJECTED','EXPIRED']}},data:{
+        status:fields.some(f=>f.value)?'UNDER_REVIEW':'MISSING_INFORMATION',
+        ...(slotRequirementId && !occupied ? {requirementId:slotRequirementId} : {}),
+      }})
       return true
     })
     if(!materialized) continue

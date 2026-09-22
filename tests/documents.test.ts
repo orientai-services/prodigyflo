@@ -63,6 +63,11 @@ describe('upload validation', () => {
     expect(res).toEqual({ ok: true, mimeType: 'application/pdf' })
   })
 
+  it('accepts a PDF whose %PDF- marker is after a short header', () => {
+    const res = validateUpload({ ...base, buffer: Buffer.concat([Buffer.from('\x00\x00'), PDF_HEADER]), declaredMime: 'application/pdf' })
+    expect(res).toEqual({ ok: true, mimeType: 'application/pdf' })
+  })
+
   it('accepts a PDF wrapped with a [BEGIN] prefix from SCS storage', () => {
     const res = validateUpload({ ...base, buffer: Buffer.concat([Buffer.from('[BEGIN]\n'), PDF_HEADER]), declaredMime: 'application/pdf' })
     expect(res).toEqual({ ok: true, mimeType: 'application/pdf' })
