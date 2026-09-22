@@ -43,8 +43,11 @@ function fixture() {
     },
     extractedField: { deleteMany: vi.fn(), createMany: vi.fn() },
     clientDocument: {
-      updateMany: vi.fn(), findMany: vi.fn().mockImplementation(async () => [{ id: 'doc', clientId: 'client', fileName: 'test.pdf', label: null, status: 'RECEIVED', storageKey: 'original', requirement: { key: 'finance_agreement', name: 'Finance agreement' }, extractions }]),
+      updateMany: vi.fn(), findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockImplementation(async () => [{ id: 'doc', clientId: 'client', fileName: 'test.pdf', label: null, status: 'RECEIVED', storageKey: 'original', requirement: { key: 'finance_agreement', name: 'Finance agreement' }, extractions }]),
     },
+    documentRequirement: { findFirst: vi.fn().mockResolvedValue({ id: 'req-finance' }), upsert: vi.fn() },
+    documentPackage: { findFirst: vi.fn().mockResolvedValue({ id: 'pkg' }) },
     surveyResponse: { findMany: vi.fn().mockResolvedValue([]) },
     cysFieldDefinition: { findMany: vi.fn().mockResolvedValue([definition]) },
     cysFieldValue: { findMany: vi.fn().mockImplementation(async () => saved) },
