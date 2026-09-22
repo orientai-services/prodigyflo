@@ -103,18 +103,19 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
     if (cell.label === 'First payment date') {
       return fill(cell, 'Not started', 'No signing date or completion certificate on file.')
     }
-    if (cell.label === 'Remaining balance' && Number.isFinite(amount) && amount > 0) {
+    if (cell.label === 'Remaining balance' && Number.isFinite(amount) && amount > 0 && elapsed === 0) {
       return fill(cell, money(amount), 'Payments not started · original amount financed', amount)
     }
-    if (cell.label === 'Interest paid to date') {
+    if (cell.label === 'Interest paid to date' && elapsed === 0) {
       return fill(cell, '$0.00', 'Payments not started', 0)
     }
     if (cell.label === 'Months remaining' && Number.isFinite(termNum) && termNum > 0) {
-      return fill(cell, String(Math.round(termNum)), 'Full term until first payment starts')
+      const left = Math.max(0, Math.round(termNum) - elapsed)
+      return fill(cell, String(left), elapsed ? 'Term months minus payments due since first payment' : 'Full term until first payment starts')
     }
     if (cell.label === 'Years remaining' && Number.isFinite(termNum) && termNum > 0) {
-      const years = termNum / 12
-      return fill(cell, years.toFixed(termNum % 12 === 0 ? 0 : 1), 'Full term until first payment starts')
+      const left = Math.max(0, Math.round(termNum) - elapsed)
+      return fill(cell, (left / 12).toFixed(left % 12 === 0 ? 0 : 1), 'From first payment date and term')
     }
     if (cell.label === 'Annual Escalator Rate %') return fill(cell, '0%', 'Loan has no yearly payment increase')
     if (cell.label === '30% Dealer Fee') return fill(cell, 'Not in paperwork', 'Needs amount financed')

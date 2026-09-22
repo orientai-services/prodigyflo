@@ -97,7 +97,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     monthlyPayment: paymentFact?.value,
     principal: amountFact?.value,
     introPayment: introFact?.value,
-    introCount: introCountFact?.value ?? (introFact?.value ? 12 : null),
+    introCount: introCountFact?.value,
     now: opts?.now,
   })
   const yearOnePay = Number(String(firstYearFact?.value || paymentFact?.value || '').replace(/[^0-9.]/g, ''))
