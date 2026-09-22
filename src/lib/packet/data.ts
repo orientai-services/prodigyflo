@@ -11,10 +11,11 @@ import { feeTrench, pathLabel, routePath, trenchLabel } from './route'
 import { asRecord, str } from './schema'
 import { extractedFact, normalizeProduct, termMonthsFromYears, type ExtractableDoc } from '@/lib/desk-extract'
 
-/** Final packets use only reviewed document facts, never raw AI suggestions. */
+/** Same facts the profile shows. Rejected readings stay off the packet. */
 function extracted(docs: ExtractableDoc[], typeKey: string, fieldKey: string): string {
   const fact = extractedFact(docs, typeKey, fieldKey)
-  return fact?.verified ? fact.value : ''
+  if (!fact || fact.note?.includes('rejected') || fact.note?.includes('unknown')) return ''
+  return fact.value || ''
 }
 
 export async function assemblePacket(clientId: string) {
@@ -43,11 +44,12 @@ export async function assemblePacket(clientId: string) {
   const answers = asRecord(client.surveyResponses[0]?.answers)
   const addr = client.addresses[0]
   const docs = client.documents
+  const detected = (d: (typeof docs)[number]) => str(d.extractions[0]?.detectedTypeKey)
   const hasContract = docs.some((d) =>
-    /contract|agreement|solar/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''}`),
+    /contract|agreement|solar|ppa|lease/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''} ${detected(d)}`),
   )
   const hasFinance = docs.some((d) =>
-    /finance|loan|til/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''}`),
+    /finance|loan|til|ric|goodleap|sunlight|mosaic/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''} ${detected(d)}`),
   )
 
   const confirmed = (key: string) => client.cysFieldValues.find(field => field.fieldKey === key)?.value || ''
@@ -66,7 +68,10 @@ export async function assemblePacket(clientId: string) {
   const apr = isPpaOrLease ? '' : confirmed('apr_or_escalator') || extracted(docs, 'finance_agreement', 'apr')
   const escalation = isPpaOrLease ? confirmed('apr_or_escalator') || extracted(docs, 'solar_contract', 'escalator_pct') : ''
   const effectiveDate = extracted(docs, 'solar_contract', 'contract_date')
-  const signatureDate = extracted(docs, 'solar_contract', 'customer_signed_date') || str(client.contracts[0]?.signedAt)
+  const signatureDate = extracted(docs, 'solar_contract', 'customer_signed_date')
+    || extracted(docs, 'finance_agreement', 'customer_signed_date')
+    || extracted(docs, 'finance_agreement', 'first_payment_date')
+    || str(client.contracts[0]?.signedAt)
   const termNote = !directTerm && term ? `Term months derived from stated years × 12 (${statedYears}).` : ''
 
   const ready = evaluateReady({
@@ -78,9 +83,9 @@ export async function assemblePacket(clientId: string) {
     city: (confirmed('city') || str(answers.city)) || addr?.city || '',
     state: (confirmed('state') || str(answers.state)) || addr?.state || '',
     zip: (confirmed('zip') || str(answers.zip)) || addr?.postalCode || '',
-    product_confirmed: product,
-    lender_confirmed: lender,
-    monthly: monthly || firstYearMonthly,
+    product_confirmed: confirmed('product_confirmed'),
+    lender_confirmed: confirmed('lender_confirmed'),
+    monthly: confirmed('monthly') || confirmed('monthly_guess'),
     has_contract: hasContract,
     has_finance: hasFinance,
   })
@@ -146,7 +151,7 @@ export async function assemblePacket(clientId: string) {
     effectiveDate,
     apr,
     contractValue: isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed'),
-    payoff: confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount'),
+    payoff: confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount') || extracted(docs, 'finance_agreement', 'remaining_balance'),
     signedDate: signatureDate,
     painType: (confirmed('pain_type') || str(answers.pain_type)),
     painNarrative: (confirmed('pain_narrative') || str(answers.pain_narrative)),
