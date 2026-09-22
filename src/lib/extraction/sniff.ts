@@ -17,11 +17,18 @@ export const DEFAULT_ALLOWED_MIME_TYPES = [
 
 const HEIC_BRANDS = new Set(['heic', 'heix', 'hevc', 'heif', 'mif1', 'msf1'])
 
+/** Some SCS originals are stored with a `[BEGIN]\\n` wrapper before `%PDF-`. */
+export function unwrapDocumentBytes(buf: Buffer): Buffer {
+  const marker = buf.subarray(0, Math.min(buf.length, 8192)).indexOf(Buffer.from('%PDF'))
+  if (marker > 0) return buf.subarray(marker)
+  return buf
+}
+
 /** Identify a buffer by its leading bytes. Returns null when unrecognized. */
 export function sniffMimeType(buf: Buffer): string | null {
-  const head = buf.subarray(0, Math.min(buf.length, 8192)).toString('latin1')
-  if (head.includes('%PDF-') || head.includes('%PDF')) return 'application/pdf'
+  buf = unwrapDocumentBytes(buf)
   if (buf.length >= 5 && buf.subarray(0, 5).toString('latin1') === '%PDF-') return 'application/pdf'
+  if (buf.length >= 4 && buf.subarray(0, 4).toString('latin1') === '%PDF') return 'application/pdf'
   if (
     buf.length >= 8 &&
     buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&

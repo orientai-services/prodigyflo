@@ -6,7 +6,7 @@ import { db } from '@/lib/db'
 import { getFileStorage } from '@/lib/storage'
 import { runExtraction } from '@/lib/extraction/run'
 import { materializeScsAnalysis } from './scs-analysis'
-import { sha256, validateUpload } from '@/lib/extraction/sniff'
+import { sha256, unwrapDocumentBytes, validateUpload } from '@/lib/extraction/sniff'
 import type { DocumentRef } from '@/lib/packet/schema'
 import { scsRequirementId } from './scs-document-requirements'
 
@@ -148,7 +148,7 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
       // Never forward either credential to a redirected destination.
       redirect: 'error',
       cache: 'no-store',
-      signal: AbortSignal.timeout(55_000),
+      signal: AbortSignal.timeout(90_000),
     })
     if (!response.ok) throw new Error(`SCS export returned ${response.status}.`)
     if (response.headers.get('x-scs-document-id') !== row.sourceDocumentId) {
@@ -160,7 +160,7 @@ async function importOne(id: string, scope: Prisma.ExternalDocumentImportWhereIn
     const contentLength = Number(response.headers.get('content-length') ?? 0)
     if (contentLength > MAX_IMPORT_MB * 1024 * 1024) throw new Error(`SCS document exceeds ${MAX_IMPORT_MB} MB import limit.`)
     stage = 'reading and validating the exported bytes'
-    const bytes = Buffer.from(await response.arrayBuffer())
+    const bytes = unwrapDocumentBytes(Buffer.from(await response.arrayBuffer()))
     const declaredMime = response.headers.get('content-type') ?? row.sourceMimeType ?? ''
     const validation = validateUpload({
       buffer: bytes,
