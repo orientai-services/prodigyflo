@@ -505,7 +505,7 @@ describe('database-backed document flows', () => {
     }
   })
 
-  it('retries a failed real-only SCS extraction and stops automatically after three failed attempts', async () => {
+  it('does not Anthropic-extract SCS uploads; analysis waits for the SCS packet', async () => {
     const { runPendingScsDocumentExtractions } = await import('@/lib/intake/scs-document-import')
     const sourceLeadId = randomUUID()
     const sourceDocumentId = randomUUID()
@@ -520,10 +520,8 @@ describe('database-backed document flows', () => {
     delete process.env.ANTHROPIC_API_KEY
     process.env.SCS_IMPORT_EXECUTION_COHORT = JSON.stringify({ mode: 'resume', expiresAt: new Date(Date.now() + 60_000).toISOString(), organizationId: orgA, sourceId: source.id, cases: [{ leadId: sourceLeadId, documentIds: [sourceDocumentId] }] })
     try {
-      // First real attempt fails without a mock run existing in the history.
-      for (let attempt = 0; attempt < 3; attempt++) expect(await runPendingScsDocumentExtractions(1)).toEqual({ attempted: 1, completed: 0, failed: 1, skipped: 0 })
       expect(await runPendingScsDocumentExtractions(1)).toEqual({ attempted: 0, completed: 0, failed: 0, skipped: 0 })
-      expect(await db.documentExtraction.count({ where: { documentId: doc.id, provider: 'anthropic', status: 'FAILED' } })).toBe(3)
+      expect(await db.documentExtraction.count({ where: { documentId: doc.id, provider: 'anthropic' } })).toBe(0)
       expect(await db.clientDocument.count({ where: { id: doc.id } })).toBe(1)
       expect(await new LocalFileStorage(storageDir).get(key)).toEqual(Buffer.from(BILL_TEXT))
     } finally {
