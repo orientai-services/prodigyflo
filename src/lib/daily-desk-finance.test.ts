@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { amortize, cellDisplay, listedMoney, sourceMoney } from '@/lib/daily-desk-finance'
+import { amortize, cellDisplay, listedMoney, ppaPaymentSchedule, sourceMoney } from '@/lib/daily-desk-finance'
 
 describe('listedMoney', () => {
   it('does not invent $0 on lists or chips', () => {
@@ -42,6 +42,13 @@ describe('amortize', () => {
     })
     expect(out.interestPaid.kind).toBe('cannot_compute')
     expect(cellDisplay(out.interestPaid)).not.toBe('$0.00')
+  })
+
+  it('schedules PPA remaining with a yearly escalator and never treats it as APR', () => {
+    const out = ppaPaymentSchedule({ yearOneMonthly: 100, escalatorPct: 2.5, termMonths: 24, monthsElapsed: 12 })
+    expect(out.paid).toBe(1200)
+    expect(out.remaining).toBe(Math.round(100 * 1.025 * 12 * 100) / 100)
+    expect(out.total).toBe(Math.round((1200 + 100 * 1.025 * 12) * 100) / 100)
   })
 
   it('uses intro then ongoing payments when a stepped schedule is supplied', () => {

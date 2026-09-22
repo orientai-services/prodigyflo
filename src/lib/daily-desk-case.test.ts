@@ -39,7 +39,10 @@ describe('PPA client profile population', () => {
     expect(profile?.finance.find(cell => cell.label === 'Actual in-service date')?.cell.kind).toBe('missing')
     expect(profile?.finance.find(cell => cell.label === 'Contract effective date')?.cell).toMatchObject({ display: '2018-05-30' })
     expect(profile?.finance.find(cell => cell.label === 'Customer signature date')?.cell).toMatchObject({ display: '2018-05-28' })
-    expect(profile?.finance.some(cell => /interest|amount financed|remaining balance/i.test(cell.label))).toBe(false)
+    expect(profile?.finance.find(cell => cell.label === 'Interest rate')?.cell).toMatchObject({ display: 'None' })
+    expect(profile?.finance.find(cell => cell.label === 'Annual payment escalation')?.cell).toMatchObject({ display: '1.9%' })
+    expect(profile?.finance.find(cell => cell.label === 'Total / amount financed')?.cell.kind).toBe('value')
+    expect(profile?.finance.find(cell => cell.label === 'Estimated remaining balance')?.cell.kind).toBe('value')
     expect(profile?.intake.some(row => row.question.includes('provenance'))).toBe(false)
   })
 
