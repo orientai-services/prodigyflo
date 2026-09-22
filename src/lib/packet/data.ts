@@ -83,9 +83,9 @@ export async function assemblePacket(clientId: string) {
     city: (confirmed('city') || str(answers.city)) || addr?.city || '',
     state: (confirmed('state') || str(answers.state)) || addr?.state || '',
     zip: (confirmed('zip') || str(answers.zip)) || addr?.postalCode || '',
-    product_confirmed: product,
-    lender_confirmed: lender,
-    monthly: monthly || firstYearMonthly,
+    product_confirmed: confirmed('product_confirmed'),
+    lender_confirmed: confirmed('lender_confirmed'),
+    monthly: confirmed('monthly') || confirmed('monthly_guess'),
     has_contract: hasContract,
     has_finance: hasFinance,
   })

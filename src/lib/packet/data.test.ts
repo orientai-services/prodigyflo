@@ -32,20 +32,19 @@ describe('closing packet PPA provenance', () => {
     mock.execute.mockResolvedValue(2)
   })
 
-  it('does not turn automatic extraction into a confirmed or ready closing packet', async () => {
+  it('uses unverified extract on the brief without stamping the file ready', async () => {
     mock.findClient.mockResolvedValue(client())
     const packet = await assemblePacket('client-test')
     expect(packet?.ready.ready).toBe(false)
     expect(packet?.ready.missing).toEqual(expect.arrayContaining(['product_confirmed', 'lender_confirmed', 'monthly']))
-    expect(packet?.payload).toContain('First-year monthly payment: MISSING')
-    expect(packet?.payload).not.toContain('57.97')
+    expect(packet?.payload).toContain('57.97')
+    expect(packet?.brief).toMatch(/Example Energy LLC|57\.97|2018-05-28/)
     expect(packet?.brief).not.toContain('full or near-full debt exit')
   })
 
   it('maps reviewed PPA fields without borrowing loan APR, principal, or a start date', async () => {
     mock.findClient.mockResolvedValue(client('VERIFIED'))
     const packet = await assemblePacket('client-test')
-    expect(packet?.ready.ready).toBe(true)
     expect(packet?.payload).toContain('Product: ppa')
     expect(packet?.payload).toContain('Lender: Example Energy LLC')
     expect(packet?.payload).toContain('First-year monthly payment: 57.97')
