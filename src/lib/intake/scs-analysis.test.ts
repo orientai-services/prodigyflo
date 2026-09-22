@@ -36,6 +36,10 @@ describe('PF evidence field mapping',()=>{
   expect(typeFor({...doc,classification:['solar_contract'],fields:{agreement_type:{...fact,value:'ppa'}}})).toBe('solar_contract')
   expect(typeFor({...doc,classification:['utility_bill'],fields:{}})).toBe('utility_bill')
  })
+ it('maps a larger-payment flag from SCS without changing desk routing',()=>{
+  const fields=analysisFields({...doc,classification:['ppa'],fields:{balloon_expected:{...fact,value:'yes'}},reviewDecisions:{}})
+  expect(fields[0]).toMatchObject({key:'balloon_expected',value:'yes'})
+ })
  it('materializes remaining, cash price, and utility bill amount from unreviewed extracts',()=>{
   const fields=analysisFields({...doc,classification:['ppa'],fields:{
     remaining_balance:{...fact,value:'64212.83'},
