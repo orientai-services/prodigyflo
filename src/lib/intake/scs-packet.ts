@@ -1,5 +1,5 @@
 import 'server-only'
-import { queueAnalysisPacket } from './scs-analysis'
+import { queueAnalysisPacket, materializeScsAnalysis } from './scs-analysis'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
@@ -128,6 +128,11 @@ export async function ingestScsPacket(opts: {
   await queueAnalysisPacket({...opts, sourceLeadId: str(raw.lead_id), analysis: asRecord(raw.data).analysis, rawPayload:raw},store)
 
   if (store !== db) return
+  try {
+    await materializeScsAnalysis(25, { clientId: opts.clientId, sourceLeadId: str(raw.lead_id) })
+  } catch (err) {
+    console.error('[intake] analysis materialize failed; durable cron will retry', err)
+  }
   try {
     await refreshCysMirror(opts.organizationId, opts.clientId)
   } catch (err) {
