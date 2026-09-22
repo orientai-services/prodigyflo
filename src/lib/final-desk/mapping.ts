@@ -22,7 +22,9 @@ export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { f
     return cell ? { ...cell, label } : missing(label)
   }
   const type = find('Agreement type').cell
-  const isPpa = type.kind === 'value' && /ppa|lease/i.test(type.display)
+  const escHint = find('Annual Escalator Rate %', 'Annual payment escalation')
+  const isPpa = (type.kind === 'value' && /ppa|lease/i.test(type.display))
+    || (escHint.cell.kind === 'value' && Number(String(escHint.cell.display).replace(/[^\d.]/g, '')) > 0 && !(type.kind === 'value' && /loan/i.test(type.display)))
   const amt = find('Total / amount financed')
   const amount = amt.cell.kind === 'value' ? Number(amt.cell.display.replace(/[^\d.-]/g, '')) : NaN
   const benchmark: CaseCell = isPpa
@@ -89,7 +91,10 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
   const finance = input.finance.map(cell => {
     if (cell.cell.kind === 'value') return cell
     if (input.isPpa && cell.label === 'Interest rate') {
-      return fill(cell, 'None', 'PPA/lease has no APR. Yearly increase is Annual Escalator Rate %.')
+      return fill(cell, 'No APR', 'This is a PPA/lease. The yearly increase is Annual Escalator Rate %, not interest.')
+    }
+    if (input.isPpa && cell.label === '30% Dealer Fee') {
+      return fill(cell, '$0.00', 'PPA/lease has no loan dealer fee', 0)
     }
     if (input.isPpa && cell.label === 'Total / amount financed' && ppaSched) {
       return fill(cell, money(ppaSched.total), 'Sum of scheduled PPA payments; not a loan principal', ppaSched.total)
