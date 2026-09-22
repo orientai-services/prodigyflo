@@ -10,6 +10,17 @@ export type CaseFactSource = {
   documents: ExtractableDoc[]; contracts: { productType: string | null }[];
 }
 function nestedStr(answers: Record<string, unknown>, group: string, key: string): string { return str(asRecord(answers[group])[key]) }
+const CREDIT_BAND_LABEL: Record<string, string> = {
+  lt580: 'Below 580',
+  '580_669': '580–669',
+  '670_739': '670–739',
+  '740_plus': '740+',
+  unsure: 'Not sure',
+}
+function creditLabel(raw: string): string {
+  if (!raw) return ''
+  return CREDIT_BAND_LABEL[raw] ?? CREDIT_BAND_LABEL[raw.replace(/-/g, '_')] ?? raw
+}
 /** Shared, read-only profile facts. Filters do not reimplement precedence or finance. */
 export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed[] } | null, opts?: { now?: Date }) {
   const confirmed = (key: string) => cys?.values.find((value) => value.fieldKey === key && value.status === 'VERIFIED')?.value || ''
@@ -69,8 +80,9 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     nestedStr(answers, 'screening', 'credit_band') ||
     nestedStr(answers, 'stage1_answers', 'credit_band') ||
     nestedStr(answers, 'solar', 'credit_band')
-  const creditRaw =
-    str(answers.credit_score) || str(answers.creditScore) || str(answers.credit) || creditBand
+  const creditRaw = creditLabel(
+    str(answers.credit_score) || str(answers.creditScore) || str(answers.credit) || creditBand,
+  )
   const bankruptcy =
     str(answers.active_bankruptcy) || nestedStr(answers, 'screening', 'active_bankruptcy')
   const sourcedCell = (label: string, source: ExtractedFact | null, kind: 'money' | 'percent' | 'text' = 'text', hint?: string): CaseCell => ({
@@ -160,9 +172,16 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     extracted(docs, 'utility_bill', 'utility_name') || str(answers.utility) || str(answers.utility_name)
   const usage =
     extracted(docs, 'production_report', 'production_kwh') ||
+    extracted(docs, 'utility_bill', 'annual_usage_kwh') ||
+    extracted(docs, 'utility_bill', 'monthly_usage_kwh') ||
     extracted(docs, 'utility_bill', 'kwh') ||
     str(answers.usage_kwh) ||
-    str(answers.annual_usage)
+    str(answers.annual_usage) ||
+    str(answers.annual_usage_kwh) ||
+    str(answers.monthly_usage_kwh)
+  const utilityBill =
+    extracted(docs, 'utility_bill', 'amount_due') ||
+    str(answers.monthly_utility_bill)
   const roofHome = [str(answers.yearsAtAddress) && `${answers.yearsAtAddress} years at address`, str(answers.line1) || addr?.line1]
     .filter(Boolean)
     .join(' · ')
@@ -180,7 +199,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
       cell: bankruptcy ? { kind: 'value', display: bankruptcy } : { kind: 'missing' },
     },
     { label: 'System size', cell: kw ? { kind: 'value', display: /kw/i.test(kw) ? kw : `${kw} kW` } : { kind: 'missing' }, hint: kwFact?.note, unverified: kwFact ? !kwFact.verified : undefined },
-    { label: 'Utility', cell: sourceText(utility) },
+    { label: 'Utility', cell: sourceText(utility && utilityBill ? `${utility} · ${utilityBill}` : utility || utilityBill) },
     { label: 'Usage', cell: usage ? { kind: 'value', display: /kwh/i.test(usage) ? usage : `${usage} kWh` } : { kind: 'missing' } },
     { label: 'Roof / home', cell: sourceText(roofHome) },
   ]
