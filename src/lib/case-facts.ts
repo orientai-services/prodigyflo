@@ -52,7 +52,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     ?? (!isPpaOrLease ? fact('finance_agreement', 'first_year_monthly_payment') : null)
     ?? fact('solar_contract', 'monthly_payment')
     ?? fact('solar_contract', 'first_year_monthly_payment')
-  const firstYearFact = fact('solar_contract', 'first_year_monthly_payment')
+  const firstYearFact = fact('solar_contract', 'first_year_monthly_payment') ?? fact('finance_agreement', 'first_year_monthly_payment')
   const basisFact = fact('solar_contract', 'payment_basis')
   const startFact = fact('solar_contract', 'term_start_basis')
   const escalationFact = fact('solar_contract', 'escalator_pct', isPpaOrLease ? 'apr_or_escalator' : undefined)
@@ -60,7 +60,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const providerFact = isPpaOrLease
     ? fact('solar_contract', 'contract_counterparty', 'lender_confirmed')
     : fact(type, 'lender_name', 'lender_confirmed', 'lender_confirmed')
-  const kwFact = fact('proposal', 'system_size_kw') ?? fact('solar_contract', 'system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
+  const kwFact = fact('proposal', 'system_size_kw') ?? fact('solar_contract', 'system_size_kw') ?? fact('finance_agreement', 'system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
   const kw = kwFact?.value || ''
   const creditBand =
     str(answers.credit_band) ||

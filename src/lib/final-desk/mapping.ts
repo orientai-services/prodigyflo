@@ -36,7 +36,7 @@ export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { f
   // Historical starting price is useful only with its explicit period qualifier.
   const shownPayment = payment.cell.kind === 'missing'
     ? find('Monthly payment', 'First-year monthly payment') : payment
-  const finance = [amt, find('Remaining balance', 'Estimated remaining balance'), find('Interest rate'),
+  const finance = [amt, find('Remaining balance', 'Estimated remaining balance'), find('Interest rate', 'Annual payment escalation'),
     find('Interest paid to date', 'Estimated interest paid'), find('Annual Escalator Rate %', 'Annual payment escalation'),
     find('Term years'), find('Term months'), find('Years remaining', 'Time remaining'), find('Months remaining', 'Time remaining'), shownPayment, benchmark,
     find('Lender', 'Contract counterparty'),
@@ -74,8 +74,12 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
   const na = 'Not applicable to this agreement type'
   const finance = input.finance.map(cell => {
     if (cell.cell.kind === 'value') return cell
-    if (input.isPpa && ['Total / amount financed', 'Remaining balance', 'Interest rate', 'Interest paid to date', '30% Dealer Fee'].includes(cell.label)) {
-      return fill(cell, 'N/A', cell.hint || na)
+    if (input.isPpa && cell.label === 'Interest rate') {
+      const esc = input.finance.find(c => c.label === 'Annual Escalator Rate %' && c.cell.kind === 'value')
+      if (esc) return { ...cell, cell: esc.cell, hint: 'Annual escalator; not a loan APR' }
+    }
+    if (input.isPpa && ['Total / amount financed', 'Remaining balance', 'Interest paid to date', '30% Dealer Fee'].includes(cell.label)) {
+      return fill(cell, 'Not a loan', cell.hint || na)
     }
     if (cell.label === 'First payment date') {
       return fill(cell, 'Not started', 'No signing date or completion certificate on file.')
