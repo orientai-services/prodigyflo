@@ -28,7 +28,7 @@ export const CASE_DOC_KINDS: DeskDocKind[] = [
 export type DeskDocState = 'missing' | 'uploaded' | 'extracted' | 'unverified' | 'verified' | 'failed'
 
 const FINANCE_NAME =
-  /goodleap|\bmosaic\b|\bsunlight\b|truth\s*-?\s*in\s*-?\s*lending|\btil\b|credit\s+agreement|promissory\s+note|loan\s+agreement/i
+  /goodleap|loanpal|loan pal|\bmosaic\b|\bsunlight\b|truth\s*-?\s*in\s*-?\s*lending|\btil\b|credit\s+agreement|promissory\s+note|loan\s+agreement|finance agreement|closing certificate|loan closing/i
 
 const INSTALL_NAME =
   /solar\s+agreement|\binstall(?:ation)?\b|\bppa\b|power\s+purchase|\blease\b|\bsteele\b/i
@@ -73,6 +73,13 @@ export function classifyDeskKind(input: {
   if (/public[_ -]record[_ -]summary|search[_ -]summary|records?[_ -]summary/i.test(sourceText)) {
     return CASE_DOC_KINDS.find(k => k.key === 'other') ?? null
   }
+  // Filename is the packet type. A deal typed "loan" must not move an install
+  // / solar agreement PDF onto the finance tile. Lender names still win.
+  const nameHay = [input.fileName, input.label]
+    .filter((s): s is string => Boolean(s && s.trim()))
+    .join('\n')
+  if (FINANCE_NAME.test(nameHay)) return CASE_DOC_KINDS.find((k) => k.key === 'finance_agreement') ?? null
+  if (INSTALL_NAME.test(nameHay)) return CASE_DOC_KINDS.find((k) => k.key === 'signed_contract') ?? null
   const direct =
     matchDocKind(input.detectedType) ||
     matchDocKind(input.requirementKey) ||
