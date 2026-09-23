@@ -34,13 +34,24 @@ const KEYS:Record<string,string>={agreement_type:'product_type',customer_signed_
 const LOAN_KINDS=new Set(['loan','til','loan_statement','loan_or_til','ric'])
 const SOLAR_KINDS=new Set(['agreement','ppa','lease','solar_contract','signed_contract','solar_agreement','power_purchase_agreement','install_agreement','proposal'])
 const TYPE_SOURCE={finance_agreement:'loan_or_til',solar_contract:'agreement',utility_bill:'utility_bill'} as const
-export function typeFor(doc:z.infer<typeof document>) {
+/** Lender / TILA packet names. Installer names are not lenders. */
+const FINANCE_NAME=/goodleap|loanpal|loan pal|\bmosaic\b|\bsunlight\b|truth\s*-?\s*in\s*-?\s*lending|\btil\b|credit\s+agreement|promissory\s+note|loan\s+agreement|finance agreement|closing certificate|loan closing/i
+const INSTALL_NAME=/solar\s+agreement|\binstall(?:ation)?\b|\bppa\b|power\s+purchase|\blease\b/i
+export type DocumentSlotHint={sourceDocumentType?:string|null;sourceFileName?:string|null}
+/**
+ * Desk type for an SCS file. PacketDocType `agreement` (install / solar / PPA /
+ * lease) → solar_contract. `loan_or_til` (TILA / lender) → finance_agreement.
+ * Deal type "loan" is how the system is paid, not a lender PDF.
+ */
+export function typeFor(doc:z.infer<typeof document>,hint:DocumentSlotHint={}) {
   const product=String(doc.fields.agreement_type?.value??'').toLowerCase()
   const kinds=doc.classification.map(k=>String(k).toLowerCase())
+  const source=String(hint.sourceDocumentType??'').toLowerCase().trim()
+  const file=String(hint.sourceFileName??'').replace(/[_-]+/g,' ')
   const hay=`${kinds.join(' ')} ${product}`
-  if(kinds.includes('utility_bill') || /utility_bill|electric(?:ity)?\s*bill/.test(hay)) return 'utility_bill'
-  if(kinds.some(k=>LOAN_KINDS.has(k)) || /\bloan\b|\btil\b|\bric\b|installment/.test(product)) return 'finance_agreement'
-  if(kinds.some(k=>SOLAR_KINDS.has(k)) || /\bppa\b|\blease\b|power purchase/.test(product)) return 'solar_contract'
+  if(source==='utility_bill' || kinds.includes('utility_bill') || /utility_bill|electric(?:ity)?\s*bill/.test(hay)) return 'utility_bill'
+  if(source==='loan_or_til' || FINANCE_NAME.test(file) || kinds.some(k=>LOAN_KINDS.has(k))) return 'finance_agreement'
+  if(source==='agreement' || INSTALL_NAME.test(file) || kinds.some(k=>SOLAR_KINDS.has(k)) || /\bppa\b|\blease\b|power purchase/.test(product)) return 'solar_contract'
   if(kinds.includes('ucc_or_lien') || kinds.includes('lien_filing')) return 'lien_filing'
   if(kinds.includes('permit') || kinds.includes('permits')) return 'permit'
   if(kinds.includes('monitoring') || kinds.includes('production')) return 'production_report'
@@ -60,8 +71,9 @@ export async function materializeScsAnalysis(limit=20,scope:Prisma.ExternalDocum
     const address=client.addresses[0]
     const liveIdentity={first_name:client.firstName.trim().toLowerCase(),last_name:client.lastName.trim().toLowerCase(),address_line1:(address?.line1??'').trim().toLowerCase(),city:(address?.city??'').trim().toLowerCase(),state:(address?.state??'').trim().toLowerCase(),zip:(address?.postalCode??'').trim().toLowerCase()}
     if(hash(liveIdentity)!==source.identity_fingerprint) throw Error('Contact/property changed before evidence materialization')
-    const type=typeFor(doc), spec=specForType(type)
-    const fields=analysisFields(doc)
+    const hint={sourceDocumentType:row.sourceDocumentType,sourceFileName:row.sourceFileName}
+    const type=typeFor(doc,hint), spec=specForType(type)
+    const fields=analysisFields(doc,hint)
     const slotSource=TYPE_SOURCE[type as keyof typeof TYPE_SOURCE]
     const slotRequirementId=slotSource?await scsRequirementId(row.organizationId,slotSource):null
     const materialized=await db.$transaction(async store=>{
@@ -119,8 +131,8 @@ export async function requeueImportedScsAnalysis(scope:Prisma.ExternalDocumentIm
   return result.count
 }
 
-export function analysisFields(doc:z.infer<typeof document>) {
-  const type=typeFor(doc),spec=specForType(type)
+export function analysisFields(doc:z.infer<typeof document>,hint:DocumentSlotHint={}) {
+  const type=typeFor(doc,hint),spec=specForType(type)
   return Object.entries(doc.fields).flatMap(([scsKey,f])=>{
       const key=scsKey==='lender_servicer' ? type==='solar_contract'?'contract_counterparty':'lender_name' : KEYS[scsKey]
       if(!key || scsKey==='utility_account_number'&&type!=='utility_bill') return []

@@ -94,7 +94,8 @@ export async function runStaffAnalysisJobs(limit=1,documentId?:string) {
         const mapped=mapBatches(state.batches.map(b=>({files:b.files,result:b.result as AnalyzerBatchResult})),state.reconciliation as {fields?: AnalyzerBatchResult['fields']}|undefined)[0]
         if(!mapped || mapped.documentId!==doc.id || !mapped.coverage.complete) throw Error('Incomplete staff document coverage')
         const evidence={...mapped,sha256:state.sha256,coverage:{...mapped.coverage,complete:true as const}}
-        const fields=analysisFields(evidence as Parameters<typeof analysisFields>[0]),type=typeFor(evidence as Parameters<typeof typeFor>[0])
+        const hint={sourceFileName:doc.fileName}
+        const fields=analysisFields(evidence as Parameters<typeof analysisFields>[0],hint),type=typeFor(evidence as Parameters<typeof typeFor>[0],hint)
         await db.$transaction(async store=>{
           await store.$queryRaw`SELECT id FROM "Client" WHERE id=${doc.clientId} FOR UPDATE`
           await store.$queryRaw`SELECT id FROM "RecordsAnalysisJob" WHERE id=${job.id} FOR UPDATE`

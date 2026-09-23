@@ -24,7 +24,13 @@ describe('matchDocKind', () => {
 })
 
 describe('classifyDeskKind', () => {
-  it('uses analyzed loan classification over the original agreement upload category',()=>expect(classifyDeskKind({requirementKey:'solar_contract',detectedType:'finance_agreement'})?.key).toBe('finance_agreement'))
+  it('keeps an install/solar agreement PDF on the solar tile even if extract called the deal a loan',()=>{
+    expect(classifyDeskKind({requirementKey:'solar_contract',detectedType:'finance_agreement',fileName:'Installer Solar Agreement.pdf'})?.key).toBe('signed_contract')
+  })
+  it('puts a lender/TILA PDF on finance even if it landed on the solar requirement',()=>{
+    expect(classifyDeskKind({requirementKey:'solar_contract',detectedType:'finance_agreement',fileName:'GoodLeap Loan Agreement.pdf'})?.key).toBe('finance_agreement')
+    expect(classifyDeskKind({requirementKey:'solar_contract',detectedType:'finance_agreement'})?.key).toBe('finance_agreement')
+  })
   it('never counts generated lookup summaries as original records', () => {
     expect(classifyDeskKind({detectedType: 'public_record_summary', fileName: 'County-Permit-Record.pdf'})?.key).toBe('other')
     expect(classifyDeskKind({fileName: 'UCC-Fixture-Search-Summary.pdf'})?.key).toBe('other')

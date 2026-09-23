@@ -38,6 +38,17 @@ describe('PF evidence field mapping',()=>{
   expect(typeFor({...doc,classification:['proposal'],fields:{}})).toBe('solar_contract')
   expect(typeFor({...doc,classification:['install_agreement'],fields:{}})).toBe('solar_contract')
  })
+ it('keeps an install/solar agreement on solar_contract when the deal is a loan',()=>{
+  const install={...doc,classification:['agreement'],fields:{agreement_type:{...fact,value:'loan'}}}
+  expect(typeFor(install)).toBe('solar_contract')
+  expect(typeFor(install,{sourceDocumentType:'agreement',sourceFileName:'Installer Solar Agreement.pdf'})).toBe('solar_contract')
+  expect(analysisFields(install,{sourceDocumentType:'agreement'})[0]).toMatchObject({key:'product_type',value:'loan'})
+ })
+ it('keeps a lender/TILA PDF on finance_agreement even if analysis says agreement',()=>{
+  const lender={...doc,classification:['agreement'],fields:{agreement_type:{...fact,value:'loan'}}}
+  expect(typeFor(lender,{sourceDocumentType:'loan_or_til',sourceFileName:'Goodleap Loan Agreement Solar Panels.pdf'})).toBe('finance_agreement')
+  expect(typeFor(lender,{sourceFileName:'Mosaic Loan Agreement.pdf'})).toBe('finance_agreement')
+ })
  it('maps a larger-payment flag from SCS without changing desk routing',()=>{
   const fields=analysisFields({...doc,classification:['ppa'],fields:{balloon_expected:{...fact,value:'yes'}},reviewDecisions:{}})
   expect(fields[0]).toMatchObject({key:'balloon_expected',value:'yes'})
