@@ -48,7 +48,6 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   const calendarRef = useRef<HTMLDivElement>(null), busyRef = useRef(false), refreshEpoch = useRef(0), bookingRequest = useRef('')
   const file = data.file, board = data.board, clients = data.clients ?? [], isAdmin = data.user.role === 'SUPER_ADMIN'
   const monthRef = useRef(board?.month)
-  monthRef.current = board?.month
   const tz = board?.timezone ?? file?.timezone ?? 'America/Los_Angeles'
   const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
   const closers = board?.closers ?? file?.closers ?? []
@@ -60,8 +59,10 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
     const response = await fetch(`/api/desk?${params}`, { cache: 'no-store' })
     if (!response.ok) { if ([401, 403, 404].includes(response.status)) router.refresh(); throw Error('Unable to refresh this view') }
     const next: FinalDeskPayload = await response.json(); if (epoch !== refreshEpoch.current) return; setData(next)
+    if (next.board?.month) monthRef.current = next.board.month
     if (next.questionnaire && !touched.current.size && !saving.current) { answerRef.current = next.questionnaire.answers; setAnswers(next.questionnaire.answers); revision.current = next.questionnaire.revision }
   }
+  useEffect(() => { monthRef.current = board?.month }, [board?.month])
   useEffect(() => { const tick = () => setNow(new Date()); const timer = setInterval(tick, 15000); tick(); return () => { clearInterval(timer); if (toastTimer.current) clearTimeout(toastTimer.current) } }, [])
   useEffect(() => {
     const timer = setInterval(() => {
