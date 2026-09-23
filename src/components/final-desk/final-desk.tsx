@@ -47,6 +47,7 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   const answerRef = useRef(answers), touched = useRef(new Set<string>()), revision = useRef(initial.questionnaire?.revision ?? 0), saving = useRef<Promise<boolean> | null>(null)
   const calendarRef = useRef<HTMLDivElement>(null), busyRef = useRef(false), refreshEpoch = useRef(0), bookingRequest = useRef('')
   const file = data.file, board = data.board, clients = data.clients ?? [], isAdmin = data.user.role === 'SUPER_ADMIN'
+  const monthRef = useRef(board?.month)
   const tz = board?.timezone ?? file?.timezone ?? 'America/Los_Angeles'
   const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
   const closers = board?.closers ?? file?.closers ?? []
@@ -54,14 +55,21 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   function notify(message: string) { setToast(message); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 6000) }
   async function refresh(month?: string) {
     const epoch = ++refreshEpoch.current
-    const params = new URLSearchParams({ view, ...query, ...(clientId ? { clientId } : {}), ...(month || board?.month ? { month: month ?? board!.month } : {}) })
+    const params = new URLSearchParams({ view, ...query, ...(clientId ? { clientId } : {}), ...(month || monthRef.current ? { month: month ?? monthRef.current! } : {}) })
     const response = await fetch(`/api/desk?${params}`, { cache: 'no-store' })
     if (!response.ok) { if ([401, 403, 404].includes(response.status)) router.refresh(); throw Error('Unable to refresh this view') }
     const next: FinalDeskPayload = await response.json(); if (epoch !== refreshEpoch.current) return; setData(next)
+    if (next.board?.month) monthRef.current = next.board.month
     if (next.questionnaire && !touched.current.size && !saving.current) { answerRef.current = next.questionnaire.answers; setAnswers(next.questionnaire.answers); revision.current = next.questionnaire.revision }
   }
+  useEffect(() => { monthRef.current = board?.month }, [board?.month])
   useEffect(() => { const tick = () => setNow(new Date()); const timer = setInterval(tick, 15000); tick(); return () => { clearInterval(timer); if (toastTimer.current) clearTimeout(toastTimer.current) } }, [])
-  useEffect(() => { const timer = setInterval(() => { if (!busyRef.current && !busy && !modal && !look && view !== 'questionnaire') void refresh().catch(() => {} ) }, 15000); return () => clearInterval(timer) })
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!busyRef.current && view !== 'questionnaire') void refresh().catch(() => {})
+    }, 15000)
+    return () => clearInterval(timer)
+  }, [view])
   function applyBooking(result: SchedulingResult) {
     if (!result.appointmentId || !result.startsAt || !result.clientId) return
     setData(previous => {

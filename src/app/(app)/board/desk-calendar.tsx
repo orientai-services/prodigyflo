@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -69,6 +69,14 @@ export function DeskCalendar({
   const [note, setNote] = useState('')
   const [pending, setPending] = useState(false)
   const [dragging, setDragging] = useState<DeskLead | null>(null)
+  const pendingRef = useRef(false)
+  pendingRef.current = pending
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!pendingRef.current) router.refresh()
+    }, 15000)
+    return () => clearInterval(timer)
+  }, [router])
 
   const leads = useMemo(() => new Map(board.unscheduled.map((l) => [l.clientId, l])), [board.unscheduled])
   const chips = useMemo(() => {
