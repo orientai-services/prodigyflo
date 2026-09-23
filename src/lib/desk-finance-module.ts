@@ -8,6 +8,7 @@
 
 import {
   amortize,
+  dealerFeeFromAmount,
   parseFirstPayDate,
   parseNumber,
   sourceMoney,
@@ -185,6 +186,7 @@ function loanCells(facts: FinanceFacts, now: Date): CaseCell[] {
     monthlyPayment: facts.monthly,
     now,
   })
+  const dealer = dealerFeeFromAmount(facts.amountFinanced)
   return [
     { label: 'Total / amount financed', cell: sourceMoney(facts.amountFinanced) },
     {
@@ -211,7 +213,7 @@ function loanCells(facts: FinanceFacts, now: Date): CaseCell[] {
       hint: amort.monthsRemaining.kind === 'cannot_compute' ? `Needs ${amort.missing.join(', ')}` : undefined,
     },
     { label: 'Monthly payment', cell: sourceMoney(facts.monthly) },
-    { label: 'Dealer fee', cell: sourceMoney(facts.dealerFee), hint: facts.dealerFee ? 'Embedded in principal' : undefined },
+    { label: 'Dealer fee', cell: dealer, hint: dealer.kind === 'value' ? 'Computed 30% of amount · unverified · staff CYS-verify required' : 'Needs total / amount financed' },
     { label: 'Lender', cell: sourceText(facts.lender) },
     { label: 'First payment date', cell: sourceText(facts.firstPay) },
   ]

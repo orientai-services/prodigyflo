@@ -1,5 +1,5 @@
 import { extractedFact } from '@/lib/desk-extract'
-import { ppaPaymentSchedule } from '@/lib/daily-desk-finance'
+import { dealerFeeFromAmount, ppaPaymentSchedule } from '@/lib/daily-desk-finance'
 import { emptyAnswers, QUESTIONS, type QuestionnaireAnswers } from './questions'
 import type { CaseCell, CaseFileData } from '@/lib/daily-desk-case-types'
 
@@ -26,16 +26,15 @@ export function profileCells(data: Pick<CaseFileData, 'finance' | 'solar'>): { f
   const isPpa = (type.kind === 'value' && /ppa|lease/i.test(type.display))
     || (escHint.cell.kind === 'value' && Number(String(escHint.cell.display).replace(/[^\d.]/g, '')) > 0 && !(type.kind === 'value' && /loan/i.test(type.display)))
   const amt = find('Total / amount financed')
-  const amount = amt.cell.kind === 'value' ? Number(amt.cell.display.replace(/[^\d.-]/g, '')) : NaN
-  const benchmark: CaseCell = isPpa
-    ? (find('30% Dealer Fee').cell.kind === 'value' ? find('30% Dealer Fee') : { label: '30% Dealer Fee', cell: { kind: 'value', display: 'None' }, hint: 'PPA/lease has no dealer fee on a loan principal.' })
-    : {
+  const amount = amt.cell.kind === 'value' ? (amt.cell.amount ?? Number(amt.cell.display.replace(/[^\d.-]/g, ''))) : NaN
+  const fee = dealerFeeFromAmount(Number.isFinite(amount) ? amount : null)
+  const benchmark: CaseCell = {
     label: '30% Dealer Fee',
-    cell: Number.isFinite(amount) && amount > 0
-      ? { kind: 'value', display: (Math.round(amount * 30) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) }
-      : { kind: 'cannot_compute', missing: ['supported amount financed'] },
-    hint: 'Internal 30% benchmark · not the documented dealer fee',
-    unverified: amt.unverified,
+    cell: fee,
+    hint: fee.kind === 'value'
+      ? 'Computed 30% of amount · unverified · staff CYS-verify required'
+      : 'Needs total / amount financed',
+    unverified: fee.kind === 'value',
   }
   const payment = find('Monthly payment', 'Contract-stated monthly payment')
   // Historical starting price is useful only with its explicit period qualifier.
@@ -93,9 +92,6 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
     if (input.isPpa && cell.label === 'Interest rate') {
       return fill(cell, 'No APR', 'This is a PPA/lease. The yearly increase is Annual Escalator Rate %, not interest.')
     }
-    if (input.isPpa && cell.label === '30% Dealer Fee') {
-      return fill(cell, '$0.00', 'PPA/lease has no loan dealer fee', 0)
-    }
     if (input.isPpa && cell.label === 'Total / amount financed' && ppaSched) {
       return fill(cell, money(ppaSched.total), 'Sum of scheduled PPA payments; not a loan principal', ppaSched.total)
     }
@@ -123,8 +119,20 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
       return fill(cell, (left / 12).toFixed(left % 12 === 0 ? 0 : 1), 'From first payment date and term')
     }
     if (cell.label === 'Annual Escalator Rate %') return fill(cell, '0%', 'Loan has no yearly payment increase')
-    if (cell.label === '30% Dealer Fee') return fill(cell, 'Not in paperwork', 'Needs amount financed')
+    if (cell.label === '30% Dealer Fee') return cell
     return fill(cell, 'Not in paperwork', 'Confirm or enter this on SCS Review')
+  })
+  const amountAfter = finance.find(c => c.label === 'Total / amount financed')
+  const amountN = amountAfter?.cell.kind === 'value'
+    ? (amountAfter.cell.amount ?? Number(String(amountAfter.cell.display).replace(/[^\d.-]/g, '')))
+    : NaN
+  const dealer = dealerFeeFromAmount(Number.isFinite(amountN) ? amountN : null)
+  const financeWithFee = finance.map(cell => {
+    if (cell.label !== '30% Dealer Fee') return cell
+    if (dealer.kind === 'value') {
+      return { label: '30% Dealer Fee', cell: dealer, hint: 'Computed 30% of amount · unverified · staff CYS-verify required', unverified: true }
+    }
+    return { label: '30% Dealer Fee', cell: { kind: 'missing' as const }, hint: 'Needs total / amount financed' }
   })
   const solar = input.solar.map(cell => {
     if (cell.cell.kind === 'value') return cell
@@ -132,7 +140,7 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
     if (cell.label === 'Credit score') return fill(cell, 'Not collected', 'Intake form only · never from the PDF')
     return fill(cell, 'Not in paperwork', 'Confirm or enter this on SCS Review')
   })
-  return { finance, solar }
+  return { finance: financeWithFee, solar }
 }
 
 const text = (v: unknown): string => typeof v === 'string' || typeof v === 'number' ? String(v).trim() : ''

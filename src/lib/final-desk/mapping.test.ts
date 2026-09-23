@@ -59,4 +59,21 @@ describe('final HTML questionnaire and projection', () => {
     expect(finance.find(c=>c.label==='Monthly payment')).toMatchObject({cell:{display:'$57.97'},hint:expect.stringContaining('not today')})
     expect(solar.find(c=>c.label==='Credit score')?.cell).toMatchObject({kind:'value',display:'650–699'})
   })
+  it('computes 30% dealer fee from the amount tile, including PPA totals without APR', () => {
+    const ppa = profileCells({
+      finance: [{ label: 'Total / amount financed', cell: { kind: 'value', display: '$16,734.94', amount: 16734.94 } }],
+      solar: [{ label: 'Agreement type', cell: { kind: 'value', display: 'ppa' } }],
+    } as CaseFileData)
+    expect(ppa.finance.find(c => c.label === '30% Dealer Fee')?.cell).toMatchObject({ kind: 'value', amount: 5020.48 })
+    const missingAmt = profileCells({
+      finance: [],
+      solar: [{ label: 'Agreement type', cell: { kind: 'value', display: 'loan' } }],
+    } as CaseFileData)
+    expect(missingAmt.finance.find(c => c.label === '30% Dealer Fee')?.cell.kind).toBe('missing')
+    const loan = profileCells({
+      finance: [{ label: 'Total / amount financed', cell: { kind: 'value', display: '$59,823.00', amount: 59823 } }],
+      solar: [{ label: 'Agreement type', cell: { kind: 'value', display: 'loan' } }],
+    } as CaseFileData)
+    expect(loan.finance.find(c => c.label === '30% Dealer Fee')?.cell).toMatchObject({ kind: 'value', amount: 17946.9 })
+  })
 })
