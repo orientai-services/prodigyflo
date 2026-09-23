@@ -86,6 +86,14 @@ async function localFindDuplicates(
   return []
 }
 
+function preferredLanguageCode(raw: string | undefined): string {
+  const v = (raw ?? '').trim().toLowerCase()
+  if (!v) return 'en'
+  if (v === 'spanish' || v === 'es' || v.startsWith('es')) return 'es'
+  if (v === 'english' || v === 'en' || v.startsWith('en')) return 'en'
+  return v.slice(0, 2) || 'en'
+}
+
 const MERGEABLE_FIELDS = [
   'firstName', 'lastName', 'email', 'phone', 'preferredLanguage',
   'utmSource', 'utmMedium', 'utmCampaign', 'utmTerm', 'utmContent',
@@ -101,7 +109,7 @@ function localMergeChanges(
     const incoming = mapped[field as keyof MappedLead]
     const current = existing[field]
     if (incoming && (current === null || current === undefined || current === '')) {
-      changes[field] = incoming
+      changes[field] = field === 'preferredLanguage' ? preferredLanguageCode(incoming) : incoming
     }
   }
   return changes
@@ -265,7 +273,7 @@ export async function applyToCrm(
         lastName: mapped.lastName!,
         email: mapped.email ?? '',
         phone: mapped.phone ?? '',
-        preferredLanguage: mapped.preferredLanguage?.toLowerCase().slice(0, 2) || 'en',
+        preferredLanguage: preferredLanguageCode(mapped.preferredLanguage),
         ownerId: defaultCloser?.id ?? null,
         teamId: defaultTeam?.id ?? null,
         leadSourceId: source.defaultLeadSourceId,
