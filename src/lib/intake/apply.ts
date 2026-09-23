@@ -351,6 +351,12 @@ export async function processInbound(
       { timeout: 20_000, maxWait: 20_000 },
     )
     : await processInboundLocked(source, externalId, rawPayload, actor, db)
+  if (result.submission.clientId && source.slug === 'scs-website' && parseIntakeBooking(rawPayload)) {
+    try {
+      const { upsertIntakeAppointment } = await import('@/lib/intake/appointment')
+      result.booking = await upsertIntakeAppointment({ source, clientId: result.submission.clientId, rawPayload }) ?? result.booking
+    } catch { /* GET /api/jobs/run remains the retry */ }
+  }
   if (!result.duplicate && result.submission.clientId && source.slug === 'scs-website') {
     const { refreshCysMirror } = await import('@/lib/cys/data')
     try { await refreshCysMirror(source.organizationId, result.submission.clientId) } catch { /* derived view; receipt is durable */ }

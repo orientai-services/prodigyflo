@@ -32,9 +32,15 @@ export async function scheduleAppointment(tx: Prisma.TransactionClient, input: {
     if (!row) return { ok: false, outcome: 'CONFLICT', error: 'The previous appointment is no longer available.' }
     return { ok: true, outcome, appointmentId: row.id, clientId: client.id, startsAt: row.startsAt.toISOString(), endsAt: row.endsAt.toISOString(), timezone: row.timezone, updatedAt: row.updatedAt.toISOString(), status: row.status }
   }
-  if (receipt) return receipt.outcome === 'CONFLICT' || !receipt.appointmentId
-    ? { ok: false, outcome: 'CONFLICT', error: 'This booking conflicted with an existing appointment. Use Reschedule.' }
-    : current(receipt.appointmentId, 'REPLAYED')
+  if (receipt) {
+    if (input.imported && receipt.outcome === 'CONFLICT' && !receipt.appointmentId) {
+      await tx.appointmentReceipt.delete({ where: { id: key } })
+    } else {
+      return receipt.outcome === 'CONFLICT' || !receipt.appointmentId
+        ? { ok: false, outcome: 'CONFLICT', error: 'This booking conflicted with an existing appointment. Use Reschedule.' }
+        : current(receipt.appointmentId, 'REPLAYED')
+    }
+  }
   const remember = async (id: string | null, outcome: 'SAVED' | 'CONFLICT') => tx.appointmentReceipt.create({ data: { id: key, clientId: client.id, appointmentId: id, outcome } })
   const conflict = async (message: string): Promise<SchedulingResult> => { await remember(null, 'CONFLICT'); return { ok: false, outcome: 'CONFLICT', error: message } }
   // Old provider events never undo subsequent staff edits or terminal statuses.

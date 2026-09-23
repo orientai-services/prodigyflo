@@ -90,6 +90,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let result
   try { result = await processInbound(source, externalId, payload) } catch (error) {
     if (error instanceof RetiredIntakeError) return Response.json({ status: 'IGNORED', reason: 'retired_test' })
+    try {
+      const { parseIntakeBooking, upsertIntakeAppointment } = await import('@/lib/intake/appointment')
+      if (parseIntakeBooking(payload)) {
+        const existing = await db.intakeSubmission.findUnique({
+          where: { sourceId_externalId: { sourceId: source.id, externalId } },
+        })
+        if (existing?.clientId) await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload: payload })
+      }
+    } catch { /* still fail the HTTP response */ }
     throw error
   }
   const { duplicate, submission, booking } = result
