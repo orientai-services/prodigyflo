@@ -6,6 +6,8 @@ table, do not deploy it and do not treat it as production. Run
 
 The two apps stay separate. Do not merge the repositories or share databases.
 
+**Client process (every homeowner):** `docs/CLIENT-JOURNEY.md`. This file is only which GitHub / Vercel / domain is production.
+
 | | Solar Contract Services | ProdigyFlo |
 |---|---|---|
 | Role | Homeowner intake | Staff CRM |
