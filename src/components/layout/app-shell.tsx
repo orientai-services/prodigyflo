@@ -17,6 +17,9 @@ import { OrgSwitcher, type SwitchableOrg } from '@/components/layout/org-switche
 import { UserMenu } from '@/components/layout/user-menu'
 import { NotificationBell } from '@/components/layout/notification-bell'
 import { persistSidebarExpanded, readSidebarExpanded } from '@/components/layout/sidebar-state'
+import { LocaleSwitch, useUiLocale } from '@/components/locale-switch'
+import { UI_COPY } from '@/lib/ui-copy'
+import { uiCopyFor } from '@/lib/ui-copy.es'
 
 type ShellUser = {
   name: string
@@ -78,6 +81,7 @@ function NavSections({
   rail?: boolean
   expanded?: boolean
 }) {
+  const t = uiCopyFor(useUiLocale(), UI_COPY)
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
 
@@ -98,10 +102,18 @@ function NavSections({
               rail && 'hidden [.pf-nav-open_&]:block',
             )}
           >
-            {section.title}
+            {section.title === 'Desk' ? t.nav.desk : section.title}
           </p>
           <ul className="space-y-0.5">
             {section.items.map((item) => {
+              const label =
+                item.href === '/board' ? t.nav.board
+                : item.href === '/clients' ? t.nav.clients
+                : item.href === '/queue' ? t.nav.queue
+                : item.href === '/documents' ? t.nav.documents
+                : item.href === '/submissions' ? t.nav.submissions
+                : item.href === '/pipeline' ? t.nav.pipeline
+                : item.label
               const active = isActive(item.href, item.exact)
               const linkClass = cn(
                 'focus-visible:ring-ring flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none',
@@ -120,7 +132,7 @@ function NavSections({
                         'w-0 opacity-0 motion-safe:transition-opacity motion-safe:duration-200 [.pf-nav-open_&]:w-auto [.pf-nav-open_&]:flex-1 [.pf-nav-open_&]:opacity-100',
                     )}
                   >
-                    {item.label}
+                    {label}
                   </span>
                 </>
               )
@@ -139,7 +151,7 @@ function NavSections({
                       >
                         {inner}
                       </TooltipTrigger>
-                      <TooltipContent side="right">{item.label}</TooltipContent>
+                      <TooltipContent side="right">{label}</TooltipContent>
                     </Tooltip>
                   ) : (
                     <Link href={item.href} aria-current={active ? 'page' : undefined} className={linkClass}>
@@ -182,6 +194,8 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const locale = useUiLocale()
+  const t = uiCopyFor(locale, UI_COPY)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [drawerRoute, setDrawerRoute] = useState(pathname)
@@ -282,7 +296,7 @@ export function AppShell({
                     onClick={toggleNav}
                     aria-expanded={navExpanded}
                     aria-controls="pf-desktop-nav"
-                    aria-label={navExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                    aria-label={navExpanded ? t.collapse : t.expand}
                     className="text-muted-foreground hover:text-foreground w-full [.pf-nav-open_&]:justify-start [.pf-nav-open_&]:px-2"
                   />
                 }
@@ -291,9 +305,9 @@ export function AppShell({
                     stamped class so the first paint is always right. */}
                 <PanelLeftOpen className="size-4 [.pf-nav-open_&]:hidden" aria-hidden="true" />
                 <PanelLeftClose className="hidden size-4 [.pf-nav-open_&]:block" aria-hidden="true" />
-                <span className="hidden text-xs [.pf-nav-open_&]:inline">Collapse</span>
+                <span className="hidden text-xs [.pf-nav-open_&]:inline">{t.collapse}</span>
               </TooltipTrigger>
-              <TooltipContent side="right">Expand sidebar</TooltipContent>
+              <TooltipContent side="right">{t.expand}</TooltipContent>
             </Tooltip>
           </div>
           {orgFooter(true)}
@@ -338,7 +352,7 @@ export function AppShell({
             size="icon-sm"
             className="lg:hidden"
             onClick={() => setMobileOpen(true)}
-            aria-label="Open menu"
+            aria-label={t.openMenu}
           >
             <Menu className="size-4" />
           </Button>
@@ -355,7 +369,7 @@ export function AppShell({
             className="text-muted-foreground hover:bg-muted hidden h-8 min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 text-sm transition-colors sm:flex sm:max-w-sm"
           >
             <Search className="size-3.5 shrink-0" />
-            <span className="truncate">Search clients, people, actions…</span>
+            <span className="truncate">{t.search}</span>
             <kbd className="bg-muted text-muted-foreground ml-auto hidden shrink-0 rounded px-1.5 py-0.5 font-mono text-[0.65rem] sm:inline">
               ⌘K
             </kbd>
@@ -371,6 +385,7 @@ export function AppShell({
             >
               <Search className="size-4" />
             </Button>
+            <LocaleSwitch />
             <NotificationBell unreadCount={unreadCount} />
             <UserMenu user={user} />
           </div>

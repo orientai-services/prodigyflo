@@ -1,0 +1,61 @@
+import { UI_COPY } from './ui-copy'
+
+export const UI_COPY_ES = {
+  language: 'Idioma',
+  search: 'Buscar clientes, personas, acciones…',
+  openMenu: 'Abrir menú',
+  collapse: 'Contraer',
+  expand: 'Expandir barra',
+  signOut: 'Cerrar sesión',
+  inviteOnly: 'Escritorio solo por invitación',
+  unscheduled: 'Sin cita',
+  unscheduledHintDay: 'Arrastra a una hora.',
+  unscheduledHint: 'Arrastra a un día o haz clic en el expediente.',
+  viewAll: 'Ver todos',
+  missing: 'Falta',
+  cannotCompute: 'No se puede calcular',
+  unverified: 'Sin verificar',
+  titles: {
+    board: 'Tablero del calendario',
+    clients: 'Clientes',
+    profile: 'Perfil del cliente',
+    questionnaire: 'Cuestionario',
+    queue: 'Cola',
+    engine: 'Motor',
+    documents: 'Laboratorio de documentos',
+    submissions: 'CYS / envíos',
+    users: 'Usuarios',
+  },
+  tiles: {
+    finance_agreement: 'Acuerdo de financiamiento',
+    signed_contract: 'Contrato firmado',
+    utility_bill: 'Recibo de electricidad',
+    comm_evidence: 'Evidencia de comunicación',
+    ucc_lien: 'UCC / gravamen',
+    home_deed: 'Escritura de la vivienda',
+    county_permit: 'Permiso del condado',
+    proposal: 'Propuesta / estimado de ahorro',
+    lender_statement: 'Estado de cuenta actual',
+    payoff_letter: 'Cotización de liquidación',
+    gov_id: 'Identificación',
+    other: 'Otros documentos',
+    production_report: 'Reporte de producción solar',
+  },
+  nav: {
+    board: 'Tablero',
+    pipeline: 'Embudo',
+    clients: 'Clientes',
+    queue: 'Cola',
+    documents: 'Laboratorio de documentos',
+    submissions: 'CYS',
+    desk: 'Escritorio',
+    more: 'Más',
+  },
+  week: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
+  today: 'Hoy',
+  month: 'Mes',
+}
+
+export function uiCopyFor(locale: 'en' | 'es', english: typeof UI_COPY = UI_COPY) {
+  return locale === 'es' ? UI_COPY_ES : english
+}
