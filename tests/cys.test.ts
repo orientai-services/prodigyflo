@@ -185,6 +185,28 @@ describe('CYS field resolution', () => {
     const r = resolveField(d, sources())
     expect(r.status).toBe('MISSING')
   })
+
+  it('computes dealer_fee as 30% of amount financed and ignores OCR dealer_fee', () => {
+    const d = def({ key: 'dealer_fee', sourcePath: 'document.finance_agreement.dealer_fee' })
+    const r = resolveField(d, sources({
+      documentFields: [
+        docField({ key: 'dealer_fee', documentTypeKey: 'finance_agreement', value: '99999' }),
+        docField({ key: 'amount_financed', documentTypeKey: 'finance_agreement', value: '16734.94' }),
+      ],
+    }))
+    expect(r.status).toBe('SUGGESTED')
+    expect(r.value).toBe('5020.48')
+    expect(r.sourceLabel).toBe('Computed · unverified')
+  })
+
+  it('leaves dealer_fee missing when amount financed is empty', () => {
+    const d = def({ key: 'dealer_fee', sourcePath: 'document.finance_agreement.dealer_fee' })
+    const r = resolveField(d, sources({
+      documentFields: [docField({ key: 'dealer_fee', documentTypeKey: 'finance_agreement', value: '1240' })],
+    }))
+    expect(r.status).toBe('MISSING')
+    expect(r.value).toBeNull()
+  })
 })
 
 describe('completion maths', () => {

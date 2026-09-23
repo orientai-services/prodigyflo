@@ -1,4 +1,5 @@
 import type { CysSourceType, CysValueStatus, FieldVerification } from '@prisma/client'
+import { dealerFeeFromAmount } from '@/lib/daily-desk-finance'
 import { keysForField, keysForType, normalizeProduct, termMonthsFromYears } from '@/lib/desk-extract'
 
 /**
@@ -236,7 +237,27 @@ function resolveDocumentField(def: CysDefinitionInput, sources: SourceRecord): R
   return missing(def.key)
 }
 
+function resolveDealerFee(def: CysDefinitionInput, sources: SourceRecord): ResolvedValue {
+  const amounts = sources.documentFields.filter(
+    (f) => f.key === 'amount_financed' && f.verification !== 'REJECTED',
+  )
+  const verified = amounts.filter((f) => (f.verification === 'VERIFIED' || f.verification === 'CORRECTED') && !isBlank(effectiveValue(f)))
+  const suggested = amounts.filter((f) => f.verification === 'UNVERIFIED' && !isBlank(f.value))
+  const picked = verified[0] ?? suggested[0]
+  const raw = picked ? effectiveValue(picked) ?? picked.value : null
+  const fee = dealerFeeFromAmount(raw)
+  if (fee.kind !== 'value' || fee.amount == null) return missing(def.key)
+  return {
+    ...missing(def.key),
+    value: fee.amount.toFixed(2),
+    status: 'SUGGESTED',
+    sourceLabel: 'Computed · unverified',
+    note: 'Computed as 30% of amount financed. Staff CYS-verify required.',
+  }
+}
+
 export function resolveField(def: CysDefinitionInput, sources: SourceRecord): ResolvedValue {
+  if (def.key === 'dealer_fee') return resolveDealerFee(def, sources)
   const documentKind = CYS_DOCUMENT_KINDS[def.key]
   if (documentKind && sources.documents) {
     const docs = sources.documents.filter((doc) => doc.kind === documentKind)

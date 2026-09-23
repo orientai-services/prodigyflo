@@ -30,6 +30,15 @@ export function sourceMoney(raw: string | number | null | undefined): ComputedCe
   return { kind: 'value', display: MONEY.format(n), amount: n }
 }
 
+/** Internal 30% of the amount tile. Never OCR. Missing amount → missing. */
+export const DEALER_FEE_RATE = 0.30
+export function dealerFeeFromAmount(amount: string | number | null | undefined): ComputedCell {
+  const n = parseNumber(amount)
+  if (n == null || n === 0) return { kind: 'missing' }
+  const fee = Math.round(n * DEALER_FEE_RATE * 100) / 100
+  return { kind: 'value', display: MONEY.format(fee), amount: fee }
+}
+
 export function sourceText(raw: string | null | undefined): ComputedCell {
   const s = (raw ?? '').trim()
   if (!s || s.toUpperCase() === 'MISSING' || s.toLowerCase() === 'unknown') return { kind: 'missing' }

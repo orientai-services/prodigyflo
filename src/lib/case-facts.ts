@@ -1,6 +1,6 @@
 import { asRecord, str } from '@/lib/packet/schema'
 import { DESK_TIMEZONE } from '@/lib/daily-desk'
-import { amortize, ppaPaymentSchedule, sourceMoney, sourcePercent, sourceText } from '@/lib/daily-desk-finance'
+import { amortize, dealerFeeFromAmount, ppaPaymentSchedule, sourceMoney, sourcePercent, sourceText } from '@/lib/daily-desk-finance'
 import { extracted, extractedFact, normalizeProduct, termMonthsFromYears, type ExtractedFact, type ExtractableDoc } from '@/lib/desk-extract'
 import type { CaseCell } from '@/lib/daily-desk-case-types'
 type Reviewed = { fieldKey: string; value: string | null; status: string; sourceLabel?: string | null; note?: string | null }
@@ -56,7 +56,6 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const statementMonths = fact('lender_statement', 'months_remaining')
   const statementYears = fact('lender_statement', 'years_remaining')
   const useStatement = Boolean(statementRemaining?.value)
-  const dealerFact = fact('finance_agreement', 'dealer_fee', 'dealer_fee', 'dealer_fee')
   const termFact = fact(type, 'term_months', 'term_months', 'term_months')
   const yearsFact = fact(type, 'term_years')
   const term = termFact?.value || termMonthsFromYears(yearsFact?.value || '')
@@ -117,6 +116,10 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const ppaSched = isPpaOrLease && yearOnePay > 0 && termNum > 0
     ? ppaPaymentSchedule({ yearOneMonthly: yearOnePay, escalatorPct: Number.isFinite(escPct) ? escPct : 0, termMonths: termNum, monthsElapsed: elapsed ?? 0 })
     : null
+  const dealerCell = dealerFeeFromAmount(amountFact?.value || ppaSched?.total || null)
+  const dealerHint = dealerCell.kind === 'value'
+    ? 'Computed 30% of amount · unverified · staff CYS-verify required'
+    : 'Needs total / amount financed'
   const amortHint = hasLoanInputs
     ? (firstPayFact?.note?.toLowerCase().includes('signed') || firstPayFact?.note?.toLowerCase().includes('unverified')
       ? 'Estimate from signing date and contract terms; not a payoff quote'
@@ -138,7 +141,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     { label: 'Months remaining', cell: monthsLeft != null ? { kind: 'value' as const, display: String(monthsLeft) } : { kind: 'cannot_compute' as const, missing: ['first payment date and term'] }, hint: 'From confirmed start date and term' },
     sourcedCell('Contract-stated monthly payment', paymentFact, 'money', 'Current payment requires a current statement or explicit dated evidence'),
     sourcedCell('First-year monthly payment', firstYearFact, 'money', 'Contract starting amount; not today’s bill'),
-    { label: '30% Dealer Fee', cell: { kind: 'value' as const, display: '$0.00', amount: 0 }, hint: 'PPA/lease has no dealer fee on a loan principal.' },
+    { label: '30% Dealer Fee', cell: dealerCell, hint: dealerHint, unverified: dealerCell.kind === 'value' },
     sourcedCell('Lender', providerFact),
     sourcedCell('Contract counterparty', providerFact),
     sourcedCell('First payment date', firstPayFact),
@@ -163,7 +166,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
       ? sourcedCell('Months remaining', statementMonths, 'text', 'From lender statement')
       : { label: 'Months remaining', cell: amort.monthsRemaining, hint: amortHint },
     sourcedCell('Monthly payment', paymentFact, 'money'),
-    sourcedCell('Dealer fee', dealerFact, 'money'),
+    { label: '30% Dealer Fee', cell: dealerCell, hint: dealerHint, unverified: dealerCell.kind === 'value' },
     sourcedCell('Lender', providerFact),
     sourcedCell('First payment date', firstPayFact),
   ]

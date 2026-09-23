@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { amortize, cellDisplay, listedMoney, ppaPaymentSchedule, sourceMoney } from '@/lib/daily-desk-finance'
+import { amortize, cellDisplay, dealerFeeFromAmount, listedMoney, ppaPaymentSchedule, sourceMoney } from '@/lib/daily-desk-finance'
 
 describe('listedMoney', () => {
   it('does not invent $0 on lists or chips', () => {
@@ -16,6 +16,18 @@ describe('sourceMoney', () => {
     expect(sourceMoney('0')).toEqual({ kind: 'missing' })
     expect(sourceMoney('$0.00')).toEqual({ kind: 'missing' })
     expect(sourceMoney('$31,860')).toMatchObject({ kind: 'value', amount: 31860 })
+  })
+})
+
+describe('dealerFeeFromAmount', () => {
+  it('is 30% of the amount tile, rounded to cents', () => {
+    expect(dealerFeeFromAmount(16734.94)).toMatchObject({ kind: 'value', amount: 5020.48, display: '$5,020.48' })
+    expect(dealerFeeFromAmount(59823)).toMatchObject({ kind: 'value', amount: 17946.9, display: '$17,946.90' })
+  })
+  it('is missing when the amount tile is empty', () => {
+    expect(dealerFeeFromAmount(null)).toEqual({ kind: 'missing' })
+    expect(dealerFeeFromAmount('')).toEqual({ kind: 'missing' })
+    expect(dealerFeeFromAmount(0)).toEqual({ kind: 'missing' })
   })
 })
 

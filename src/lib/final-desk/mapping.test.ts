@@ -4,6 +4,8 @@ import { answerCount, emptyAnswers, QUESTIONS, validateAnswers } from './questio
 import { mergeQuestionnaire, prefillQuestionnaire, prefillFromDocuments, profileCells } from './mapping'
 import type { CaseFileData } from '@/lib/daily-desk-case-types'
 
+type ProfileStub = Pick<CaseFileData, 'finance' | 'solar'>
+
 const identity = {name:'Test Client',address:'123 Example Lane',phone:'2025550100',email:'test@example.test'}
 describe('final HTML questionnaire and projection', () => {
   it('preserves the 42 exact question IDs in the supplied prototype', () => {
@@ -47,7 +49,7 @@ describe('final HTML questionnaire and projection', () => {
       {label:'Annual payment escalation',cell:{kind:'value',display:'1.9%'}},
       {label:'Customer signature date',cell:{kind:'value',display:'2018-05-28'}},
       {label:'Term months',cell:{kind:'value',display:'240'}},
-    ],solar:[{label:'Agreement type',cell:{kind:'value',display:'ppa'}},{label:'Credit range',cell:{kind:'value',display:'650–699'}}]} as CaseFileData
+    ],solar:[{label:'Agreement type',cell:{kind:'value',display:'ppa'}},{label:'Credit range',cell:{kind:'value',display:'650–699'}}]} satisfies ProfileStub
     const {finance,solar}=profileCells(fixture)
     expect(finance).toHaveLength(13);expect(solar).toHaveLength(4)
     expect(finance.find(c=>c.label==='Interest rate')?.cell).toMatchObject({kind:'value',display:'No APR'})
@@ -58,5 +60,22 @@ describe('final HTML questionnaire and projection', () => {
     expect(finance.find(c=>c.label==='First payment date')?.cell).toMatchObject({kind:'value',display:'2018-05-28'})
     expect(finance.find(c=>c.label==='Monthly payment')).toMatchObject({cell:{display:'$57.97'},hint:expect.stringContaining('not today')})
     expect(solar.find(c=>c.label==='Credit score')?.cell).toMatchObject({kind:'value',display:'650–699'})
+  })
+  it('computes 30% dealer fee from the amount tile, including PPA totals without APR', () => {
+    const ppa = profileCells({
+      finance: [{ label: 'Total / amount financed', cell: { kind: 'value', display: '$16,734.94', amount: 16734.94 } }],
+      solar: [{ label: 'Agreement type', cell: { kind: 'value', display: 'ppa' } }],
+    } satisfies ProfileStub)
+    expect(ppa.finance.find(c => c.label === '30% Dealer Fee')?.cell).toMatchObject({ kind: 'value', amount: 5020.48 })
+    const missingAmt: ProfileStub = {
+      finance: [],
+      solar: [{ label: 'Agreement type', cell: { kind: 'value', display: 'loan' } }],
+    }
+    expect(profileCells(missingAmt).finance.find(c => c.label === '30% Dealer Fee')?.cell.kind).toBe('missing')
+    const loan = profileCells({
+      finance: [{ label: 'Total / amount financed', cell: { kind: 'value', display: '$59,823.00', amount: 59823 } }],
+      solar: [{ label: 'Agreement type', cell: { kind: 'value', display: 'loan' } }],
+    } satisfies ProfileStub)
+    expect(loan.finance.find(c => c.label === '30% Dealer Fee')?.cell).toMatchObject({ kind: 'value', amount: 17946.9 })
   })
 })
