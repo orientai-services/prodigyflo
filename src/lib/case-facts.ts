@@ -46,7 +46,11 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const aprFact = isPpaOrLease ? null : fact('finance_agreement', 'apr', 'apr', 'apr')
   const inServiceFact = fact('solar_contract', 'in_service_date', 'first_payment_or_install')
   const firstPayFact = isPpaOrLease
-    ? inServiceFact ?? fact('solar_contract', 'first_payment_date') ?? fact('solar_contract', 'customer_signed_date')
+    ? inServiceFact
+      ?? fact('solar_contract', 'first_payment_date')
+      ?? fact('finance_agreement', 'first_payment_date')
+      ?? fact('solar_contract', 'customer_signed_date')
+      ?? fact('finance_agreement', 'customer_signed_date')
     : fact('completion_cert', 'first_payment_date')
       ?? fact(type, 'first_payment_date', 'first_payment_or_install')
       ?? fact(type, 'customer_signed_date')
@@ -57,7 +61,9 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const statementYears = fact('lender_statement', 'years_remaining')
   const useStatement = Boolean(statementRemaining?.value)
   const termFact = fact(type, 'term_months', 'term_months', 'term_months')
+    ?? (isPpaOrLease ? fact('finance_agreement', 'term_months') : fact('solar_contract', 'term_months'))
   const yearsFact = fact(type, 'term_years')
+    ?? (isPpaOrLease ? fact('finance_agreement', 'term_years') : null)
   const term = termFact?.value || termMonthsFromYears(yearsFact?.value || '')
   const termSource = termFact ?? (term && yearsFact ? { ...yearsFact, value: term, note: `${yearsFact.note} · Derived months = stated years × 12` } : null)
   const paymentFact = fact(type, 'monthly_payment', undefined, isPpaOrLease ? undefined : 'monthly_payment')
@@ -68,9 +74,12 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const basisFact = fact('solar_contract', 'payment_basis')
   const startFact = fact('solar_contract', 'term_start_basis')
   const escalationFact = fact('solar_contract', 'escalator_pct', isPpaOrLease ? 'apr_or_escalator' : undefined)
+    ?? (isPpaOrLease ? fact('finance_agreement', 'escalator_pct') : null)
   const installerFact = fact('solar_contract', 'installer_name') ?? fact('finance_agreement', 'installer_name',undefined,'installer_guess')
   const providerFact = isPpaOrLease
     ? fact('solar_contract', 'contract_counterparty', 'lender_confirmed')
+      ?? fact('finance_agreement', 'lender_name')
+      ?? fact('finance_agreement', 'contract_counterparty')
     : fact(type, 'lender_name', 'lender_confirmed', 'lender_confirmed')
   const kwFact = fact('proposal', 'system_size_kw') ?? fact('solar_contract', 'system_size_kw') ?? fact('finance_agreement', 'system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
   const kw = kwFact?.value || ''

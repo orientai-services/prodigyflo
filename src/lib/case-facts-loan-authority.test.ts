@@ -162,4 +162,40 @@ describe('loan-map document authority on FinalDesk cells', () => {
     expect(cell(facts, 'System size')?.cell).toMatchObject({ kind: 'value' })
     expect(JSON.stringify(cell(facts, 'System size')?.cell)).toMatch(/8\.64/)
   })
+
+  it('lease fields populate when a leasing-act page parked the extract on finance_agreement', () => {
+    const lease = {
+      extractions: [{
+        detectedTypeKey: 'finance_agreement',
+        status: 'COMPLETED',
+        sourceActive: true,
+        fields: [
+          field('product_type', 'lease'),
+          field('escalator_pct', '2.9'),
+          field('term_years', '25'),
+          field('term_months', '300'),
+          field('lender_name', 'SunPower Capital, LLC'),
+          field('first_payment_date', '2024-05-18'),
+          field('monthly_payment', '297.11'),
+          field('first_year_monthly_payment', '297.11'),
+          field('amount_financed', '128297.03'),
+          field('remaining_balance', '119803.27'),
+        ],
+      }],
+    }
+    const facts = resolveCaseFacts({
+      organization: { timezone: 'America/Los_Angeles' },
+      surveyResponses: [{ answers: {} }],
+      addresses: [{ line1: '2792 Peachtree Circle', city: 'Clearwater', state: 'FL', postalCode: '33761' }],
+      documents: [lease],
+      contracts: [{ productType: 'lease' }],
+    }, null, { now: new Date('2026-09-24T12:00:00Z') })
+    expect(cell(facts, 'Annual Escalator Rate %')?.cell).toMatchObject({ kind: 'value', display: '2.9%' })
+    expect(cell(facts, 'Term years')?.cell).toMatchObject({ kind: 'value', display: '25' })
+    expect(cell(facts, 'Term months')?.cell).toMatchObject({ kind: 'value', display: '300' })
+    expect(cell(facts, 'Lender')?.cell).toMatchObject({ kind: 'value', display: 'SunPower Capital, LLC' })
+    expect(cell(facts, 'First payment date')?.cell).toMatchObject({ kind: 'value', display: '2024-05-18' })
+    expect(cell(facts, 'Months remaining')?.cell).toMatchObject({ kind: 'value', display: '272' })
+    expect(cell(facts, 'Years remaining')?.cell).toMatchObject({ kind: 'value', display: '22.7' })
+  })
 })

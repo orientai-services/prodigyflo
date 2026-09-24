@@ -118,7 +118,7 @@ export function completeDeskCells(input: { finance: CaseCell[]; solar: CaseCell[
       const left = Math.max(0, Math.round(termNum) - elapsed)
       return fill(cell, (left / 12).toFixed(left % 12 === 0 ? 0 : 1), 'From first payment date and term')
     }
-    if (cell.label === 'Annual Escalator Rate %') return fill(cell, '0%', 'Loan has no yearly payment increase')
+    if (cell.label === 'Annual Escalator Rate %' && !input.isPpa) return fill(cell, '0%', 'Loan has no yearly payment increase')
     if (cell.label === '30% Dealer Fee') return cell
     return fill(cell, 'Not in paperwork', 'Confirm or enter this on SCS Review')
   })
