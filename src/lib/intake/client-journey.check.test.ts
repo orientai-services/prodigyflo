@@ -18,6 +18,7 @@ describe('canonical client journey', () => {
     expect(req).toMatch(/sourceType: 'agreement', key: 'solar_contract'/)
     expect(req).toMatch(/sourceType: 'loan_or_til', key: 'finance_agreement'/)
     expect(req).toMatch(/sourceType: 'utility_bill', key: 'utility_bill'/)
+    expect(read('src/lib/intake/scs-analysis.test.ts')).toMatch(/federal leasing disclosure page is classified til/)
   })
 
   it('does not treat deal type loan as a lender PDF', () => {
@@ -26,6 +27,36 @@ describe('canonical client journey', () => {
     expect(typeFor).toMatch(/source==='agreement'/)
     expect(typeFor).not.toMatch(/\/\\bloan\\b\|\\btil\\b\|\\bric\\b\|installment\/\.test\(product\)/)
     expect(typeFor).toMatch(/Deal type "loan" is how the system is paid/)
+  })
+
+  it('slots agreement/install/ppa/lease before leftover LOAN_KINDS', () => {
+    const src = read('src/lib/intake/scs-analysis.ts')
+    const financeHint = src.indexOf("source==='loan_or_til'")
+    const financeName = src.indexOf('FINANCE_NAME.test(file)')
+    const solar = src.indexOf("source==='agreement'")
+    const leftoverKinds = src.lastIndexOf('kinds.some(k=>LOAN_KINDS.has(k))')
+    expect(financeHint).toBeGreaterThan(-1)
+    expect(financeName).toBeGreaterThan(financeHint)
+    expect(solar).toBeGreaterThan(financeName)
+    expect(leftoverKinds).toBeGreaterThan(solar)
+  })
+
+  it('desk still reads a lease extract parked on finance_agreement', () => {
+    const facts = read('src/lib/case-facts.ts')
+    expect(facts).toMatch(/fact\('finance_agreement', 'term_months'\)/)
+    expect(facts).toMatch(/fact\('finance_agreement', 'escalator_pct'\)/)
+    expect(facts).toMatch(/fact\('finance_agreement', 'lender_name'\)/)
+    expect(facts).toMatch(/fact\('finance_agreement', 'first_payment_date'\)/)
+  })
+
+  it('locks JPEG, Spanish TILA, lease+til, and year-one monthly in CLIENT-JOURNEY', () => {
+    const doc = read('docs/CLIENT-JOURNEY.md')
+    expect(doc).toMatch(/Every page gets a JPEG/)
+    expect(doc).toMatch(/TASA PORCENTUAL ANUAL/)
+    expect(doc).toMatch(/`lease`\+`til` stays lease/)
+    expect(doc).toMatch(/Copy onto `monthly_solar_payment`/)
+    expect(doc).toMatch(/upsertIntakeAppointment/)
+    expect(doc).not.toMatch(/\b(William|Jose|Marc|Eric|Edwin|Lloyd)\b/)
   })
 
   it('paints install filenames on the solar tile before detected finance type', () => {
@@ -39,6 +70,8 @@ describe('canonical client journey', () => {
     const apply = read('src/lib/intake/apply.ts')
     expect(apply).toMatch(/runPendingScsDocumentImports\(5, undefined, clientId\)/)
     expect(apply).toMatch(/runPendingScsDocumentExtractions\(5, clientId\)/)
+    expect(apply).toMatch(/upsertIntakeAppointment/)
+    expect(apply).toMatch(/after\(async\(\)=>\{/)
     expect(apply).toMatch(/No network, document copy or AI runs while the lock is held/)
     const locked = apply.slice(apply.indexOf('async function processInboundLocked'), apply.indexOf('export async function reapplySubmission'))
     expect(locked).not.toMatch(/runPendingScsDocumentImports/)
