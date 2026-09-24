@@ -1,8 +1,10 @@
 # Client journey — canonical
 
-**Every SCS homeowner, every time.** No per-client filename branches. No one-off republish.
+**Every SCS homeowner, every time.** Analyze → Review → Findings → apply → book → ProdigyFlo desk. No per-client filename branches. No one-off republish.
 
 This file is the process. `docs/CANONICAL.md` is the production map (which GitHub / Vercel / domain). Do not merge the two apps or their databases.
+
+**This repo (staff desk).** `typeFor` in `src/lib/intake/scs-analysis.ts` slots the file. `SCS_DOCUMENT_REQUIREMENTS` maps packet `agreement` → `solar_contract` and `loan_or_til` → `finance_agreement`. `case-facts.ts` reads PPA/lease from `solar_contract` and still reads a lease extract parked on `finance_agreement`. `upsertIntakeAppointment` runs after the inbound lock so a booked clock lands on the desk. File copy and materialize run in `after()`, never inside the 20s lock.
 
 | | Homeowner (SCS) | Staff (ProdigyFlo) |
 |---|---|---|
@@ -19,7 +21,8 @@ Companion visual: `~/Developer/factory/2026-09-21_doc-extraction-population/LOGI
 
 ```
  Contact → Upload → Reading (gate, not numbered)
-        → Review Confirm → Questions (money / credit / consent)
+        → Review Confirm → Findings
+        → Questions (money / credit / consent)
         → Booking (optional clock) → Confirmation
 ```
 
@@ -30,10 +33,61 @@ Reading and Analysis stay gates. They are not extra numbered steps.
 - Blank Review boxes do not block continue. Only a proposed or typed value must be decided.
 - Credit is the intake form. Never OCR a credit score.
 - Booking is optional. A live clock still must land on the staff board.
+- Language overlay (`scs_locale` cookie, `leads.language`) sits on the funnel LocaleProvider. English masters stay. `/check` stays English.
 
 ---
 
-## 2. What happens to every uploaded file
+## 2. MASTER ROUTING
+
+Do not invent a new scheme. These three truths are how production already routes.
+
+### 2.1 Document intelligence
+
+Every page gets a JPEG. The analyzer cannot start without `imageKey`.
+
+Text pages may render at **1280px**. Scans stay **2576**.
+
+Text-layer regex is fallback only. Review source of truth is Document Intelligence + the loan-authority fence.
+
+Spanish (or mixed) PDFs use the same path. Spanish TILA headings feed the same parsers:
+
+- TASA PORCENTUAL ANUAL
+- Monto financiado
+- Pago Mensual Inicial
+- Fecha de Inicio del Préstamo
+
+English fixtures must still pass.
+
+### 2.2 Product type — three truths, never collapse
+
+| Kind | Packet / desk | Rate box |
+|---|---|---|
+| LOAN / TILA / RIC | `loan_or_til` → `finance_agreement` | APR is `interest_rate`. No escalator unless the page also states a yearly increase. |
+| PPA / LEASE / INSTALL | `agreement` → `solar_contract` | Yearly increase is `escalator_rate`, NEVER `interest_rate`. |
+
+A federal leasing disclosure / TIL page inside a lease packet does **not** turn it into a loan. SCS classification `lease`+`til` stays lease.
+
+ProdigyFlo `typeFor`: `agreement` / install / PPA / lease wins **before** leftover `LOAN_KINDS`. Filename GoodLeap / Loanpal / Mosaic / Sunlight still goes `finance_agreement`.
+
+Installer name is not a lender. Deal type `loan` (APR / amount financed) is how they pay, not which PDF this is.
+
+### 2.3 Money map
+
+PPA/lease monthly = year-one / estimated monthly / ACH year-one. Copy onto `monthly_solar_payment`.
+
+Loans keep APR on `interest_rate`. PPA/lease never writes APR into that box.
+
+Dealer fee = `round(0.30 × amount financed, 2)`. Never OCR a PDF “dealer fee” line.
+
+First-pay: completion cert wins. If there is no cert, customer signing / envelope date is first-pay.
+
+Loan remaining amortizes from amount financed since first-pay. PPA/lease remaining is leftover scheduled payments, not loan principal. A lender statement beats math. Drop junk remaining (page “2”, legalese). Remaining is not a payoff quote.
+
+kW is DC from watts (10,400 W → 10.4) or a labeled kW. Skip CEC-AC. Skip “shall not exceed 25 kW”. Do not treat a $1,000 deposit as watts. Missing → Not in paperwork. Do not invent kW, remaining, first-pay, or credit.
+
+---
+
+## 3. What happens to every uploaded file
 
 ```
  Upload PDF
@@ -61,7 +115,7 @@ If a page is a photo, it is still rasterized. Skipping JPEGs because a text laye
 
 ---
 
-## 3. Packet type → staff tile (permanent)
+## 4. Packet type → staff tile (permanent)
 
 Installer name is not a lender. Deal type `loan` (APR / amount financed) is how they pay, not which PDF this is.
 
@@ -79,7 +133,7 @@ If the file is already in ProdigyFlo on the wrong requirement, **re-slot the sam
 
 ---
 
-## 4. Who may write which box
+## 5. Who may write which box
 
 | Source | May write | Must not write |
 |---|---|---|
@@ -101,7 +155,7 @@ If the file is already in ProdigyFlo on the wrong requirement, **re-slot the sam
 
 ---
 
-## 5. Always-on handoff (no republish)
+## 6. Always-on handoff (no republish)
 
 ```
  Review Confirm
@@ -115,6 +169,7 @@ If the file is already in ProdigyFlo on the wrong requirement, **re-slot the sam
     v
  after()                    copy this client's files (max 5)
                             materialize SCS analysis (no Anthropic)
+                            upsertIntakeAppointment when a clock is present
     |
     v
  Profile tiles + FinalDesk  unverified extracts may show
@@ -127,7 +182,7 @@ Webhook stays metadata-only. Cron `/api/jobs/run` is retry.
 
 ---
 
-## 6. Booking clock
+## 7. Booking clock
 
 ```
  Widget postMessage → bookings row
@@ -149,13 +204,13 @@ Webhook stays metadata-only. Cron `/api/jobs/run` is retry.
 
 ---
 
-## 7. Property records (separate pipe)
+## 8. Property records (separate pipe)
 
 Deed / UCC / permit originals may land on their tiles. Search-summary PDFs are **Other**, never the original. UCC CAPTCHA must not block OCR, Review, or booking.
 
 ---
 
-## 8. Never
+## 9. Never
 
 - Per-client or per-filename special cases (no named-homeowner branches)
 - Second OCR in ProdigyFlo on an SCS file
@@ -164,6 +219,7 @@ Deed / UCC / permit originals may land on their tiles. Search-summary PDFs are *
 - Mix APR and escalator
 - Treat an installer name as a lender
 - Send an install PDF to `finance_agreement` because the deal is a loan
+- Treat a lease packet as a loan because it includes a federal leasing disclosure
 - Skip JPEGs for text-layer pages
 - Duplicate storage bytes to “fix” a wrong tile
 - One-off republish as the default path
@@ -172,9 +228,9 @@ Deed / UCC / permit originals may land on their tiles. Search-summary PDFs are *
 
 ---
 
-## 9. How this stays true
+## 10. How this stays true
 
-SCS: `npm run check:client-journey` (wired into `npm run check`).
-ProdigyFlo: `src/lib/intake/client-journey.check.test.ts` (wired into `npm test`).
+SCS: `npm run check:client-journey` (wired into `npm run check`) plus `npm run check:loan-authority`.
+ProdigyFlo: `src/lib/intake/client-journey.check.test.ts` and `scs-analysis` tests (wired into `npm test`).
 
-If a future change breaks the trail, the packet router, the tile map, the JPEG rule, the dealer-fee math, or the always-on kick, those guards fail in CI.
+If a future change breaks the trail, the JPEG rule, Spanish TILA on the same parsers, lease+til staying lease, year-one monthly copy, the tile map, dealer-fee math, or the always-on kick, those guards fail in CI.
