@@ -36,6 +36,17 @@ const INSTALL_NAME =
 const DEED_NAME = /homeownership|\bdeed\b|ownership|\bparcel\b/i
 const UCC_NAME = /\bucc\b|fixture|\blien\b/i
 const PERMIT_NAME = /\bpermit/i
+/** Staff/SCS already parked the file on this tile. Do not move it because
+ *  extraction guessed `other` or the filename contains "install"/"solar". */
+const SLOTTED_RECORD_KEYS = new Set([
+  'county_permit',
+  'home_deed',
+  'ucc_lien',
+  'utility_bill',
+  'production_report',
+  'comm_evidence',
+  'gov_id',
+])
 
 function normalizeKey(raw: string | null | undefined): string {
   return (raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
@@ -73,6 +84,8 @@ export function classifyDeskKind(input: {
   if (/public[_ -]record[_ -]summary|search[_ -]summary|records?[_ -]summary/i.test(sourceText)) {
     return CASE_DOC_KINDS.find(k => k.key === 'other') ?? null
   }
+  const slotted = matchDocKind(input.requirementKey)
+  if (slotted && SLOTTED_RECORD_KEYS.has(slotted.key)) return slotted
   // Filename is the packet type. A deal typed "loan" must not move an install
   // / solar agreement PDF onto the finance tile. Lender names still win.
   const nameHay = [input.fileName, input.label]
@@ -80,9 +93,10 @@ export function classifyDeskKind(input: {
     .join('\n')
   if (FINANCE_NAME.test(nameHay)) return CASE_DOC_KINDS.find((k) => k.key === 'finance_agreement') ?? null
   if (INSTALL_NAME.test(nameHay)) return CASE_DOC_KINDS.find((k) => k.key === 'signed_contract') ?? null
+  const detected = matchDocKind(input.detectedType)
   const direct =
-    matchDocKind(input.detectedType) ||
-    matchDocKind(input.requirementKey) ||
+    (detected && detected.key !== 'other' ? detected : null) ||
+    slotted ||
     matchDocKind(input.label) ||
     matchDocKind(input.fileName)
   if (direct) return direct

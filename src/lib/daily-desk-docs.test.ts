@@ -41,6 +41,22 @@ describe('classifyDeskKind', () => {
     expect(classifyDeskKind({ fileName: 'Steele_Solar_Agreement.pdf' })?.key).toBe('signed_contract')
   })
 
+  it('keeps a staff upload on County Permit Record even when extraction says other', () => {
+    expect(classifyDeskKind({
+      requirementKey: 'permit_records',
+      detectedType: 'other',
+      label: 'County Permit Record',
+      fileName: 'Solar_-_Evolution_Power_Notice_of_Commencement.pdf',
+    })?.key).toBe('county_permit')
+  })
+
+  it('keeps deed, UCC, utility, and production staff slots when extraction is other', () => {
+    expect(classifyDeskKind({ requirementKey: 'property_ownership', detectedType: 'other', fileName: 'scan.pdf' })?.key).toBe('home_deed')
+    expect(classifyDeskKind({ requirementKey: 'lien_filing', detectedType: 'other', fileName: 'scan.pdf' })?.key).toBe('ucc_lien')
+    expect(classifyDeskKind({ requirementKey: 'utility_bill', detectedType: 'other', fileName: 'scan.pdf' })?.key).toBe('utility_bill')
+    expect(classifyDeskKind({ requirementKey: 'production_report', detectedType: 'other', fileName: 'scan.png' })?.key).toBe('production_report')
+  })
+
   it('keeps unknown files accessible in Other without inventing a contract classification', () => {
     expect(classifyDeskKind({ fileName: 'scan-page-3.jpg', label: 'other' })?.key).toBe('other')
   })

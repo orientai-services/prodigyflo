@@ -64,6 +64,7 @@ describe('canonical client journey', () => {
     expect(desk).toMatch(/const nameHay = \[input\.fileName, input\.label\]/)
     expect(desk.indexOf('FINANCE_NAME.test(nameHay)')).toBeLessThan(desk.indexOf('matchDocKind(input.detectedType)'))
     expect(desk.indexOf('INSTALL_NAME.test(nameHay)')).toBeLessThan(desk.indexOf('matchDocKind(input.detectedType)'))
+    expect(desk).toMatch(/SLOTTED_RECORD_KEYS/)
   })
 
   it('copies this client’s files after ingest, never inside the lock', () => {
