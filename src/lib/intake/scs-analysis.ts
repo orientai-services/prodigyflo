@@ -50,8 +50,9 @@ export function typeFor(doc:z.infer<typeof document>,hint:DocumentSlotHint={}) {
   const file=String(hint.sourceFileName??'').replace(/[_-]+/g,' ')
   const hay=`${kinds.join(' ')} ${product}`
   if(source==='utility_bill' || kinds.includes('utility_bill') || /utility_bill|electric(?:ity)?\s*bill/.test(hay)) return 'utility_bill'
-  if(source==='loan_or_til' || FINANCE_NAME.test(file) || kinds.some(k=>LOAN_KINDS.has(k))) return 'finance_agreement'
+  if(source==='loan_or_til' || FINANCE_NAME.test(file)) return 'finance_agreement'
   if(source==='agreement' || INSTALL_NAME.test(file) || kinds.some(k=>SOLAR_KINDS.has(k)) || /\bppa\b|\blease\b|power purchase/.test(product)) return 'solar_contract'
+  if(kinds.some(k=>LOAN_KINDS.has(k))) return 'finance_agreement'
   if(kinds.includes('ucc_or_lien') || kinds.includes('lien_filing')) return 'lien_filing'
   if(kinds.includes('permit') || kinds.includes('permits')) return 'permit'
   if(kinds.includes('monitoring') || kinds.includes('production')) return 'production_report'

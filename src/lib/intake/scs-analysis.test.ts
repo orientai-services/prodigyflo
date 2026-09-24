@@ -49,6 +49,26 @@ describe('PF evidence field mapping',()=>{
   expect(typeFor(lender,{sourceDocumentType:'loan_or_til',sourceFileName:'Goodleap Loan Agreement Solar Panels.pdf'})).toBe('finance_agreement')
   expect(typeFor(lender,{sourceFileName:'Mosaic Loan Agreement.pdf'})).toBe('finance_agreement')
  })
+ it('keeps a lease packet on solar_contract when a federal leasing disclosure page is classified til',()=>{
+  const lease={...doc,classification:['lease','warranty','til','other'],fields:{
+    agreement_type:{...fact,value:'lease'},
+    lender_servicer:{...fact,value:'SunPower Capital, LLC'},
+    escalator_rate:{...fact,value:'2.9'},
+    payment_term_months:{...fact,value:'300'},
+    first_payment_date:{...fact,value:'2024-05-18'},
+  }}
+  expect(typeFor(lease)).toBe('solar_contract')
+  expect(typeFor(lease,{sourceDocumentType:'agreement',sourceFileName:'William_Anderson-Lease_Document.pdf'})).toBe('solar_contract')
+  const fields=analysisFields(lease,{sourceDocumentType:'agreement'})
+  expect(fields).toEqual(expect.arrayContaining([
+    expect.objectContaining({key:'product_type',value:'lease'}),
+    expect.objectContaining({key:'contract_counterparty',value:'SunPower Capital, LLC'}),
+    expect.objectContaining({key:'escalator_pct',value:'2.9'}),
+    expect.objectContaining({key:'term_months',value:'300'}),
+    expect.objectContaining({key:'first_payment_date',value:'2024-05-18'}),
+  ]))
+  expect(fields.some(f=>f.key==='apr')).toBe(false)
+ })
  it('maps a larger-payment flag from SCS without changing desk routing',()=>{
   const fields=analysisFields({...doc,classification:['ppa'],fields:{balloon_expected:{...fact,value:'yes'}},reviewDecisions:{}})
   expect(fields[0]).toMatchObject({key:'balloon_expected',value:'yes'})
