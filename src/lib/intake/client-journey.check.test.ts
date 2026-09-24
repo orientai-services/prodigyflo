@@ -56,6 +56,7 @@ describe('canonical client journey', () => {
     expect(doc).toMatch(/`lease`\+`til` stays lease/)
     expect(doc).toMatch(/Copy onto `monthly_solar_payment`/)
     expect(doc).toMatch(/upsertIntakeAppointment/)
+    expect(doc).toMatch(/Never move a slotted record file to Other/)
     expect(doc).not.toMatch(/\b(William|Jose|Marc|Eric|Edwin|Lloyd)\b/)
   })
 
@@ -65,6 +66,10 @@ describe('canonical client journey', () => {
     expect(desk.indexOf('FINANCE_NAME.test(nameHay)')).toBeLessThan(desk.indexOf('matchDocKind(input.detectedType)'))
     expect(desk.indexOf('INSTALL_NAME.test(nameHay)')).toBeLessThan(desk.indexOf('matchDocKind(input.detectedType)'))
     expect(desk).toMatch(/SLOTTED_RECORD_KEYS/)
+    const slotTest = read('src/lib/daily-desk-docs.test.ts')
+    expect(slotTest).toMatch(/requirementKey: 'permit_records'/)
+    expect(slotTest).toMatch(/detectedType: 'other'/)
+    expect(slotTest).toMatch(/toBe\('county_permit'\)/)
   })
 
   it('copies this client’s files after ingest, never inside the lock', () => {

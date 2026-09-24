@@ -220,6 +220,7 @@ Deed / UCC / permit originals may land on their tiles. Search-summary PDFs are *
 - Treat an installer name as a lender
 - Send an install PDF to `finance_agreement` because the deal is a loan
 - Treat a lease packet as a loan because it includes a federal leasing disclosure
+- Never move a slotted record file to Other
 - Skip JPEGs for text-layer pages
 - Duplicate storage bytes to “fix” a wrong tile
 - One-off republish as the default path
