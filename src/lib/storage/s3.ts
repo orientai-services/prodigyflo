@@ -16,7 +16,7 @@ import { objectStorageEnv, s3ForcePathStyle, s3PutExtra } from './s3-config'
  * do not branch.
  */
 const KEY_RE = /^[A-Za-z0-9_-]{8,64}\.bin$/
-const NAMED_KEY_RE = /^avatars\/[a-z0-9]{10,40}\.(jpg|png|webp)$/
+const NAMED_KEY_RE = /^(?:avatars\/[a-z0-9]{10,40}\.(?:jpg|png|webp)|closer-packets\/[a-z0-9]{10,40}\/(?:review|pitch)\.pdf)$/
 
 export class S3FileStorage implements FileStorage {
   readonly name = 's3'

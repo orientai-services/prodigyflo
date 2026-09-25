@@ -17,7 +17,7 @@ const KEY_RE = /^[A-Za-z0-9_-]{8,64}\.bin$/
  * image extension. As strict as KEY_RE — no dots or slashes can smuggle a
  * traversal, and the namespace can never collide with a document key.
  */
-const NAMED_KEY_RE = /^avatars\/[a-z0-9]{10,40}\.(jpg|png|webp)$/
+const NAMED_KEY_RE = /^(?:avatars\/[a-z0-9]{10,40}\.(?:jpg|png|webp)|closer-packets\/[a-z0-9]{10,40}\/(?:review|pitch)\.pdf)$/
 
 export class LocalFileStorage implements FileStorage {
   readonly name = 'local'
