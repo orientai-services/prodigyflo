@@ -1,7 +1,7 @@
 import 'server-only'
 import { db } from '@/lib/db'
 import { clientScope, type SessionUser } from '@/lib/rbac'
-import { civilDate } from '@/lib/daily-desk'
+import { DESK_TIMEZONE, civilDate, countsAsDeskBooking, deskMonthRange } from '@/lib/daily-desk'
 import { classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { resolveCaseFacts } from '@/lib/case-facts'
 import { loadDefinitions, loadSourcesForClients } from '@/lib/cys/data'
@@ -16,6 +16,15 @@ export async function loadFilteredClients(user: SessionUser, query: ClientQuery)
   if(query.scheduling && query.scheduling!=='unscheduled')throw new InvalidFilterError('Unknown scheduling filter.')
   if(query.page && (!/^\d+$/.test(query.page)||Number(query.page)<1||!Number.isSafeInteger(Number(query.page))))throw new InvalidFilterError('Invalid page.')
   const now = new Date()
+  const monthRange = new Map<string, { rangeStart: Date; rangeEnd: Date }>()
+  const rangeFor = (timeZone: string) => {
+    const zone = timeZone || DESK_TIMEZONE
+    const cached = monthRange.get(zone)
+    if (cached) return cached
+    const range = deskMonthRange(civilDate(now, zone).slice(0, 7), zone)
+    monthRange.set(zone, range)
+    return range
+  }
   const [rows, definitions] = await Promise.all([
     db.client.findMany({ where: clientScope(user),
       orderBy: [{ lastActivityAt:'desc' },{ id:'asc' }], select: {
@@ -62,7 +71,9 @@ export async function loadFilteredClients(user: SessionUser, query: ClientQuery)
       const e=d.extractions[0],kind=classifyDeskKind({requirementKey:d.requirement?.key,detectedType:e?.detectedTypeKey,label:d.label,fileName:d.fileName})
       return {id:d.id,key:kind?.key??'other',label:d.fileName||d.label||'Document',state:tileState({hasFile:true,extractionStatus:e?.status??null,fieldCount:e?.fields.length??0,verifiedCount:e?.fields.filter(f=>['VERIFIED','CORRECTED'].includes(f.verification)).length??0})}
     })
-    const agreement=documents.filter(d=>['finance_agreement','signed_contract'].includes(d.key)),appt=c.appointments.filter(a=>['SCHEDULED','CONFIRMED'].includes(a.status)&&a.endsAt>now).at(-1)
+    const agreement=documents.filter(d=>['finance_agreement','signed_contract'].includes(d.key))
+    const range=rangeFor(c.organization.timezone)
+    const appt=c.appointments.filter(a=>countsAsDeskBooking(a,now,range.rangeStart,range.rangeEnd)).at(-1)
     const extraction=!agreement.length?'none':agreement.every(d=>d.state==='verified')?'verified':'unverified'
     const name=String(answers.legal_name||`${facts.confirmed('first_name')||c.firstName} ${facts.confirmed('last_name')||c.lastName}`)
     const credit=cells.solar.find(s=>s.label==='Credit score')?.cell

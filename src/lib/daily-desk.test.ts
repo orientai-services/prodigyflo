@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   civilDate,
+  countsAsDeskBooking,
+  deskMonthRange,
   isoDate,
   missingDocsLabel,
   monthGrid,
@@ -51,6 +53,57 @@ describe('zonedDate', () => {
     expect(at.toISOString()).toBe('2026-09-16T17:00:00.000Z')
     expect(civilDate(at, 'America/Los_Angeles')).toBe('2026-09-16')
     expect(timeLabel(at, 'America/Los_Angeles')).toBe('10:00')
+  })
+})
+
+describe('countsAsDeskBooking', () => {
+  const range = deskMonthRange('2026-09', 'America/Los_Angeles')
+  const now = new Date('2026-09-25T04:50:00.000Z')
+
+  it('keeps a finished booking on this month off the unscheduled list', () => {
+    expect(
+      countsAsDeskBooking(
+        {
+          status: 'SCHEDULED',
+          startsAt: new Date('2026-09-24T20:30:00.000Z'),
+          endsAt: new Date('2026-09-24T21:30:00.000Z'),
+        },
+        now,
+        range.rangeStart,
+        range.rangeEnd,
+      ),
+    ).toBe(true)
+  })
+
+  it('does not treat a finished booking as on a later month', () => {
+    const october = deskMonthRange('2026-10', 'America/Los_Angeles')
+    expect(
+      countsAsDeskBooking(
+        {
+          status: 'SCHEDULED',
+          startsAt: new Date('2026-09-24T20:30:00.000Z'),
+          endsAt: new Date('2026-09-24T21:30:00.000Z'),
+        },
+        now,
+        october.rangeStart,
+        october.rangeEnd,
+      ),
+    ).toBe(false)
+  })
+
+  it('releases a no-show even when the start is on this month', () => {
+    expect(
+      countsAsDeskBooking(
+        {
+          status: 'NO_SHOW',
+          startsAt: new Date('2026-09-24T20:30:00.000Z'),
+          endsAt: new Date('2026-09-24T21:30:00.000Z'),
+        },
+        now,
+        range.rangeStart,
+        range.rangeEnd,
+      ),
+    ).toBe(false)
   })
 })
 
