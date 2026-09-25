@@ -204,3 +204,18 @@ export function countsAsDeskBooking(
     (appt.endsAt > now || (appt.startsAt >= rangeStart && appt.startsAt < rangeEnd))
   )
 }
+
+/** Soonest call that has not ended. A finished booking on this month is only the fallback. */
+export function deskBookingToShow<T extends { status: string; startsAt: Date; endsAt: Date }>(
+  appointments: readonly T[],
+  now: Date,
+  rangeStart: Date,
+  rangeEnd: Date,
+): T | undefined {
+  const qualifying = appointments.filter((appt) => countsAsDeskBooking(appt, now, rangeStart, rangeEnd))
+  const upcoming = qualifying
+    .filter((appt) => appt.endsAt > now)
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
+  if (upcoming.length) return upcoming[0]
+  return [...qualifying].sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0]
+}

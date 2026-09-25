@@ -1,7 +1,7 @@
 import 'server-only'
 import { db } from '@/lib/db'
 import { clientScope, type SessionUser } from '@/lib/rbac'
-import { DESK_TIMEZONE, civilDate, countsAsDeskBooking, deskMonthRange } from '@/lib/daily-desk'
+import { DESK_TIMEZONE, civilDate, deskBookingToShow, deskMonthRange } from '@/lib/daily-desk'
 import { classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { resolveCaseFacts } from '@/lib/case-facts'
 import { loadDefinitions, loadSourcesForClients } from '@/lib/cys/data'
@@ -73,7 +73,7 @@ export async function loadFilteredClients(user: SessionUser, query: ClientQuery)
     })
     const agreement=documents.filter(d=>['finance_agreement','signed_contract'].includes(d.key))
     const range=rangeFor(c.organization.timezone)
-    const appt=c.appointments.filter(a=>countsAsDeskBooking(a,now,range.rangeStart,range.rangeEnd)).at(-1)
+    const appt=deskBookingToShow(c.appointments,now,range.rangeStart,range.rangeEnd)
     const extraction=!agreement.length?'none':agreement.every(d=>d.state==='verified')?'verified':'unverified'
     const name=String(answers.legal_name||`${facts.confirmed('first_name')||c.firstName} ${facts.confirmed('last_name')||c.lastName}`)
     const credit=cells.solar.find(s=>s.label==='Credit score')?.cell
