@@ -28,10 +28,10 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/clients/[cli
 
   const model = callPacket(built.closerInput, kind as CallAudience)
   const bytes = await renderCallPacket(model)
-  return pdfResponse(Buffer.from(bytes), model.filename)
+  return pdfResponse(bytes, model.filename)
 }
 
-async function readStoredPacket(clientId: string, kind: 'review' | 'pitch'): Promise<Buffer | null> {
+async function readStoredPacket(clientId: string, kind: 'review' | 'pitch'): Promise<Uint8Array | null> {
   let key: string
   try {
     key = closerPacketKey(clientId, kind)
@@ -41,10 +41,10 @@ async function readStoredPacket(clientId: string, kind: 'review' | 'pitch'): Pro
   const storage = getFileStorage()
   const stat = await storage.stat(key)
   if (!stat) return null
-  return storage.get(key)
+  return new Uint8Array(await storage.get(key))
 }
 
-function pdfResponse(bytes: Buffer, filename: string) {
+function pdfResponse(bytes: Uint8Array, filename: string) {
   const safe = filename.replace(/[^A-Za-z0-9._-]+/g, '')
   return new Response(bytes, {
     headers: {
