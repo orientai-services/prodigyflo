@@ -10,6 +10,7 @@
 import { pathLabel, trenchLabel } from './route'
 import { str, type Path, type Trench } from './schema'
 import { federalLevers, leverFor, stateLeversForFile } from './state-levers'
+import { composeMasterCallSheet, consumerRightsPoster, type ConsumerRightsPoster, type MasterCallSheet } from './call-sheet'
 import { normalizeProduct } from '@/lib/desk-extract'
 
 export type CloserWinInput = {
@@ -61,6 +62,12 @@ export type CloserWinBrief = {
   talkingPoints: string[]
   recommendedNextStep: string
   missingForCeiling: string[]
+  callSheet: MasterCallSheet
+  rights: ConsumerRightsPoster
+}
+
+function finish(input: CloserWinInput, brief: Omit<CloserWinBrief, 'callSheet' | 'rights'>): CloserWinBrief {
+  return { ...brief, callSheet: composeMasterCallSheet(input), rights: consumerRightsPoster(input) }
 }
 
 const DEAD_LENDER = /sunlight|mosaic/i
@@ -314,7 +321,7 @@ export function composeCloserWinBrief(input: CloserWinInput): CloserWinBrief {
       ? `This week: ${pulls[0]}. Then the rest of the pull list. Then the demand — not before.`
       : 'Packet is documented. Walk the redline and book the next human step.'
 
-  return {
+  return finish(input, {
     situation,
     fileFacts,
     redline,
@@ -327,7 +334,7 @@ export function composeCloserWinBrief(input: CloserWinInput): CloserWinBrief {
     talkingPoints,
     recommendedNextStep,
     missingForCeiling,
-  }
+  })
 }
 
 function composeContractReviewBrief(input: CloserWinInput): CloserWinBrief {
@@ -351,7 +358,7 @@ function composeContractReviewBrief(input: CloserWinInput): CloserWinBrief {
     'Annual payment escalation is not loan APR. No loan principal, dealer fee, amortization, or cancellation entitlement is inferred.',
     'Review the agreement’s cancellation and transfer clauses. Do not infer a deadline from the signature or effective date alone.',
   ]
-  return {
+  return finish(input, {
     situation: facts.join(' '), fileFacts: facts, redline,
     cancelPath: ['Review the PPA / lease agreement and its current account records before selecting a resolution path.'],
     whyThisFile: [input.hasContract ? 'Agreement received for review.' : 'Agreement still needed.'],
@@ -360,7 +367,7 @@ function composeContractReviewBrief(input: CloserWinInput): CloserWinBrief {
     highlights: facts.slice(1, 5), objections: [], talkingPoints: [next],
     recommendedNextStep: next,
     missingForCeiling: ['Current dated statement', 'Actual in-service date', ...missing],
-  }
+  })
 }
 
 export function formatCloserWinBrief(b: CloserWinBrief): string {
@@ -401,5 +408,7 @@ export function closerWinToBriefContent(b: CloserWinBrief) {
     cancelPath: b.cancelPath,
     closeTalk: b.closeTalk,
     outcomeCeiling: b.outcomeCeiling,
+    callSheet: b.callSheet,
+    rights: b.rights,
   }
 }

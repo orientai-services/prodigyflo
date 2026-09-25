@@ -67,6 +67,7 @@ export const STATE_LEVERS: Record<string, StateLever> = {
     contractorBoard: 'Florida DBPR Construction Industry Licensing Board',
     solar: 'Florida home-solicitation / home-improvement cancellation plus solar contractor licensing. Confirm the notice attached to THIS contract.',
     ag: 'Florida AG — Consumer Protection',
+    udap: 'Florida Deceptive and Unfair Trade Practices Act (FDUTPA)',
   }),
   GA: D('GA', 'Georgia', {
     contractorBoard: 'Georgia State Licensing Board for Residential and General Contractors',

@@ -56,13 +56,16 @@ export type CaseFileData = {
   docs: CaseDocTile[]
   intake: { question: string; answer: string }[]
   redline: {
-    facts: string
-    vs: string
     state: string[]
     federal: string[]
-    blockers: string[]
-    flag: string
   }
+  callSheet: {
+    opening: string
+    sections: { title: string; say: string; facts: { label: string; value: string }[] }[]
+    ask: string
+    documents: { item: string; note: string }[]
+    disclaimer: string
+  } | null
   brief: {
     id: string
     body: string

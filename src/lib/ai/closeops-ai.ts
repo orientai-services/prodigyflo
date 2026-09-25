@@ -57,6 +57,30 @@ export function asBriefContent(value: unknown): CloserBriefContent {
         .map((o) => ({ objection: str((o as Record<string, unknown>)?.objection), response: str((o as Record<string, unknown>)?.response) }))
         .filter((o) => o.objection)
     : []
+  const sheet = raw.callSheet && typeof raw.callSheet === 'object' ? raw.callSheet as Record<string, unknown> : null
+  const rights = raw.rights && typeof raw.rights === 'object' ? raw.rights as Record<string, unknown> : null
+  const sections = Array.isArray(sheet?.sections)
+    ? sheet.sections.flatMap((section) => {
+        const row = section as Record<string, unknown>
+        const title = str(row.title)
+        if (!title) return []
+        const facts = Array.isArray(row.facts)
+          ? row.facts.flatMap((fact) => {
+              const item = fact as Record<string, unknown>
+              const label = str(item.label)
+              return label ? [{ label, value: str(item.value) || 'MISSING' }] : []
+            })
+          : []
+        return [{ title, say: str(row.say), facts }]
+      })
+    : []
+  const documents = Array.isArray(sheet?.documents)
+    ? sheet.documents.flatMap((doc) => {
+        const row = doc as Record<string, unknown>
+        const item = str(row.item)
+        return item ? [{ item, note: str(row.note) }] : []
+      })
+    : []
   return {
     situation: str(raw.situation),
     highlights: strArray(raw.highlights),
@@ -67,6 +91,12 @@ export function asBriefContent(value: unknown): CloserBriefContent {
     cancelPath: strArray(raw.cancelPath),
     closeTalk: str(raw.closeTalk) || undefined,
     outcomeCeiling: str(raw.outcomeCeiling) || undefined,
+    callSheet: sheet && str(sheet.opening)
+      ? { opening: str(sheet.opening), sections, ask: str(sheet.ask), documents, disclaimer: str(sheet.disclaimer) }
+      : undefined,
+    rights: rights
+      ? { state: strArray(rights.state), federal: strArray(rights.federal) }
+      : undefined,
   }
 }
 
