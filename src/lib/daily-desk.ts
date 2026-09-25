@@ -205,6 +205,15 @@ export function countsAsDeskBooking(
   )
 }
 
+/**
+ * The board colors a chip from the client's assigned closer.
+ * A call that already started keeps its own appointment owner for history,
+ * and assignment does not rewrite that row.
+ */
+export function deskChipCloserName(clientOwnerName: string | null): string | null {
+  return clientOwnerName
+}
+
 /** Soonest call that has not ended. A finished booking on this month is only the fallback. */
 export function deskBookingToShow<T extends { status: string; startsAt: Date; endsAt: Date }>(
   appointments: readonly T[],

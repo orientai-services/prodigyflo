@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { matchDocKind } from '@/lib/daily-desk-docs'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
-import { DESK_TIMEZONE, civilDate, deskMonthRange, monthGrid, monthTitle, parseMonth, timeLabel, type DeskBoard, type DeskChip } from '@/lib/daily-desk'
+import { DESK_TIMEZONE, civilDate, deskChipCloserName, deskMonthRange, monthGrid, monthTitle, parseMonth, timeLabel, type DeskBoard, type DeskChip } from '@/lib/daily-desk'
 
 export function canReadDesk(user: SessionUser): boolean {
   return can(user, 'appointments:read')
@@ -34,7 +34,7 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
     db.appointment.findMany({
       where: { client: scope, startsAt: { gte: rangeStart, lt: rangeEnd }, ...(user.role === 'CLOSER' ? { ownerId: user.id } : {}) },
       orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, startsAt: true, updatedAt: true, status: true, owner: { select: { name: true } }, client: { select: clientSelect } },
+      select: { id: true, startsAt: true, updatedAt: true, status: true, client: { select: clientSelect } },
     }),
     db.client.findMany({
       where: { AND: [scope, { status: 'ACTIVE', appointments: { none: booked } }] },
@@ -54,7 +54,7 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
   for (const appointment of appointments) {
     const day = civilDate(appointment.startsAt, timezone)
     const chip: DeskChip = { ...lead(appointment.client), appointmentId: appointment.id, updatedAt: appointment.updatedAt.toISOString(), status: appointment.status,
-      ownerName: appointment.owner?.name ?? null, timeLabel: timeLabel(appointment.startsAt, timezone), startsAt: appointment.startsAt.toISOString() }
+      ownerName: deskChipCloserName(appointment.client.owner?.name ?? null), timeLabel: timeLabel(appointment.startsAt, timezone), startsAt: appointment.startsAt.toISOString() }
     chipsByDay.set(day, [...(chipsByDay.get(day) ?? []), chip])
   }
   return {
