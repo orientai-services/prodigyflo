@@ -18,7 +18,7 @@ function extracted(docs: ExtractableDoc[], typeKey: string, fieldKey: string): s
   return fact.value || ''
 }
 
-export async function assemblePacket(clientId: string) {
+export async function assemblePacket(clientId: string, opts?: { persist?: boolean }) {
   const client = await db.client.findUnique({
     where: { id: clientId },
     include: {
@@ -206,20 +206,22 @@ export async function assemblePacket(clientId: string) {
     auditor: 'grok-floor-manager',
   }
 
-  await db.cysReadiness.upsert({
-    where: { clientId },
-    create: { clientId, packageJson: packetJson },
-    update: { packageJson: packetJson },
-  })
+  if (opts?.persist !== false) {
+    await db.cysReadiness.upsert({
+      where: { clientId },
+      create: { clientId, packageJson: packetJson },
+      update: { packageJson: packetJson },
+    })
 
-  // Automatic packet projections must not replace a concurrent staff decision.
-  const projectionRows = [['closeability', ready.closeability], ['dashboard_status', strawberryStatus]]
-    .map(([key, value]) => Prisma.sql`(${randomUUID()}, ${clientId}, ${key}, ${value}, 'SUGGESTED'::"CysValueStatus", 'packet OS', NOW(), NOW())`)
-  await db.$executeRaw(Prisma.sql`
-    INSERT INTO "CysFieldValue" (id,"clientId","fieldKey",value,status,"sourceLabel","createdAt","updatedAt") VALUES ${Prisma.join(projectionRows)}
-    ON CONFLICT ("clientId","fieldKey") DO UPDATE SET value=EXCLUDED.value,status=EXCLUDED.status,"sourceLabel"=EXCLUDED."sourceLabel","updatedAt"=NOW()
-    WHERE NOT ("CysFieldValue".status='VERIFIED' AND "CysFieldValue"."verifiedById" IS NOT NULL)
-  `)
+    // Automatic packet projections must not replace a concurrent staff decision.
+    const projectionRows = [['closeability', ready.closeability], ['dashboard_status', strawberryStatus]]
+      .map(([key, value]) => Prisma.sql`(${randomUUID()}, ${clientId}, ${key}, ${value}, 'SUGGESTED'::"CysValueStatus", 'packet OS', NOW(), NOW())`)
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO "CysFieldValue" (id,"clientId","fieldKey",value,status,"sourceLabel","createdAt","updatedAt") VALUES ${Prisma.join(projectionRows)}
+      ON CONFLICT ("clientId","fieldKey") DO UPDATE SET value=EXCLUDED.value,status=EXCLUDED.status,"sourceLabel"=EXCLUDED."sourceLabel","updatedAt"=NOW()
+      WHERE NOT ("CysFieldValue".status='VERIFIED' AND "CysFieldValue"."verifiedById" IS NOT NULL)
+    `)
+  }
 
   return {
     fileId,
