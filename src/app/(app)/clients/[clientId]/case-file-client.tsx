@@ -278,11 +278,6 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
 
       <section className="desk-card desk-block desk-prose">
         <h3>Closer brief {data.brief?.approved ? '· approved' : ''}</h3>
-        <p>
-          <a className="btn-desk" href={`/api/clients/${data.id}/closer-packet?kind=review`}>Download case review PDF</a>
-          {' '}
-          <a className="desk-btn-secondary" href={`/api/clients/${data.id}/closer-packet?kind=pitch`}>Download closer pitch PDF</a>
-        </p>
         {data.callSheet && (
           <div>
             <p><b>Master call sheet</b></p>
@@ -315,6 +310,8 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
             {data.brief.ask && <p>First ask: {data.brief.ask}.</p>}
             {data.brief.open && <p>Suggested open: {data.brief.open}</p>}
             <div className="desk-actions-row" style={{ marginTop: 10 }}>
+              <a className="btn-desk" href={`/api/clients/${data.id}/closer-packet?kind=review`}>Case review PDF</a>
+              <a className="desk-btn-secondary" href={`/api/clients/${data.id}/closer-packet?kind=pitch`}>Closer pitch PDF</a>
               <button type="button" className="btn-desk" disabled={pending || data.brief.approved} onClick={() => void runApprove()}>
                 {data.brief.approved ? 'Approved' : 'Approve brief'}
               </button>
