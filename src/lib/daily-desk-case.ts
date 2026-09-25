@@ -180,12 +180,8 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
 
   const win = packet?.closerWin
   const redline = {
-    facts: win?.fileFacts.join(' ') || 'No packet facts on file yet.',
-    vs: win?.redline.find((l) => /vs|promised|quoted|intake/i.test(l)) || win?.redline[0] || 'Intake vs page is not on file yet.',
-    state: win?.redline.filter((l) => /state|cooling-off|home-solicitation/i.test(l)).slice(0, 4) || [],
-    federal: win?.redline.filter((l) => /TILA|FTC|Holder|E-SIGN|federal/i.test(l)).slice(0, 4) || [],
-    blockers: packet?.ready.missing ?? [],
-    flag: packet?.closeability === 'C' ? 'Insufficient file' : packet?.ready.ready ? 'Review only' : 'Review only · insufficient file',
+    state: win?.rights.state ?? [],
+    federal: win?.rights.federal ?? [],
   }
 
   return {
@@ -213,6 +209,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     docs: tiles,
     intake,
     redline,
+    callSheet: win?.callSheet ?? null,
     brief: latestBrief
       ? {
           id: latestBrief.id,

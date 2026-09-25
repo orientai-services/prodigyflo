@@ -249,4 +249,12 @@ export type CloserBriefContent = {
   cancelPath?: string[]
   closeTalk?: string
   outcomeCeiling?: string
+  callSheet?: {
+    opening: string
+    sections: { title: string; say: string; facts: { label: string; value: string }[] }[]
+    ask: string
+    documents: { item: string; note: string }[]
+    disclaimer: string
+  }
+  rights?: { state: string[]; federal: string[] }
 }

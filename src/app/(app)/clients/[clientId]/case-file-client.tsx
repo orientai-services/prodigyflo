@@ -248,45 +248,66 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
         </section>
         <section className="desk-card desk-block desk-prose">
           <h3>Redline · internal posture</h3>
+          <p className="desk-muted">State and federal consumer rights for this file. Not a homeowner lecture.</p>
           <p>
-            <b>On the page:</b> {data.redline.facts}
+            <b>{data.state || 'State'} consumer rights</b>
           </p>
-          <p>
-            <b>Intake vs page:</b> {data.redline.vs}
-          </p>
-          {data.redline.state.length > 0 && (
-            <>
-              <p>
-                <b>State</b>
-              </p>
-              <ul>
-                {data.redline.state.map((x) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {data.redline.federal.length > 0 && (
-            <>
-              <p>
-                <b>Federal</b>
-              </p>
-              <ul>
-                {data.redline.federal.map((x) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ul>
-            </>
+          {data.redline.state.length === 0 ? (
+            <p className="desk-muted">No state rights until the property state is on the file.</p>
+          ) : (
+            <ul>
+              {data.redline.state.map((x) => (
+                <li key={x}>{x}</li>
+              ))}
+            </ul>
           )}
           <p>
-            <b>Blockers:</b> {data.redline.blockers.length ? data.redline.blockers.join(', ') : 'none listed'}.
+            <b>Federal consumer rights</b>
           </p>
-          <span className="desk-flag">Flag · {data.redline.flag}</span>
+          {data.redline.federal.length === 0 ? (
+            <p className="desk-muted">No federal rights on this file yet.</p>
+          ) : (
+            <ul>
+              {data.redline.federal.map((x) => (
+                <li key={x}>{x}</li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
 
       <section className="desk-card desk-block desk-prose">
         <h3>Closer brief {data.brief?.approved ? '· approved' : ''}</h3>
+        <p>
+          <a className="btn-desk" href={`/api/clients/${data.id}/closer-packet?kind=review`}>Download case review PDF</a>
+          {' '}
+          <a className="desk-btn-secondary" href={`/api/clients/${data.id}/closer-packet?kind=pitch`}>Download closer pitch PDF</a>
+        </p>
+        {data.callSheet && (
+          <div>
+            <p><b>Master call sheet</b></p>
+            <p>{data.callSheet.disclaimer}</p>
+            <p><b>Opening — then stop.</b> {data.callSheet.opening}</p>
+            {data.callSheet.sections.map((section) => (
+              <div key={section.title}>
+                <p><b>{section.title}</b></p>
+                <p>{section.say}</p>
+                <ul>
+                  {section.facts.map((fact) => (
+                    <li key={fact.label}><b>{fact.label}:</b> {fact.value}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            <p><b>The ask — then stop.</b> {data.callSheet.ask}</p>
+            <p><b>Documents</b></p>
+            <ul>
+              {data.callSheet.documents.map((doc) => (
+                <li key={doc.item}><b>{doc.item}:</b> {doc.note}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         {data.brief ? (
           <>
             <p>{data.brief.body || 'No body on this brief yet.'}</p>

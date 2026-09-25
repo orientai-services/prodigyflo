@@ -68,7 +68,48 @@ function BriefBody({ brief }: { brief: BriefView }) {
         </div>
       )}
 
-      {c.redline && c.redline.length > 0 && (
+      {c.callSheet && (
+        <div>
+          <SectionLabel>Master call sheet</SectionLabel>
+          {c.callSheet.disclaimer && <p className="text-muted-foreground mb-2 text-xs">{c.callSheet.disclaimer}</p>}
+          <p className="text-sm leading-relaxed"><span className="font-medium">Opening — then stop. </span>{c.callSheet.opening}</p>
+          {c.callSheet.sections.map((section) => (
+            <div key={section.title} className="mt-3">
+              <p className="text-sm font-medium">{section.title}</p>
+              <p className="text-sm leading-relaxed">{section.say}</p>
+              {section.facts.length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {section.facts.map((fact) => (
+                    <li key={fact.label} className="text-sm"><span className="font-medium">{fact.label}: </span>{fact.value}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+          {c.callSheet.ask && <p className="mt-3 text-sm leading-relaxed"><span className="font-medium">The ask — then stop. </span>{c.callSheet.ask}</p>}
+        </div>
+      )}
+
+      {c.rights && (c.rights.state.length > 0 || c.rights.federal.length > 0) ? (
+        <div>
+          <SectionLabel>Redline (internal)</SectionLabel>
+          <p className="text-muted-foreground mb-2 text-xs">State and federal consumer rights for this file.</p>
+          {c.rights.state.length > 0 && (
+            <ul className="space-y-1">
+              {c.rights.state.map((t) => (
+                <li key={t} className="text-sm leading-relaxed">{t}</li>
+              ))}
+            </ul>
+          )}
+          {c.rights.federal.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {c.rights.federal.map((t) => (
+                <li key={t} className="text-sm leading-relaxed">{t}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : c.redline && c.redline.length > 0 ? (
         <div>
           <SectionLabel>Redline (internal)</SectionLabel>
           <ul className="space-y-1">
@@ -79,7 +120,7 @@ function BriefBody({ brief }: { brief: BriefView }) {
             ))}
           </ul>
         </div>
-      )}
+      ) : null}
 
       {c.cancelPath && c.cancelPath.length > 0 && (
         <div>
