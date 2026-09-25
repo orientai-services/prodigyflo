@@ -16,9 +16,9 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/clients/[cli
   if (!client) return new Response('Not found', { status: 404 })
 
   const built = await assemblePacket(clientId, { persist: false })
-  if (!built?.closerWin) return new Response('No file', { status: 404 })
+  if (!built?.closerInput) return new Response('No file', { status: 404 })
 
-  const model = callPacket(built.closerWin, kind as CallAudience)
+  const model = callPacket(built.closerInput, kind as CallAudience)
   const bytes = await renderCallPacket(model)
   return new Response(Buffer.from(bytes), {
     headers: {

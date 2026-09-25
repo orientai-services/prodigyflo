@@ -134,7 +134,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
   // C files (no instrument / no identity) never hit the CYS Dashboard.
   const payload = ready.closeability === 'C' ? 'BLOCKED: do not Dashboard this file.' : buildDashboardPayload(dashFields)
   const fileId = `${dashFields['Last name']}_${dashFields['First name']}_${dashFields.ZIP || 'UNKNOWN'}`
-  const win = composeCloserWinBrief({
+  const closerInput = {
     firstName: dashFields['First name'],
     lastName: dashFields['Last name'],
     city: (confirmed('city') || str(answers.city)) || addr?.city || '',
@@ -170,7 +170,8 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     trench,
     ready: ready.ready,
     missing: ready.missing,
-  })
+  }
+  const win = composeCloserWinBrief(closerInput)
   const brief = formatCloserWinBrief(win)
 
   const prior = await db.cysReadiness.findUnique({ where: { clientId }, select: { packageJson: true } })
@@ -240,6 +241,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     floor,
     closerApproved,
     closerWin: win,
+    closerInput,
     solarPacket: Boolean(product || lender || hasContract || hasFinance || (confirmed('pain_type') || str(answers.pain_type))),
   }
 }
