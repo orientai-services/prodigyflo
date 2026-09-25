@@ -278,40 +278,16 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
 
       <section className="desk-card desk-block desk-prose">
         <h3>Closer brief {data.brief?.approved ? '· approved' : ''}</h3>
-        {data.callSheet && (
-          <div>
-            <p><b>Master call sheet</b></p>
-            <p>{data.callSheet.disclaimer}</p>
-            <p><b>Opening — then stop.</b> {data.callSheet.opening}</p>
-            {data.callSheet.sections.map((section) => (
-              <div key={section.title}>
-                <p><b>{section.title}</b></p>
-                <p>{section.say}</p>
-                <ul>
-                  {section.facts.map((fact) => (
-                    <li key={fact.label}><b>{fact.label}:</b> {fact.value}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-            <p><b>The ask — then stop.</b> {data.callSheet.ask}</p>
-            <p><b>Documents</b></p>
-            <ul>
-              {data.callSheet.documents.map((doc) => (
-                <li key={doc.item}><b>{doc.item}:</b> {doc.note}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {data.brief ? (
-          <>
-            <p>{data.brief.body || 'No body on this brief yet.'}</p>
-            {data.brief.sur.length > 0 && <p>Surprise numbers: {data.brief.sur.join('; ')}.</p>}
-            {data.brief.ask && <p>First ask: {data.brief.ask}.</p>}
-            {data.brief.open && <p>Suggested open: {data.brief.open}</p>}
-            <div className="desk-actions-row" style={{ marginTop: 10 }}>
-              <a className="btn-desk" href={`/api/clients/${data.id}/closer-packet?kind=review`}>Case review PDF</a>
-              <a className="desk-btn-secondary" href={`/api/clients/${data.id}/closer-packet?kind=pitch`}>Closer pitch PDF</a>
+        <p>
+          {data.firstName} {data.lastName}
+          {[data.city, data.state].filter(Boolean).length ? ` · ${[data.city, data.state].filter(Boolean).join(', ')}` : ''}.{' '}
+          {data.ownerName ? `Closer: ${data.ownerName}.` : 'No closer assigned.'} Case review is what you show the client. Closer pitch is how you run the call.
+        </p>
+        <div className="desk-actions-row" style={{ marginTop: 10 }}>
+          <a className="btn-desk" href={`/api/clients/${data.id}/closer-packet?kind=review`}>Case review PDF</a>
+          <a className="desk-btn-secondary" href={`/api/clients/${data.id}/closer-packet?kind=pitch`}>Closer pitch PDF</a>
+          {data.brief && (
+            <>
               <button type="button" className="btn-desk" disabled={pending || data.brief.approved} onClick={() => void runApprove()}>
                 {data.brief.approved ? 'Approved' : 'Approve brief'}
               </button>
@@ -325,11 +301,9 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
               >
                 Edit
               </button>
-            </div>
-          </>
-        ) : (
-          <p className="desk-muted">Generate a brief below. Approving it does not stamp CYS ready and does not send CYS.</p>
-        )}
+            </>
+          )}
+        </div>
         {children}
       </section>
 
