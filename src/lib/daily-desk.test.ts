@@ -3,6 +3,7 @@ import {
   civilDate,
   countsAsDeskBooking,
   deskBookingToShow,
+  deskChipCloserName,
   deskMonthRange,
   isoDate,
   missingDocsLabel,
@@ -54,6 +55,13 @@ describe('zonedDate', () => {
     expect(at.toISOString()).toBe('2026-09-16T17:00:00.000Z')
     expect(civilDate(at, 'America/Los_Angeles')).toBe('2026-09-16')
     expect(timeLabel(at, 'America/Los_Angeles')).toBe('10:00')
+  })
+})
+
+describe('deskChipCloserName', () => {
+  it('uses the assigned closer even when the call itself has no owner', () => {
+    expect(deskChipCloserName('Gatsby')).toBe('Gatsby')
+    expect(deskChipCloserName(null)).toBeNull()
   })
 })
 
