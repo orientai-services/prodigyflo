@@ -18,6 +18,7 @@ export type CallPacket = {
   filename: string
   title: string
   pages: string[]
+  input: CloserWinInput
 }
 
 const CLOSER_ONLY = [
@@ -80,6 +81,7 @@ export function clientReviewPacket(input: CloserWinInput): CallPacket {
     filename: `${safeName(input)}-case-review.pdf`,
     title: `Your Case Review - ${name}`,
     pages,
+    input,
   }
 }
 
@@ -122,6 +124,7 @@ export function closerPitchPacket(input: CloserWinInput): CallPacket {
     filename: `${safeName(input)}-closer-pitch.pdf`,
     title: 'Closer pitch',
     pages,
+    input,
   }
 }
 
