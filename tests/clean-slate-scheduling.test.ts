@@ -4,6 +4,7 @@ import {scheduleAppointment} from '@/lib/scheduling'
 import {clientScope,type SessionUser} from '@/lib/rbac'
 import {ALL_PERMISSIONS,CLOSER_PERMISSIONS} from '@/lib/permissions'
 import {loadDeskBoard} from '@/lib/daily-desk-data'
+import {DESK_TIMEZONE,civilDate} from '@/lib/daily-desk'
 import {loadFilteredClients} from '@/lib/final-desk/filtered-clients'
 import {loadFinalQuestionnaire} from '@/lib/final-desk/data'
 import {SCHEMA_42_FIELDS} from '../prisma/seeds/cys'
@@ -59,6 +60,13 @@ it('counts running calls as scheduled, rejects new/past bookings, and releases t
  const ongoing=await db.appointment.create({data:{clientId:client,ownerId:closer.id,startsAt:new Date(Date.now()-60000),endsAt:new Date(Date.now()+600000)}})
  expect((await loadDeskBoard(closer)).unscheduledTotal).toBe(0)
  expect((await db.$transaction(tx=>scheduleAppointment(tx,input('during-call')))).outcome).toBe('CONFLICT')
+ const started=new Date(Date.now()-60*60*1000), ended=new Date(Date.now()-60*1000)
+ await db.appointment.update({where:{id:ongoing.id},data:{startsAt:started,endsAt:ended,status:'SCHEDULED'}})
+ const month=civilDate(started,DESK_TIMEZONE).slice(0,7)
+ const finished=await loadDeskBoard(closer,month)
+ expect(finished.days.flatMap(d=>d.chips).some(c=>c.appointmentId===ongoing.id)).toBe(true)
+ expect(finished.unscheduled.some(c=>c.clientId===client)).toBe(false)
+ expect(finished.unscheduledTotal).toBe(0)
  await db.appointment.update({where:{id:ongoing.id},data:{status:'NO_SHOW'}})
  expect((await loadDeskBoard(closer)).unscheduledTotal).toBe(1)
  expect((await db.$transaction(tx=>scheduleAppointment(tx,{...input('past'),startsAt:new Date('2020-01-01'),endsAt:new Date('2020-01-02')}))).ok).toBe(false)

@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { matchDocKind } from '@/lib/daily-desk-docs'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
-import { DESK_TIMEZONE, civilDate, monthGrid, monthTitle, parseMonth, timeLabel, zonedDate, type DeskBoard, type DeskChip } from '@/lib/daily-desk'
+import { DESK_TIMEZONE, civilDate, deskMonthRange, monthGrid, monthTitle, parseMonth, timeLabel, type DeskBoard, type DeskChip } from '@/lib/daily-desk'
 
 export function canReadDesk(user: SessionUser): boolean {
   return can(user, 'appointments:read')
@@ -16,12 +16,13 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
   const today = civilDate(now, timezone)
   const { year, monthIndex, key } = parseMonth(monthRaw || today.slice(0, 7))
   const cells = monthGrid(year, monthIndex)
-  const rangeStart = zonedDate(cells[0]!.iso, '00:00', timezone)
-  const lastDay = new Date(`${cells.at(-1)!.iso}T12:00:00Z`)
-  lastDay.setUTCDate(lastDay.getUTCDate() + 1)
-  const rangeEnd = zonedDate(lastDay.toISOString().slice(0, 10), '00:00', timezone)
+  const { rangeStart, rangeEnd } = deskMonthRange(key, timezone)
   const scope = clientScope(user)
   const canAssign = user.role === 'SUPER_ADMIN'
+  const booked = {
+    status: { in: ['SCHEDULED', 'CONFIRMED'] as ('SCHEDULED' | 'CONFIRMED')[] },
+    OR: [{ endsAt: { gt: now } }, { startsAt: { gte: rangeStart, lt: rangeEnd } }],
+  }
   const clientSelect = {
     id: true, firstName: true, lastName: true, email: true, phone: true,
     owner: { select: { name: true } },
@@ -36,10 +37,10 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
       select: { id: true, startsAt: true, updatedAt: true, status: true, owner: { select: { name: true } }, client: { select: clientSelect } },
     }),
     db.client.findMany({
-      where: { AND: [scope, { status: 'ACTIVE', appointments: { none: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: now } } } }] },
+      where: { AND: [scope, { status: 'ACTIVE', appointments: { none: booked } }] },
       orderBy: [{ lastActivityAt: 'desc' }, { id: 'asc' }], take: 20, select: clientSelect,
     }),
-    db.client.count({ where: { AND: [scope, { status: 'ACTIVE', appointments: { none: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: now } } } }] } }),
+    db.client.count({ where: { AND: [scope, { status: 'ACTIVE', appointments: { none: booked } }] } }),
     canAssign ? db.client.count({ where: { AND: [scope, { ownerId: null, status: 'ACTIVE' }] } }) : Promise.resolve(0),
   ])
   const canonicalKey = (key: string) => matchDocKind(key)?.key ?? key

@@ -176,3 +176,46 @@ export function missingDocsLabel(count: number): string {
   if (count <= 0) return 'docs in'
   return `${count} missing`
 }
+
+/** Inclusive start, exclusive end of the month grid the desk is showing. */
+export function deskMonthRange(monthKey: string, timeZone: string): { rangeStart: Date; rangeEnd: Date } {
+  const { year, monthIndex } = parseMonth(monthKey)
+  const cells = monthGrid(year, monthIndex)
+  const rangeStart = zonedDate(cells[0]!.iso, '00:00', timeZone)
+  const lastDay = new Date(`${cells.at(-1)!.iso}T12:00:00Z`)
+  lastDay.setUTCDate(lastDay.getUTCDate() + 1)
+  const rangeEnd = zonedDate(lastDay.toISOString().slice(0, 10), '00:00', timeZone)
+  return { rangeStart, rangeEnd }
+}
+
+/**
+ * A call occupies the board when it has not ended, or when its start falls on
+ * the month currently shown. A finished booking must not sit in Unscheduled
+ * and on that month's calendar at the same time.
+ */
+export function countsAsDeskBooking(
+  appt: { status: string; startsAt: Date; endsAt: Date },
+  now: Date,
+  rangeStart: Date,
+  rangeEnd: Date,
+): boolean {
+  return (
+    (appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') &&
+    (appt.endsAt > now || (appt.startsAt >= rangeStart && appt.startsAt < rangeEnd))
+  )
+}
+
+/** Soonest call that has not ended. A finished booking on this month is only the fallback. */
+export function deskBookingToShow<T extends { status: string; startsAt: Date; endsAt: Date }>(
+  appointments: readonly T[],
+  now: Date,
+  rangeStart: Date,
+  rangeEnd: Date,
+): T | undefined {
+  const qualifying = appointments.filter((appt) => countsAsDeskBooking(appt, now, rangeStart, rangeEnd))
+  const upcoming = qualifying
+    .filter((appt) => appt.endsAt > now)
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
+  if (upcoming.length) return upcoming[0]
+  return [...qualifying].sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0]
+}
