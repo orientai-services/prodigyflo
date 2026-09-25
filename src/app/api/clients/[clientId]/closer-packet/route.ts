@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/clients/[cli
   const stored = await readStoredPacket(clientId, kind)
   if (stored) {
     const filename = kind === 'review' ? `${client.lastName}-case-review.pdf` : `${client.lastName}-closer-pitch.pdf`
-    return pdfResponse(stored, filename)
+    return pdfResponse(Buffer.from(stored), filename)
   }
 
   const built = await assemblePacket(clientId, { persist: false })
@@ -28,10 +28,10 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/clients/[cli
 
   const model = callPacket(built.closerInput, kind as CallAudience)
   const bytes = await renderCallPacket(model)
-  return pdfResponse(bytes, model.filename)
+  return pdfResponse(Buffer.from(bytes), model.filename)
 }
 
-async function readStoredPacket(clientId: string, kind: 'review' | 'pitch'): Promise<Uint8Array | null> {
+async function readStoredPacket(clientId: string, kind: 'review' | 'pitch'): Promise<Buffer | null> {
   let key: string
   try {
     key = closerPacketKey(clientId, kind)
@@ -41,12 +41,12 @@ async function readStoredPacket(clientId: string, kind: 'review' | 'pitch'): Pro
   const storage = getFileStorage()
   const stat = await storage.stat(key)
   if (!stat) return null
-  return new Uint8Array(await storage.get(key))
+  return storage.get(key)
 }
 
-function pdfResponse(bytes: Uint8Array, filename: string) {
+function pdfResponse(bytes: Buffer, filename: string) {
   const safe = filename.replace(/[^A-Za-z0-9._-]+/g, '')
-  return new Response(bytes, {
+  return new Response(new Uint8Array(bytes), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${safe}"`,
