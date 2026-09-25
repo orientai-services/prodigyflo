@@ -3,7 +3,7 @@ import type { CloserWinInput } from './closer-win'
 import { composeMasterCallSheet } from './call-sheet'
 import { leverFor, STATE_LEVERS } from './state-levers'
 import { str } from './schema'
-import type { CallPacket } from './call-pdf-model'
+import { closerCredit, type CallPacket } from './call-pdf-model'
 
 const NAVY = rgb(11 / 255, 31 / 255, 58 / 255)
 const TEAL = rgb(46 / 255, 196 / 255, 182 / 255)
@@ -60,6 +60,10 @@ function statute(input: CloserWinInput): string {
   const name = leverFor(code).udap
   const hit = name.match(/\(([^)]+)\)/)
   return hit?.[1] ?? leverFor(code).name
+}
+
+function credit(input: CloserWinInput): string {
+  return closerCredit(input)
 }
 
 function stateName(input: CloserWinInput): string {
@@ -129,7 +133,7 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
   paragraph(cover, `Signed ${signed}  |  Term ${term} months  |  Escalator ${escalator === 'Not on file' ? escalator : escalator + '%'}`, 48, y - 8, 500, 11, font, WHITE)
   text(cover, 'File authorized  |  Processing fee on the engagement', 48, 150, 11, bold, GOLD)
   text(cover, 'Working figure and fee print only when they are on this file', 48, 132, 10, font, WHITE)
-  text(cover, 'Closer  |  Director of Finance  |  Cancel Your Solar', 48, 96, 11, bold, GOLD)
+  text(cover, credit(input), 48, 96, 11, bold, GOLD)
   text(cover, 'This review is not legal advice. Counsel evaluates independently.', 48, 78, 8, font, rgb(0.75, 0.8, 0.84))
 
   const signedPage = doc.addPage([W, H])
@@ -169,7 +173,7 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
     signedPage.drawCircle({ x: 332, y: by + 2, size: 3, color: TEAL })
     by = paragraph(signedPage, bullet, 344, by, 210, 9, font, NAVY, 2) - 8
   }
-  text(signedPage, 'Confidential case review  |  Not legal advice', 36, 10, 7, font, WHITE)
+  text(signedPage, `${credit(input)}  |  Not legal advice`, 36, 10, 7, font, WHITE)
 
   const changed = doc.addPage([W, H])
   chrome(changed, font, bold, headerLeft, right, 'Page 3 of 8')
@@ -276,7 +280,7 @@ function drawPitch(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Closer
   const page1 = doc.addPage([W, H])
   chrome(page1, font, bold, 'CANCEL YOUR SOLAR  |  MASTER CALL SHEET / CLOSER', `${name}  |  1/3`, '')
   text(page1, `${name} - Closer Script`, 36, 720, 18, bold)
-  text(page1, 'Share the case review PDF. This sheet stays on YOUR screen.', 36, 702, 9, font, MUTED)
+  text(page1, `${credit(input)}. Share the case review PDF. This sheet stays on YOUR screen.`, 36, 702, 9, font, MUTED)
   page1.drawRectangle({ x: 32, y: 630, width: 548, height: 62, color: LOCK })
   text(page1, 'NUMBERS LOCK (do not improvise)', 44, 674, 8, bold, GOLD)
   paragraph(page1, `${sheet.sections[2]?.say ?? ''} Do not drop the fee. Do not invent a number that is not on this engagement.`, 44, 658, 520, 8, font, NAVY, 2)

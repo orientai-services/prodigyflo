@@ -36,6 +36,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
         },
       },
       contracts: { take: 1 },
+      owner: { select: { name: true, title: true } },
       cysFieldValues: { where: { status: 'VERIFIED', verifiedById: { not: null } } },
     },
   })
@@ -170,6 +171,8 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     trench,
     ready: ready.ready,
     missing: ready.missing,
+    closerName: client.owner?.name || '',
+    closerTitle: client.owner?.title || '',
   }
   const win = composeCloserWinBrief(closerInput)
   const brief = formatCloserWinBrief(win)

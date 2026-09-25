@@ -47,6 +47,9 @@ export type CloserWinInput = {
   trench: Trench
   ready: boolean
   missing: string[]
+  /** Assigned closer. Empty until someone is assigned. */
+  closerName?: string
+  closerTitle?: string
 }
 
 export type CloserWinBrief = {

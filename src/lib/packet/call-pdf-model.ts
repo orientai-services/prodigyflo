@@ -38,6 +38,12 @@ function statuteName(state: string): string {
   return leverFor(state).udap
 }
 
+export function closerCredit(input: CloserWinInput): string {
+  const name = str(input.closerName) || 'Unassigned'
+  const title = str(input.closerTitle)
+  return title ? `${name} | ${title} | Cancel Your Solar` : `${name} | Cancel Your Solar`
+}
+
 function safeName(input: CloserWinInput): string {
   const last = str(input.lastName).replace(/[^A-Za-z0-9]+/g, '') || 'Client'
   return last
@@ -53,6 +59,7 @@ export function clientReviewPacket(input: CloserWinInput): CallPacket {
       'Your Case Review',
       `Prepared for ${name}`,
       facts(sheet.sections[0]?.facts ?? []),
+      closerCredit(input),
       'This review is not legal advice. Counsel evaluates independently.',
     ].join('\n\n'),
     ['What You Signed', 'The contract', facts(sheet.sections[0]?.facts ?? []), 'What this means', sheet.sections[0]?.say ?? ''].join('\n\n'),
@@ -92,7 +99,7 @@ export function closerPitchPacket(input: CloserWinInput): CallPacket {
   const pages = [
     [
       'MASTER CALL SHEET / CLOSER',
-      'This sheet stays on your screen. Share the case review, not this sheet.',
+      `${closerCredit(input)}. This sheet stays on your screen. Share the case review, not this sheet.`,
       `Opening. ${sheet.opening}`,
       `What you signed. ${sheet.sections[0]?.say ?? ''}`,
       `What changed. ${sheet.sections[1]?.say ?? ''}`,

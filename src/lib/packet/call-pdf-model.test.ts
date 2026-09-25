@@ -45,6 +45,12 @@ describe('case review and closer pitch', () => {
     expect(review.pages.join('\n')).toMatch(/Documents We Still Need/)
     expect(reviewLeaksCloserScript(review)).toEqual([])
     expect(review.pages.join('\n')).not.toMatch(/66,812|1,288/)
+    const assigned = clientReviewPacket({ ...florida, closerName: 'Alex Rivera', closerTitle: 'Closer' })
+    expect(assigned.pages.join('\n')).toMatch(/Alex Rivera/)
+    expect(assigned.pages.join('\n')).not.toMatch(/Gatsby/)
+    const pitch = closerPitchPacket({ ...florida, closerName: 'Alex Rivera' })
+    expect(pitch.pages.join('\n')).toMatch(/Alex Rivera/)
+    expect(pitch.pages.join('\n')).not.toMatch(/Gatsby/)
   })
 
   it('names Nevada on a Nevada pitch and does not cite FDUTPA', () => {
