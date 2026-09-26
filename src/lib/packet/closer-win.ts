@@ -36,6 +36,12 @@ export type CloserWinInput = {
   payoffEstimated?: boolean
   /** Financier printed on the install agreement when the Lender field is still empty. */
   financierOnInstall?: string
+  /** Monthly electric amount. A uploaded bill wins over a typed intake answer. */
+  utilityMonthly?: string
+  /** True when utilityMonthly came from an uploaded bill, not a typed answer. */
+  utilityFromDocument?: boolean
+  /** Client said they pay the solar payment and the electric bill. */
+  payingBoth?: boolean
   effectiveDate?: string
   firstYearMonthly?: string
   escalation?: string
