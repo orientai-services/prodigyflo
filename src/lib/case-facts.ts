@@ -95,7 +95,10 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     ? fact('solar_contract', 'contract_counterparty', 'lender_confirmed')
       ?? fact('finance_agreement', 'lender_name')
       ?? fact('finance_agreement', 'contract_counterparty')
-    : fact(type, 'lender_name', 'lender_confirmed', 'lender_confirmed')
+    : fact('finance_agreement', 'lender_name', 'lender_confirmed', 'lender_confirmed')
+      ?? fact('lender_statement', 'lender_name')
+      ?? fact('solar_contract', 'contract_counterparty')
+      ?? typed(['lender_servicer', 'lender_guess', 'lender'])
   const kwFact = fact('proposal', 'system_size_kw') ?? fact('solar_contract', 'system_size_kw') ?? fact('finance_agreement', 'system_size_kw') ?? fact('production_report', 'system_size_kw', undefined, 'system_size_kw')
   const kw = kwFact?.value || ''
   const creditBand =

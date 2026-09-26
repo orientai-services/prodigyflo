@@ -117,7 +117,8 @@ export function collectFinanceFacts(
     lender: firstFilled(
       loan('lender_name'),
       solar('lender_name'),
-      answer(answers, 'lender_confirmed', 'lender_servicer'),
+      solar('contract_counterparty'),
+      answer(answers, 'lender_confirmed', 'lender_servicer', 'lender_guess'),
     ),
     escalator: isPpaOrLease(kind)
       ? firstFilled(solar('escalator_rate'), loan('escalator_rate'), answer(answers, 'escalator_rate'))
