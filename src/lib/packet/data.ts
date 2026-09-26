@@ -196,6 +196,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     missing: ready.missing,
     closerName: client.owner?.name || '',
     closerTitle: client.owner?.title || '',
+    financierOnInstall: extracted(docs, 'solar_contract', 'contract_counterparty'),
   }
   const win = composeCloserWinBrief(closerInput)
   const brief = formatCloserWinBrief(win)

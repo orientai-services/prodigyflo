@@ -8,6 +8,7 @@
 
 import type { CloserWinInput } from './closer-win'
 import { federalLevers, leverFor, stateLeversForFile, STATE_LEVERS } from './state-levers'
+import { partyStatus, PARTY_STATUS_AS_OF } from './party-status'
 import { str } from './schema'
 import { normalizeProduct } from '@/lib/desk-extract'
 
@@ -88,6 +89,43 @@ export function consumerRightsPoster(input: CloserWinInput): ConsumerRightsPoste
   return { state, federal }
 }
 
+function statusFact(label: string, name: string): CallSheetFact {
+  const found = partyStatus(name)
+  return { label, value: found ? `${found.label}: ${found.chip}` : 'Not confirmed' }
+}
+
+function changedSay(input: CloserWinInput, installer: string, counterparty: string): string {
+  const installerRecord = partyStatus(installer)
+  const lenderRecord = partyStatus(counterparty)
+  const financierRecord = partyStatus(input.financierOnInstall)
+  const named = [installerRecord, lenderRecord, financierRecord && financierRecord !== lenderRecord ? financierRecord : null].filter((item): item is NonNullable<typeof item> => Boolean(item))
+  const clientSaidGone = input.flags.includes('installer_gone') || input.painType === 'installer-gone'
+  if (!named.length && !clientSaidGone) {
+    return 'No servicer change or warrantor failure is confirmed on this file. Do not invent a bankruptcy, a successor, or a warranty gap.'
+  }
+  const lines = [
+    `Company status is from the court registry checked ${PARTY_STATUS_AS_OF}. It is not a line copied from this client's PDF.`,
+    clientSaidGone ? 'The client also said the installer is gone or unresponsive.' : '',
+    ...named.map(item => item.record),
+  ]
+  return lines.filter(Boolean).join(' ')
+}
+
+function changedFacts(input: CloserWinInput, installer: string, counterparty: string): CallSheetFact[] {
+  const facts = [
+    { label: 'Installer', value: installer },
+    statusFact('Installer status', installer),
+    { label: 'Counterparty', value: counterparty },
+    statusFact('Counterparty status', counterparty),
+  ]
+  const financier = str(input.financierOnInstall)
+  if (financier && financier.toLowerCase() !== counterparty.toLowerCase()) {
+    facts.push({ label: 'Financier on the install agreement', value: financier })
+    facts.push(statusFact('Financier status', financier))
+  }
+  return facts
+}
+
 export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
   const first = shown(input.firstName) === 'MISSING' ? 'there' : str(input.firstName)
   const product = normalizeProduct(input.product) || 'MISSING'
@@ -130,13 +168,8 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
     },
     {
       title: 'What changed',
-      say: input.flags.includes('installer_gone') || input.painType === 'installer-gone'
-        ? 'The file says the installer is gone or unresponsive. Billing and the warranty are not the same party unless this contract says so. Do not name a bankruptcy or a successor that is not on this file.'
-        : 'No servicer change or warrantor failure is confirmed on this file. Do not invent a bankruptcy, a successor, or a warranty gap.',
-      facts: [
-        { label: 'Installer', value: installer },
-        { label: 'Counterparty', value: counterparty },
-      ],
+      say: changedSay(input, installer, counterparty),
+      facts: changedFacts(input, installer, counterparty),
     },
     {
       title: 'The money',

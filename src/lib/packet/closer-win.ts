@@ -11,6 +11,7 @@ import { pathLabel, trenchLabel } from './route'
 import { str, type Path, type Trench } from './schema'
 import { federalLevers, leverFor, stateLeversForFile } from './state-levers'
 import { composeMasterCallSheet, consumerRightsPoster, type ConsumerRightsPoster, type MasterCallSheet } from './call-sheet'
+import { partyStatus } from './party-status'
 import { normalizeProduct } from '@/lib/desk-extract'
 
 export type CloserWinInput = {
@@ -33,6 +34,8 @@ export type CloserWinInput = {
   interestPaid?: string
   /** True when payoff and interest paid are amortization, not a statement. */
   payoffEstimated?: boolean
+  /** Financier printed on the install agreement when the Lender field is still empty. */
+  financierOnInstall?: string
   effectiveDate?: string
   firstYearMonthly?: string
   escalation?: string
@@ -79,7 +82,7 @@ function finish(input: CloserWinInput, brief: Omit<CloserWinBrief, 'callSheet' |
   return { ...brief, callSheet: composeMasterCallSheet(input), rights: consumerRightsPoster(input) }
 }
 
-const DEAD_LENDER = /sunlight|mosaic/i
+
 const PAIN: Record<string, string> = {
   'bills-didnt-drop': 'savings never showed up',
   'two-bills': 'paying solar and a full utility bill',
@@ -139,7 +142,9 @@ export function composeCloserWinBrief(input: CloserWinInput): CloserWinBrief {
   const signed = present(input.signedDate) ? str(input.signedDate) : 'MISSING'
   const cooling = threeDayStatus(input.signedDate)
   const pain = PAIN[input.painType] || str(input.painNarrative) || 'unspecified'
-  const deadLender = DEAD_LENDER.test(lender)
+  const lenderRecord = partyStatus(lender)
+  const installerRecord = partyStatus(installer)
+  const distressed = lenderRecord?.standing === 'chapter7' || lenderRecord?.standing === 'chapter11_wound_down' || lenderRecord?.standing === 'chapter11_emerged'
   const st = leverFor(input.state)
   const instrument = input.hasContract || input.hasFinance
   const inHomeOrTablet =
@@ -203,9 +208,8 @@ export function composeCloserWinBrief(input: CloserWinInput): CloserWinBrief {
   if (input.flags.includes('hidden_fee') || input.flags.includes('tax_credit_drop')) {
     redline.push('Dealer-fee or tax-credit representation. Only quote APR / dealer fee / ITC language that is on a finance page. Otherwise MISSING.')
   }
-  if (deadLender) {
-    redline.push(`${lender} is a distressed / post-bankruptcy solar lender pattern. Settlement and UCC-release files exist in that book. That is pattern, not a promise on this file.`)
-  }
+  if (lenderRecord && distressed) redline.push(lenderRecord.record)
+  if (installerRecord && (installerRecord.standing === 'chapter7' || installerRecord.standing === 'chapter11_wound_down')) redline.push(installerRecord.record)
 
   redline.push(...federalLevers({
     product,
@@ -239,7 +243,8 @@ export function composeCloserWinBrief(input: CloserWinInput): CloserWinBrief {
   cancelPath.push(`Still needed to raise the ceiling: ${pulls.join('; ')}.`)
 
   const whyThisFile: string[] = []
-  if (deadLender) whyThisFile.push(`${lender} has a public settlement / cancellation pattern after distress. Use it as path, not as a guaranteed recovery.`)
+  if (distressed && lenderRecord) whyThisFile.push(`${lender}: ${lenderRecord.chip}. ${lenderRecord.record}`)
+  if (installerRecord && installerRecord.standing === 'chapter7') whyThisFile.push(`${installer}: ${installerRecord.chip}. ${installerRecord.record}`)
   if (instrument) whyThisFile.push('A signed instrument is on file — this is not a no-paper C file.')
   if (present(input.contractValue) || present(input.monthly)) {
     whyThisFile.push(`Economics on the packet: ${value !== 'MISSING' ? value : ''} ${monthly !== 'MISSING' ? `${monthly}/mo` : ''} ${term !== 'MISSING' ? term : ''}`.trim())
