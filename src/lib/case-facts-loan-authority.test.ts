@@ -190,7 +190,7 @@ describe('loan-map document authority on FinalDesk cells', () => {
     expect(cell(facts, 'Monthly payment')?.cell).toMatchObject({ kind: 'value', amount: 350 })
     expect(cell(facts, 'First payment date')?.cell).toMatchObject({ kind: 'value', display: '2022-12-12' })
     expect(cell(facts, 'Term months')?.cell).toMatchObject({ kind: 'value', display: '300' })
-    expect(JSON.stringify(cell(facts, 'Lender')?.cell)).not.toMatch(/GoodLeap/)
+    expect(cell(facts, 'Lender')?.cell).toMatchObject({ kind: 'value', display: 'GoodLeap' })
     const amort = amortize({
       firstPayDate: '2022-12-12', termMonths: 300, aprPercent: 2.99, monthlyPayment: 350,
       principal: 36819.55, now,
@@ -204,7 +204,7 @@ describe('loan-map document authority on FinalDesk cells', () => {
       extractions: [{
         detectedTypeKey: 'solar_contract',
         status: 'COMPLETED',
-        fields: [field('product_type', 'loan'), field('interest_rate', '4.60'), field('amount_financed', '1000')],
+        fields: [field('product_type', 'loan'), field('interest_rate', '4.60'), field('amount_financed', '1000'), field('contract_counterparty', 'Other Finance Co')],
       }],
     }
     const lender = {

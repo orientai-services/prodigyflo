@@ -80,7 +80,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
   const installer = extracted(docs, 'solar_contract', 'installer_name')
   const lender = confirmed('lender_confirmed') || (isPpaOrLease
     ? extracted(docs, 'solar_contract', 'contract_counterparty')
-    : extracted(docs, type, 'lender_name') || extracted(docs, 'lender_statement', 'lender_name'))
+    : extracted(docs, 'finance_agreement', 'lender_name') || extracted(docs, 'lender_statement', 'lender_name') || extracted(docs, 'solar_contract', 'contract_counterparty') || str(answers.lender_servicer) || str(answers.lender_guess))
   const monthly = extracted(docs, 'lender_statement', 'monthly_payment') || extracted(docs, type, 'monthly_payment') || loanAmount('Monthly payment') || confirmed('monthly_guess') || str(answers.monthly_guess) || str(answers.monthly_solar_payment)
   const firstYearMonthly = isPpaOrLease ? extracted(docs, 'solar_contract', 'first_year_monthly_payment') : ''
   const statedYears = extracted(docs, type, 'term_years') || (isPpaOrLease ? '' : extracted(docs, 'solar_contract', 'term_years'))
