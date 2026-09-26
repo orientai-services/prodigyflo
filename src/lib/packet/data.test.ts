@@ -7,6 +7,7 @@ vi.mock('@/lib/db', () => ({ db: {
   $executeRaw: mock.execute,
 } }))
 import { assemblePacket } from './data'
+import { composeMasterCallSheet } from './call-sheet'
 
 function client(verification = 'UNVERIFIED') {
   return {
@@ -57,6 +58,14 @@ describe('closing packet PPA provenance', () => {
     expect(packet?.payload).toContain('Contract effective date: 2018-05-30')
     expect(packet?.payload).toContain('Actual in-service date: MISSING')
     expect(packet?.payload).toContain('Current payoff: MISSING')
+    expect(Number(packet?.closerInput.payoff)).toBeGreaterThan(0)
+    const sheet = composeMasterCallSheet(packet!.closerInput)
+    const numbers = sheet.sections.find(section => section.title === 'The money')
+    expect(numbers?.facts.find(fact => fact.label === 'Working figure')?.value).toMatch(/^\$/)
+    expect(numbers?.facts.find(fact => fact.label === 'Agreed processing fee')?.value).toMatch(/^\$/)
+    expect(numbers?.say).toMatch(/yearly increase/)
+    expect(sheet.sections.find(section => section.title === 'Two options')?.facts.find(fact => fact.label === 'Lien')?.value).toMatch(/Nevada/)
+    expect(sheet.sections.find(section => section.title === 'Two options')?.facts.find(fact => fact.label === 'Lien')?.value).toMatch(/do not disclose a UCC lien/)
     expect(packet?.trench).toBe('unknown')
   })
 

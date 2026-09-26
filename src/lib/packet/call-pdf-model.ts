@@ -7,7 +7,7 @@
  */
 
 import type { CloserWinInput } from './closer-win'
-import { composeMasterCallSheet, consumerRightsPoster } from './call-sheet'
+import { composeMasterCallSheet, consumerRightsPoster, lienStatusCopy } from './call-sheet'
 import { leverFor, STATE_LEVERS } from './state-levers'
 import { str } from './schema'
 
@@ -75,7 +75,7 @@ export function clientReviewPacket(input: CloserWinInput): CallPacket {
     [
       'Where We Go From Here',
       sheet.sections[4]?.say ?? '',
-      `Lien status. Quote only the lien language in this contract. Counsel pulls the county record and the ${stateName} UCC registry. Do not invent a filing number.`,
+      `Lien status. ${lienStatusCopy(input.state, input.lienQuote)}`,
     ].join('\n\n'),
     [
       'Documents We Still Need',

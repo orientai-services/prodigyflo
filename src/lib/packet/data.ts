@@ -21,6 +21,20 @@ function extracted(docs: ExtractableDoc[], typeKey: string, fieldKey: string): s
   return fact.value || ''
 }
 
+function disclosedLien(docs: ExtractableDoc[]): string {
+  for (const doc of docs) {
+    for (const extraction of doc.extractions ?? []) {
+      if (extraction.sourceActive === false) continue
+      for (const field of extraction.fields ?? []) {
+        if (!/ucc|lien|fixture/i.test(field.key)) continue
+        const value = (field.correctedValue || field.value || '').trim()
+        if (value && !/^(none|n\/a|not disclosed|unknown)$/i.test(value)) return value
+      }
+    }
+  }
+  return ''
+}
+
 export async function assemblePacket(clientId: string, opts?: { persist?: boolean }) {
   const client = await db.client.findUnique({
     where: { id: clientId },
@@ -61,7 +75,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
   const product = normalizeProduct(confirmed('product_confirmed') || extracted(docs, 'solar_contract', 'product_type') || extracted(docs, 'finance_agreement', 'product_type'))
   const isPpaOrLease = product === 'ppa' || product === 'lease'
   const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
-  const loanFacts = isPpaOrLease ? null : resolveCaseFacts({
+  const loanFacts = resolveCaseFacts({
     organization: { timezone: DESK_TIMEZONE },
     surveyResponses: client.surveyResponses,
     addresses: client.addresses,
@@ -174,9 +188,10 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     apr,
     contractValue: financed,
     payoff: confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount') || loanAmount('Remaining balance') || loanAmount('Estimated remaining balance'),
-    firstPayDate: isPpaOrLease ? '' : loanText('First payment date'),
+    firstPayDate: loanText('First payment date'),
     interestPaid: isPpaOrLease ? '' : loanAmount('Interest paid to date') || loanAmount('Estimated interest paid'),
-    payoffEstimated: !isPpaOrLease && !confirmed('current_payoff') && !extracted(docs, 'payoff_letter', 'payoff_amount') && !loanAmount('Remaining balance') && Boolean(loanAmount('Estimated remaining balance')),
+    payoffEstimated: !confirmed('current_payoff') && !extracted(docs, 'payoff_letter', 'payoff_amount') && !loanAmount('Remaining balance') && Boolean(loanAmount('Estimated remaining balance')),
+    lienQuote: disclosedLien(docs),
     signedDate: signatureDate,
     painType: (confirmed('pain_type') || str(answers.pain_type)),
     painNarrative: (confirmed('pain_narrative') || str(answers.pain_narrative)),
