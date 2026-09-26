@@ -11,6 +11,7 @@ import { federalLevers, leverFor, stateLeversForFile, STATE_LEVERS } from './sta
 import { partyStatus, PARTY_STATUS_AS_OF } from './party-status'
 import { str } from './schema'
 import { normalizeProduct } from '@/lib/desk-extract'
+import { dealerFeeFromAmount } from '@/lib/daily-desk-finance'
 
 export type CallSheetFact = { label: string; value: string }
 export type CallSheetSection = { title: string; say: string; facts: CallSheetFact[] }
@@ -89,6 +90,37 @@ export function consumerRightsPoster(input: CloserWinInput): ConsumerRightsPoste
   return { state, federal }
 }
 
+function moneyOnFile(raw: string | undefined): string {
+  const shownValue = shown(raw)
+  if (shownValue === 'MISSING') return ''
+  return money(shownValue)
+}
+
+function beforeBill(input: CloserWinInput): string {
+  const amount = moneyOnFile(input.utilityMonthly)
+  if (!amount) return 'Not on file'
+  return input.utilityFromDocument ? `Utility bill on file: ${amount}` : `Electric bill entered in intake: ${amount}`
+}
+
+function afterBill(input: CloserWinInput, monthly: string): string {
+  const solar = monthly === 'MISSING' ? '' : monthly
+  const electric = moneyOnFile(input.utilityMonthly)
+  const lines = [
+    solar ? `Solar payment: ${solar}` : 'Solar payment is not on this file.',
+    input.payingBoth && electric ? `Still paying the electric bill: ${electric}` : '',
+  ].filter(Boolean)
+  return lines.join(' ')
+}
+
+function billSay(input: CloserWinInput, monthly: string): string {
+  const before = beforeBill(input)
+  const after = afterBill(input, monthly)
+  if (before === 'Not on file' && (!monthly || monthly === 'MISSING')) {
+    return 'Before and after are not on this file. Do not invent a bill amount or a savings number.'
+  }
+  return `Before: ${before}. After: ${after}. Do not add a savings number that is not on the bill or in what the client entered.`
+}
+
 function statusFact(label: string, name: string): CallSheetFact {
   const found = partyStatus(name)
   return { label, value: found ? `${found.label}: ${found.chip}` : 'Not confirmed' }
@@ -142,6 +174,11 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
   const interestPaid = shown(input.interestPaid) === 'MISSING' ? '' : money(input.interestPaid)
   const firstPay = shown(input.firstPayDate) === 'MISSING' ? '' : shown(input.firstPayDate)
   const loanLine = [financed && `Amount financed ${financed}.`, apr && `APR ${apr}.`, interestPaid && `Interest paid to date ${interestPaid}.`, firstPay && `First payment ${firstPay}.`].filter(Boolean).join(' ')
+  const feeCell = dealerFeeFromAmount(input.payoff)
+  const fee = feeCell.kind === 'value' ? feeCell.display : ''
+  const workingSay = payoff === 'MISSING'
+    ? 'The working figure is the remaining balance. It is not on this file, so the 30% processing fee is not on this file.'
+    : `The working figure is the remaining balance, ${payoff}. The agreed processing fee is 30% of that figure${fee ? `: ${fee}` : ''}.`
   const state = knownState(input.state) ? leverFor(input.state) : null
   const place = [shown(input.city), shown(input.state)].filter((v) => v !== 'MISSING').join(', ') || 'MISSING'
 
@@ -173,11 +210,7 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
     },
     {
       title: 'The money',
-      say: `${payoff === 'MISSING'
-        ? 'A remaining payoff or buyout is MISSING. Do not use a face total of payments as a payoff, and do not quote a processing fee until the engagement states it.'
-        : input.payoffEstimated
-          ? `Estimated remaining balance is ${payoff}. That figure is amortization from the first payment date. It is not a payoff quote.`
-          : `The working figure on file is ${payoff}. Use that figure. Do not substitute a face total of payments.`} ${loanLine}`.trim(),
+      say: `${workingSay} ${input.payoffEstimated ? 'That remaining balance is amortization from the first payment date. It is not a payoff quote.' : ''} ${loanLine}`.trim(),
       facts: [
         { label: 'Payment on file', value: monthly },
         ...(financed ? [{ label: 'Amount financed', value: financed }] : []),
@@ -185,26 +218,29 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
         ...(interestPaid ? [{ label: input.payoffEstimated ? 'Estimated interest paid' : 'Interest paid to date', value: interestPaid }] : []),
         ...(firstPay ? [{ label: 'First payment date', value: firstPay }] : []),
         { label: input.payoffEstimated ? 'Estimated remaining balance' : 'Payoff / buyout', value: payoff },
+        { label: 'Working figure', value: payoff === 'MISSING' ? 'MISSING' : payoff },
+        { label: 'Agreed processing fee', value: fee || 'MISSING' },
       ],
     },
     {
       title: 'Reality check',
-      say: input.hasUtility
-        ? 'A utility bill is on file. Compare it to what the contract estimated. Do not invent a before-and-after average that is not on the bill.'
-        : 'Utility before/after and production are MISSING. Do not quote a savings amount or a kilowatt-hour shortfall.',
-      facts: [{ label: 'Utility bill on file', value: input.hasUtility ? 'Yes' : 'MISSING' }],
+      say: billSay(input, monthly),
+      facts: [
+        { label: 'Before', value: beforeBill(input) },
+        { label: 'After', value: afterBill(input, monthly) },
+      ],
     },
     {
       title: 'Two options',
-      say: 'Option A is the status quo on this contract. Option B is putting the file in front of counsel. Do not promise cancellation, a reduced buyout, or a dollar of exposure avoided.',
+      say: `If you stay, you keep the contract on this file.${payoff === 'MISSING' ? '' : ` The working figure is ${payoff}.`} If you open the file with counsel, the agreed processing fee is 30% of that working figure${fee ? `, ${fee}` : ''}. Counsel evaluates independently. Do not promise cancellation, a reduced buyout, or a dollar of exposure avoided.`,
       facts: [
-        { label: 'Stay', value: 'Keep the contract that is on file. Do not invent the remaining rent.' },
-        { label: 'File', value: 'Counsel evaluates independently. Fee is only the fee written on the engagement.' },
+        { label: 'Stay', value: payoff === 'MISSING' ? 'Keep the contract that is on file. The remaining balance is not on this file.' : `Keep the contract. Working figure ${payoff}.` },
+        { label: 'File', value: fee ? `Open the file with counsel. Agreed processing fee ${fee}, which is 30% of the working figure.` : 'The 30% fee prints when the remaining balance is on this file.' },
       ],
     },
   ]
 
-  const ask = `${first} — do I have your authorization to open the legal file, engage counsel under the processing fee written on the engagement, and send the document checklist? Then stop talking.`
+  const ask = `${first} — do I have your authorization to open the legal file, engage counsel under the agreed processing fee${fee ? ` of ${fee}, 30% of the working figure` : ''}, and send the document checklist? Then stop talking.`
 
   const documents: CallSheetDoc[] = [
     { item: 'Executed agreement', note: input.hasContract || input.hasFinance ? 'On file' : 'Still needed' },

@@ -213,8 +213,10 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
     ...(shown(input.firstPayDate, '') ? [['First payment date', shown(input.firstPayDate)] as [string, string]] : []),
     ...(shown(input.interestPaid, '') ? [[input.payoffEstimated ? 'Estimated interest paid' : 'Interest paid to date', money(input.interestPaid)] as [string, string]] : []),
     [input.payoffEstimated ? 'Estimated remaining balance' : 'Payoff / buyout', money(input.payoff)],
-    ['Working figure', 'Not on file'],
-    ['Agreed processing fee', 'The fee written on this engagement'],
+    ['Working figure', money(input.payoff)],
+    ['Agreed processing fee', sheet.sections[2]?.facts.find(fact => fact.label === 'Agreed processing fee')?.value === 'MISSING'
+      ? 'Not on file'
+      : sheet.sections[2]?.facts.find(fact => fact.label === 'Agreed processing fee')?.value || 'Not on file'],
   ]
   let ny = 650
   for (const [label, value] of figureRows) {
@@ -232,10 +234,12 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
   text(bills, 'What Your Bills Actually Show', 36, 720, 20, bold)
   card(bills, 32, 690, 260, 180)
   card(bills, 308, 690, 272, 180)
+  const before = sheet.sections[3]?.facts.find(fact => fact.label === 'Before')?.value || 'Not on file'
+  const after = sheet.sections[3]?.facts.find(fact => fact.label === 'After')?.value || 'Not on file'
   text(bills, 'BEFORE', 48, 658, 9, bold, MUTED)
-  paragraph(bills, input.hasUtility ? 'A utility bill is on this file. Compare it with the contract. Do not add an average that is not on the bill.' : 'Utility before and after is not on file. Do not invent a bill amount.', 48, 634, 220, 10, font)
+  paragraph(bills, before, 48, 634, 220, 11, font)
   text(bills, 'AFTER', 324, 658, 9, bold, MUTED)
-  paragraph(bills, sheet.sections[3]?.say ?? '', 324, 634, 230, 10, font)
+  paragraph(bills, after, 324, 634, 230, 11, font)
 
   const facts = doc.addPage([W, H])
   chrome(facts, font, bold, headerLeft, right, 'Page 6 of 8')
@@ -258,10 +262,12 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
   text(options, 'Where We Go From Here', 36, 720, 20, bold)
   card(options, 32, 690, 260, 280)
   card(options, 308, 690, 272, 280)
+  const stay = sheet.sections[4]?.facts.find(fact => fact.label === 'Stay')?.value || 'Keep the contract that is on this file.'
+  const openFile = sheet.sections[4]?.facts.find(fact => fact.label === 'File')?.value || 'Counsel evaluates independently.'
   text(options, 'IF YOU STAY', 48, 658, 10, bold)
-  paragraph(options, 'Keep the contract that is on this file. Do not invent the remaining rent.', 48, 634, 220, 11, font)
+  paragraph(options, stay, 48, 634, 220, 11, font)
   text(options, 'FILE OPENED WITH COUNSEL', 324, 658, 10, bold)
-  paragraph(options, 'Counsel evaluates independently. The fee is only the fee written on the engagement.', 324, 634, 230, 11, font)
+  paragraph(options, openFile, 324, 634, 230, 11, font)
   card(options, 32, 380, 548, 160)
   text(options, 'LIEN STATUS', 48, 350, 10, bold)
   paragraph(options, `Quote only the lien language in this contract. Counsel pulls the county record and the ${stateName(input)} UCC registry. Do not invent a filing number.`, 48, 326, 510, 11, font)

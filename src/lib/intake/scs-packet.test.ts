@@ -71,10 +71,10 @@ describe('ingestScsPacket document import queue', () => {
     const answers = intakeAnswersFromPacket({ data: {
       stage1_answers: { first_name: 'Example' },
       stage1_provenance: { first_name: { source: 'homeowner' } },
-      money: { monthly_utility_bill: 187.44, payment_status: 'current' },
+      money: { monthly_utility_bill: 187.44, payment_status: 'current', paying_both: true },
       screening: { credit_band: '740_plus' },
     } })
-    expect(answers).toMatchObject({ first_name: 'Example', monthly_utility_bill: 187.44, credit_band: '740_plus', payment_status: 'current' })
+    expect(answers).toMatchObject({ first_name: 'Example', monthly_utility_bill: 187.44, credit_band: '740_plus', payment_status: 'current', paying_both: true })
   })
   beforeEach(() => {
     vi.clearAllMocks()

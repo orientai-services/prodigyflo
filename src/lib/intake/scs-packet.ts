@@ -38,6 +38,7 @@ export function intakeAnswersFromPacket(raw: Record<string, unknown>): Record<st
   const screening = asRecord(data.screening)
   const extras: Record<string, unknown> = {}
   if (humanAnswers.monthly_utility_bill == null && money.monthly_utility_bill != null) extras.monthly_utility_bill = money.monthly_utility_bill
+  if (humanAnswers.paying_both == null && money.paying_both != null) extras.paying_both = money.paying_both
   if (humanAnswers.credit_band == null && screening.credit_band != null) extras.credit_band = screening.credit_band
   if (humanAnswers.payment_status == null && money.payment_status != null) extras.payment_status = money.payment_status
   const merged = { ...extras, ...humanAnswers }

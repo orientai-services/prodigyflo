@@ -41,6 +41,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
       contracts: { take: 1 },
       owner: { select: { name: true, title: true } },
       cysFieldValues: { where: { status: 'VERIFIED', verifiedById: { not: null } } },
+      intakeSubmissions: { orderBy: { updatedAt: 'desc' }, take: 1, select: { rawPayload: true } },
     },
   })
   if (!client) return null
@@ -187,7 +188,10 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     hasFinance,
     hasStatement: docs.some((d) => /statement/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''}`)),
     hasPayoff: docs.some((d) => /payoff/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''}`)),
-    hasUtility: docs.some((d) => /utility|bill/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''}`)),
+    hasUtility: docs.some((d) => /utility|bill/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''}`)) || Boolean(extracted(docs, 'utility_bill', 'amount_due')),
+    utilityMonthly: extracted(docs, 'utility_bill', 'amount_due') || confirmed('monthly_utility_bill') || str(answers.monthly_utility_bill),
+    utilityFromDocument: Boolean(extracted(docs, 'utility_bill', 'amount_due')),
+    payingBoth: answers.paying_both === true || /^(1|true|yes)$/i.test(str(answers.paying_both)) || asRecord(asRecord(asRecord((client.intakeSubmissions ?? [])[0]?.rawPayload).data).money).paying_both === true,
     hasProposal: docs.some((d) => /proposal/i.test(`${d.requirement?.key ?? ''} ${d.label ?? ''} ${d.fileName ?? ''}`)),
     closeability: ready.closeability,
     path,
