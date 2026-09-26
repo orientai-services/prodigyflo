@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import type { CloserWinInput } from './closer-win'
 import { composeMasterCallSheet } from './call-sheet'
+import { partyStatus } from './party-status'
 import { leverFor, STATE_LEVERS } from './state-levers'
 import { str } from './schema'
 import { closerCredit, type CallPacket } from './call-pdf-model'
@@ -179,9 +180,11 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
   chrome(changed, font, bold, headerLeft, right, 'Page 3 of 8')
   text(changed, 'What Changed', 36, 720, 22, bold)
   changed.drawLine({ start: { x: 70, y: 640 }, end: { x: 542, y: 640 }, thickness: 2, color: rgb(0.85, 0.88, 0.9) })
+  const installerChip = partyStatus(input.installer)?.chip ?? 'Installer not confirmed'
+  const lenderChip = partyStatus(input.lender)?.chip ?? partyStatus(input.financierOnInstall)?.chip ?? 'Lender not confirmed'
   const nodes: [typeof RED, string, string][] = [
-    [RED, 'Event 1', 'Not on file'],
-    [BLUE, 'Event 2', 'Not on file'],
+    [RED, 'Installer', installerChip],
+    [BLUE, 'Lender', lenderChip],
     [GOLD, 'Event 3', 'Not on file'],
     [TEAL, 'Today', 'Billing party on this file'],
   ]
