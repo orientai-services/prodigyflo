@@ -8,6 +8,14 @@
 
 import type { CloserWinInput } from './closer-win'
 import { federalLevers, leverFor, stateLeversForFile, STATE_LEVERS } from './state-levers'
+
+export function lienStatusCopy(state: string | undefined, disclosed: string | undefined): string {
+  const code = str(state).trim().toUpperCase()
+  const name = code.length === 2 && STATE_LEVERS[code] ? leverFor(code).name : 'this state'
+  const quote = str(disclosed)
+  if (quote) return `The contract discloses this lien language: ${quote}. A filing number is not added here. Counsel confirms it on the county record and the ${name} UCC registry.`
+  return `The contracts on this file do not disclose a UCC lien. That does not mean no filing exists. The county record and the ${name} UCC registry would have to be pulled for this property.`
+}
 import { partyStatus, PARTY_STATUS_AS_OF } from './party-status'
 import { str } from './schema'
 import { normalizeProduct } from '@/lib/desk-extract'
@@ -176,9 +184,13 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
   const loanLine = [financed && `Amount financed ${financed}.`, apr && `APR ${apr}.`, interestPaid && `Interest paid to date ${interestPaid}.`, firstPay && `First payment ${firstPay}.`].filter(Boolean).join(' ')
   const feeCell = dealerFeeFromAmount(input.payoff)
   const fee = feeCell.kind === 'value' ? feeCell.display : ''
+  const estimateNote = !input.payoffEstimated ? ''
+    : input.product === 'ppa' || input.product === 'lease'
+      ? 'That remaining balance is the scheduled payments still left, with the yearly increase. It is not a payoff quote.'
+      : 'That remaining balance is amortization from the first payment date. It is not a payoff quote.'
   const workingSay = payoff === 'MISSING'
     ? 'The working figure is the remaining balance. It is not on this file, so the 30% processing fee is not on this file.'
-    : `The working figure is the remaining balance, ${payoff}. The agreed processing fee is 30% of that figure${fee ? `: ${fee}` : ''}.`
+    : `The working figure is the remaining balance, ${payoff}. The agreed processing fee is 30% of that figure${fee ? `: ${fee}` : ''}. ${estimateNote}`
   const state = knownState(input.state) ? leverFor(input.state) : null
   const place = [shown(input.city), shown(input.state)].filter((v) => v !== 'MISSING').join(', ') || 'MISSING'
 
@@ -236,6 +248,7 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
       facts: [
         { label: 'Stay', value: payoff === 'MISSING' ? 'Keep the contract that is on file. The remaining balance is not on this file.' : `Keep the contract. Working figure ${payoff}.` },
         { label: 'File', value: fee ? `Open the file with counsel. Agreed processing fee ${fee}, which is 30% of the working figure.` : 'The 30% fee prints when the remaining balance is on this file.' },
+        { label: 'Lien', value: lienStatusCopy(input.state, input.lienQuote) },
       ],
     },
   ]

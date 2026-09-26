@@ -42,6 +42,8 @@ export type CloserWinInput = {
   utilityFromDocument?: boolean
   /** Client said they pay the solar payment and the electric bill. */
   payingBoth?: boolean
+  /** Lien or UCC language quoted from this client's contracts. Empty when none was disclosed. */
+  lienQuote?: string
   effectiveDate?: string
   firstYearMonthly?: string
   escalation?: string

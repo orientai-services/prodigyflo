@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import type { CloserWinInput } from './closer-win'
-import { composeMasterCallSheet } from './call-sheet'
+import { composeMasterCallSheet, lienStatusCopy } from './call-sheet'
 import { partyStatus } from './party-status'
 import { leverFor, STATE_LEVERS } from './state-levers'
 import { str } from './schema'
@@ -212,7 +212,7 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
     ['Term', term === 'Not on file' ? term : `${term} months`],
     ...(shown(input.firstPayDate, '') ? [['First payment date', shown(input.firstPayDate)] as [string, string]] : []),
     ...(shown(input.interestPaid, '') ? [[input.payoffEstimated ? 'Estimated interest paid' : 'Interest paid to date', money(input.interestPaid)] as [string, string]] : []),
-    [input.payoffEstimated ? 'Estimated remaining balance' : 'Payoff / buyout', money(input.payoff)],
+    ['Payoff / buyout', money(input.payoff)],
     ['Working figure', money(input.payoff)],
     ['Agreed processing fee', sheet.sections[2]?.facts.find(fact => fact.label === 'Agreed processing fee')?.value === 'MISSING'
       ? 'Not on file'
@@ -270,7 +270,7 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
   paragraph(options, openFile, 324, 634, 230, 11, font)
   card(options, 32, 380, 548, 160)
   text(options, 'LIEN STATUS', 48, 350, 10, bold)
-  paragraph(options, `Quote only the lien language in this contract. Counsel pulls the county record and the ${stateName(input)} UCC registry. Do not invent a filing number.`, 48, 326, 510, 11, font)
+  paragraph(options, sheet.sections[4]?.facts.find(fact => fact.label === 'Lien')?.value || lienStatusCopy(input.state, input.lienQuote), 48, 326, 510, 11, font)
 
   const docs = doc.addPage([W, H])
   chrome(docs, font, bold, headerLeft, right, 'Page 8 of 8')
@@ -342,6 +342,6 @@ function drawPitch(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Closer
     dy = paragraph(page3, `${index + 1}  ${docRow.item} - ${note}`, 36, dy, 540, 9, font) - 4
   })
   text(page3, 'LIEN ONE-LINER IF HE ASKS', 36, dy - 8, 9, bold, TEAL)
-  paragraph(page3, `Quote only the lien language in this contract. Counsel pulls the county record and the ${stateName(input)} UCC registry.`, 36, dy - 24, 540, 9, font)
+  paragraph(page3, lienStatusCopy(input.state, input.lienQuote), 36, dy - 24, 540, 9, font)
   text(page3, 'STOP after the ask', W - 130, 10, 8, bold, WHITE)
 }
