@@ -222,7 +222,7 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
     },
     {
       title: 'The money',
-      say: `${workingSay} ${input.payoffEstimated ? 'That remaining balance is amortization from the first payment date. It is not a payoff quote.' : ''} ${loanLine}`.trim(),
+      say: `${workingSay} ${loanLine}`.trim(),
       facts: [
         { label: 'Payment on file', value: monthly },
         ...(financed ? [{ label: 'Amount financed', value: financed }] : []),

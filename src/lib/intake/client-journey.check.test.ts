@@ -83,6 +83,15 @@ describe('canonical client journey', () => {
     expect(locked).not.toMatch(/runPendingScsDocumentImports/)
   })
 
+  it('uses the remaining balance as the working figure and 30% as the fee', () => {
+    const data = read('src/lib/packet/data.ts')
+    expect(data).toMatch(/loanAmount\('Estimated remaining balance'\)/)
+    const sheet = read('src/lib/packet/call-sheet.ts')
+    expect(sheet).toMatch(/The working figure is the remaining balance/)
+    expect(sheet).toMatch(/agreed processing fee is 30% of that figure/)
+    expect(sheet).toMatch(/do not disclose a UCC lien/)
+  })
+
   it('computes dealer fee as 0.30 of amount financed', () => {
     const fee = read('src/lib/daily-desk-finance.ts')
     expect(fee).toMatch(/export const DEALER_FEE_RATE = 0\.30/)
