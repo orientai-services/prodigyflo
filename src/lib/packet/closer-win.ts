@@ -27,6 +27,12 @@ export type CloserWinInput = {
   contractValue: string
   payoff: string
   signedDate: string
+  /** Loan first-pay date from the agreement. Empty on a PPA or lease. */
+  firstPayDate?: string
+  /** Amortized or statement interest. Empty when it cannot be computed. */
+  interestPaid?: string
+  /** True when payoff and interest paid are amortization, not a statement. */
+  payoffEstimated?: boolean
   effectiveDate?: string
   firstYearMonthly?: string
   escalation?: string
@@ -271,7 +277,7 @@ export function composeCloserWinBrief(input: CloserWinInput): CloserWinBrief {
           ? `The ${st.coolingOffBusinessDays}-day ${st.name} / FTC cooling-off is gone. We do not pretend it is open.`
           : '',
         monthly !== 'MISSING' ? `Stated payment ${monthly}${term !== 'MISSING' ? ` on a ${term} term` : ''}${apr !== 'MISSING' ? ` at ${apr}` : ''}.` : '',
-        value !== 'MISSING' ? `Amount on paper ${value}. Payoff ${payoff}.` : `Payoff ${payoff}.`,
+        value !== 'MISSING' ? `Amount on paper ${value}. ${input.payoffEstimated ? 'Estimated remaining' : 'Payoff'} ${payoff}.` : `${input.payoffEstimated ? 'Estimated remaining' : 'Payoff'} ${payoff}.`,
         `The redline that matters: ${redline[0] ?? 'the numbers on this packet'}.`,
         `Best-probability path is not hoping the installer is nice. It is documenting this ${st.name} file under TILA / Holder (if on the note) / ${st.udap} and putting ${lender !== 'MISSING' ? lender : 'the lender'} in a position where keeping the debt costs more than releasing it.`,
         `If you want that shot, we collect ${pulls.slice(0, 3).join(', ')} this week and we go after the debt, not the panels.`,

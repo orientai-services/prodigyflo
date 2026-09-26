@@ -35,6 +35,13 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     const answer = answerKey ? str(answers[answerKey]) : ''
     return read ?? (answer ? { value: answer, verified: false, note: 'Intake value · not document verified' } : null)
   }
+  const typed = (keys: string[]): ExtractedFact | null => {
+    for (const key of keys) {
+      const value = str(answers[key])
+      if (value) return { value, verified: false, note: 'Typed on SCS intake · not document verified' }
+    }
+    return null
+  }
   const productFact = fact('solar_contract', 'product_type', 'product_confirmed', 'product_confirmed')
     ?? fact('finance_agreement', 'product_type')
   const product = normalizeProduct(productFact?productFact.value:str(client.contracts[0]?.productType)||str(answers.product_type_guess))
@@ -43,7 +50,12 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const amountFact = isPpaOrLease
     ? fact('solar_contract', 'cash_price') ?? fact('solar_contract', 'amount_financed') ?? fact('finance_agreement', 'amount_financed')
     : fact('finance_agreement', 'amount_financed', 'contract_value', 'amount_financed')
-  const aprFact = isPpaOrLease ? null : fact('finance_agreement', 'apr', 'apr', 'apr')
+      ?? fact('solar_contract', 'amount_financed')
+  const aprFact = isPpaOrLease ? null : (
+    fact('finance_agreement', 'apr', 'apr', 'apr')
+    ?? fact('solar_contract', 'apr')
+    ?? typed(['interest_rate', 'apr'])
+  )
   const inServiceFact = fact('solar_contract', 'in_service_date', 'first_payment_or_install')
   const firstPayFact = isPpaOrLease
     ? inServiceFact
@@ -52,8 +64,10 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
       ?? fact('solar_contract', 'customer_signed_date')
       ?? fact('finance_agreement', 'customer_signed_date')
     : fact('completion_cert', 'first_payment_date')
-      ?? fact(type, 'first_payment_date', 'first_payment_or_install')
-      ?? fact(type, 'customer_signed_date')
+      ?? fact('finance_agreement', 'first_payment_date', 'first_payment_or_install')
+      ?? fact('solar_contract', 'first_payment_date')
+      ?? fact('finance_agreement', 'customer_signed_date')
+      ?? fact('solar_contract', 'customer_signed_date')
   const statementRemaining = fact('lender_statement', 'remaining_balance')
   const remainingFact = statementRemaining ?? fact('finance_agreement', 'remaining_balance') ?? fact('solar_contract', 'remaining_balance')
   const statementInterest = fact('lender_statement', 'interest_paid_to_date')
@@ -63,13 +77,14 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
   const termFact = fact(type, 'term_months', 'term_months', 'term_months')
     ?? (isPpaOrLease ? fact('finance_agreement', 'term_months') : fact('solar_contract', 'term_months'))
   const yearsFact = fact(type, 'term_years')
-    ?? (isPpaOrLease ? fact('finance_agreement', 'term_years') : null)
+    ?? fact(isPpaOrLease ? 'finance_agreement' : 'solar_contract', 'term_years')
   const term = termFact?.value || termMonthsFromYears(yearsFact?.value || '')
   const termSource = termFact ?? (term && yearsFact ? { ...yearsFact, value: term, note: `${yearsFact.note} · Derived months = stated years × 12` } : null)
   const paymentFact = fact(type, 'monthly_payment', undefined, isPpaOrLease ? undefined : 'monthly_payment')
     ?? (!isPpaOrLease ? fact('finance_agreement', 'first_year_monthly_payment') : null)
     ?? fact('solar_contract', 'monthly_payment')
     ?? fact('solar_contract', 'first_year_monthly_payment')
+    ?? typed(['monthly_payment', 'monthly_guess', 'monthly_solar_payment'])
   const firstYearFact = fact('solar_contract', 'first_year_monthly_payment') ?? fact('finance_agreement', 'first_year_monthly_payment')
   const basisFact = fact('solar_contract', 'payment_basis')
   const startFact = fact('solar_contract', 'term_start_basis')

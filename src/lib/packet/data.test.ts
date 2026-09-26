@@ -60,6 +60,47 @@ describe('closing packet PPA provenance', () => {
     expect(packet?.trench).toBe('unknown')
   })
 
+  it('routes a loan install agreement and a typed monthly into the packet without a lender name', async () => {
+    const fixture = client()
+    fixture.documents = [{
+      id: 'document-loan',
+      requirement: { key: 'signed_contract' },
+      label: 'Install agreement',
+      fileName: 'install-agreement.pdf',
+      extractions: [{
+        detectedTypeKey: 'solar_contract',
+        fields: Object.entries({
+          product_type: 'loan',
+          amount_financed: '36819.55',
+          interest_rate: '2.99',
+          term_months: '300',
+          term_years: '25',
+          first_payment_date: '2022-12-12',
+          contract_counterparty: 'GoodLeap',
+          installer_name: 'Example Installer',
+        }).map(([key, value]) => ({ key, value, correctedValue: null, verification: 'UNVERIFIED', sourcePage: 2 })),
+      }],
+    }]
+    fixture.surveyResponses = [{ answers: { monthly_guess: '350', product_type_guess: 'loan', lender_guess: 'GoodLeap' } }]
+    mock.findClient.mockResolvedValue(fixture)
+    const packet = await assemblePacket('client-test')
+    expect(packet?.payload).toContain('APR: 2.99')
+    expect(packet?.payload).toContain('Original contract value: 36819.55')
+    expect(packet?.payload).toContain('Monthly payment: 350')
+    expect(packet?.payload).toContain('Term months: 300')
+    expect(packet?.payload).not.toContain('Lender: GoodLeap')
+    expect(packet?.closerInput.apr).toBe('2.99')
+    expect(packet?.closerInput.contractValue).toBe('36819.55')
+    expect(packet?.closerInput.monthly).toBe('350')
+    expect(packet?.closerInput.firstPayDate).toBe('2022-12-12')
+    expect(packet?.closerInput.payoffEstimated).toBe(true)
+    expect(packet?.closerInput.lender).not.toMatch(/GoodLeap/)
+    expect(packet?.brief).toMatch(/\$36,819\.55/)
+    expect(packet?.brief).toMatch(/2\.99%/)
+    expect(packet?.brief).toMatch(/\$350\.00/)
+    expect(packet?.brief).toMatch(/Estimated remaining/)
+  })
+
   it('uses reviewed staff corrections ahead of imports and document readings', async () => {
     const fixture = client('VERIFIED')
     fixture.cysFieldValues = [{ fieldKey: 'first_name', value: 'Corrected' }, { fieldKey: 'lender_confirmed', value: 'Reviewed Counterparty' }, { fieldKey: 'term_months', value: '252' }]

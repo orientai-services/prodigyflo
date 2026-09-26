@@ -94,14 +94,14 @@ export function collectFinanceFacts(
   const solar = (field: string) => pull('solar_contract', field)
 
   return {
-    amountFinanced: isPpaOrLease(kind) ? '' : firstFilled(loan('amount_financed'), answer(answers, 'amount_financed')),
-    remainingQuoted: isPpaOrLease(kind) ? '' : firstFilled(loan('remaining_balance'), answer(answers, 'remaining_balance')),
-    apr: isPpaOrLease(kind) ? '' : firstFilled(loan('apr'), loan('interest_rate'), answer(answers, 'interest_rate', 'apr')),
+    amountFinanced: isPpaOrLease(kind) ? '' : firstFilled(loan('amount_financed'), solar('amount_financed'), answer(answers, 'amount_financed')),
+    remainingQuoted: isPpaOrLease(kind) ? '' : firstFilled(loan('remaining_balance'), solar('remaining_balance'), answer(answers, 'remaining_balance')),
+    apr: isPpaOrLease(kind) ? '' : firstFilled(loan('apr'), loan('interest_rate'), solar('apr'), solar('interest_rate'), answer(answers, 'interest_rate', 'apr')),
     dealerFee: isPpaOrLease(kind) ? '' : firstFilled(loan('dealer_fee'), answer(answers, 'dealer_fee')),
     monthly: firstFilled(
       loan('monthly_payment'),
       solar('monthly_payment'),
-      answer(answers, 'monthly_payment', 'monthly_solar_payment'),
+      answer(answers, 'monthly_payment', 'monthly_solar_payment', 'monthly_guess'),
     ),
     termMonths: firstFilled(
       loan('term_months'),
@@ -111,6 +111,7 @@ export function collectFinanceFacts(
     firstPay: firstFilled(
       loan('first_payment_date'),
       solar('first_payment_date'),
+      solar('customer_signed_date'),
       answer(answers, 'first_payment_date'),
     ),
     lender: firstFilled(
