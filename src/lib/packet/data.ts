@@ -10,6 +10,9 @@ import { evaluateFloorAudit } from './floor-audit'
 import { feeTrench, pathLabel, routePath, trenchLabel } from './route'
 import { asRecord, str } from './schema'
 import { extractedFact, normalizeProduct, termMonthsFromYears, type ExtractableDoc } from '@/lib/desk-extract'
+import { resolveCaseFacts } from '@/lib/case-facts'
+import { DESK_TIMEZONE } from '@/lib/daily-desk'
+import type { CaseCell } from '@/lib/daily-desk-case-types'
 
 /** Same facts the profile shows. Rejected readings stay off the packet. */
 function extracted(docs: ExtractableDoc[], typeKey: string, fieldKey: string): string {
@@ -57,16 +60,32 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
   const product = normalizeProduct(confirmed('product_confirmed') || extracted(docs, 'solar_contract', 'product_type') || extracted(docs, 'finance_agreement', 'product_type'))
   const isPpaOrLease = product === 'ppa' || product === 'lease'
   const type = isPpaOrLease ? 'solar_contract' : 'finance_agreement'
+  const loanFacts = isPpaOrLease ? null : resolveCaseFacts({
+    organization: { timezone: DESK_TIMEZONE },
+    surveyResponses: client.surveyResponses,
+    addresses: client.addresses,
+    documents: docs,
+    contracts: client.contracts,
+  }, { values: client.cysFieldValues.map(field => ({ fieldKey: field.fieldKey, value: field.value, status: 'VERIFIED' })) })
+  const loanCell = (...labels: string[]): CaseCell | undefined => loanFacts?.finance.find(cell => labels.includes(cell.label))
+  const loanAmount = (...labels: string[]) => {
+    const cell = loanCell(...labels)
+    return cell?.cell.kind === 'value' && cell.cell.amount != null ? String(cell.cell.amount) : ''
+  }
+  const loanText = (...labels: string[]) => {
+    const cell = loanCell(...labels)
+    return cell?.cell.kind === 'value' ? cell.cell.display : ''
+  }
   const installer = extracted(docs, 'solar_contract', 'installer_name')
   const lender = confirmed('lender_confirmed') || (isPpaOrLease
     ? extracted(docs, 'solar_contract', 'contract_counterparty')
     : extracted(docs, type, 'lender_name') || extracted(docs, 'lender_statement', 'lender_name'))
-  const monthly = extracted(docs, 'lender_statement', 'monthly_payment') || extracted(docs, type, 'monthly_payment') || confirmed('monthly_guess') || str(answers.monthly_guess)
+  const monthly = extracted(docs, 'lender_statement', 'monthly_payment') || extracted(docs, type, 'monthly_payment') || loanAmount('Monthly payment') || confirmed('monthly_guess') || str(answers.monthly_guess) || str(answers.monthly_solar_payment)
   const firstYearMonthly = isPpaOrLease ? extracted(docs, 'solar_contract', 'first_year_monthly_payment') : ''
-  const statedYears = extracted(docs, type, 'term_years')
-  const directTerm = confirmed('term_months') || extracted(docs, type, 'term_months')
+  const statedYears = extracted(docs, type, 'term_years') || (isPpaOrLease ? '' : extracted(docs, 'solar_contract', 'term_years'))
+  const directTerm = confirmed('term_months') || extracted(docs, type, 'term_months') || (isPpaOrLease ? '' : extracted(docs, 'solar_contract', 'term_months') || loanText('Term months'))
   const term = directTerm || termMonthsFromYears(statedYears)
-  const apr = isPpaOrLease ? '' : confirmed('apr_or_escalator') || extracted(docs, 'finance_agreement', 'apr')
+  const apr = isPpaOrLease ? '' : confirmed('apr_or_escalator') || extracted(docs, 'finance_agreement', 'apr') || loanAmount('Interest rate')
   const escalation = isPpaOrLease ? confirmed('apr_or_escalator') || extracted(docs, 'solar_contract', 'escalator_pct') : ''
   const effectiveDate = extracted(docs, 'solar_contract', 'contract_date')
   const signatureDate = extracted(docs, 'solar_contract', 'customer_signed_date')
@@ -96,7 +115,8 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     sale_or_refi: (confirmed('sale_or_refi') || str(answers.sale_or_refi)),
     has_contract: hasContract || hasFinance,
   })
-  const trench = feeTrench(isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed'))
+  const financed = isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed') || loanAmount('Total / amount financed')
+  const trench = feeTrench(financed)
 
   const dashFields = {
     'First name': confirmed('first_name') || client.firstName,
@@ -112,7 +132,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     Lender: lender,
     Product: product,
     'Account or loan #': isPpaOrLease ? 'Not a loan' : confirmed('account_number') || extracted(docs, 'finance_agreement', 'account_number') || 'MISSING',
-    'Original contract value': isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed'),
+    'Original contract value': financed,
     'Current payoff': confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount') || 'MISSING',
     'Monthly payment': monthly,
     APR: isPpaOrLease ? 'Not applicable to PPA / lease' : apr || 'MISSING',
@@ -151,8 +171,11 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     termNote,
     effectiveDate,
     apr,
-    contractValue: isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed'),
-    payoff: confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount') || extracted(docs, 'finance_agreement', 'remaining_balance'),
+    contractValue: financed,
+    payoff: confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount') || loanAmount('Remaining balance') || loanAmount('Estimated remaining balance'),
+    firstPayDate: isPpaOrLease ? '' : loanText('First payment date'),
+    interestPaid: isPpaOrLease ? '' : loanAmount('Interest paid to date') || loanAmount('Estimated interest paid'),
+    payoffEstimated: !isPpaOrLease && !confirmed('current_payoff') && !extracted(docs, 'payoff_letter', 'payoff_amount') && !loanAmount('Remaining balance') && Boolean(loanAmount('Estimated remaining balance')),
     signedDate: signatureDate,
     painType: (confirmed('pain_type') || str(answers.pain_type)),
     painNarrative: (confirmed('pain_narrative') || str(answers.pain_narrative)),

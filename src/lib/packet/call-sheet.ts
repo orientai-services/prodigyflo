@@ -99,6 +99,11 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
   const term = shown(input.termMonths)
   const signed = shown(input.signedDate)
   const payoff = money(input.payoff)
+  const financed = shown(input.contractValue) === 'MISSING' ? '' : money(input.contractValue)
+  const apr = shown(input.apr) === 'MISSING' ? '' : `${shown(input.apr)}%`
+  const interestPaid = shown(input.interestPaid) === 'MISSING' ? '' : money(input.interestPaid)
+  const firstPay = shown(input.firstPayDate) === 'MISSING' ? '' : shown(input.firstPayDate)
+  const loanLine = [financed && `Amount financed ${financed}.`, apr && `APR ${apr}.`, interestPaid && `Interest paid to date ${interestPaid}.`, firstPay && `First payment ${firstPay}.`].filter(Boolean).join(' ')
   const state = knownState(input.state) ? leverFor(input.state) : null
   const place = [shown(input.city), shown(input.state)].filter((v) => v !== 'MISSING').join(', ') || 'MISSING'
 
@@ -135,12 +140,18 @@ export function composeMasterCallSheet(input: CloserWinInput): MasterCallSheet {
     },
     {
       title: 'The money',
-      say: payoff === 'MISSING'
+      say: `${payoff === 'MISSING'
         ? 'A remaining payoff or buyout is MISSING. Do not use a face total of payments as a payoff, and do not quote a processing fee until the engagement states it.'
-        : `The working figure on file is ${payoff}. Use that figure. Do not substitute a face total of payments.`,
+        : input.payoffEstimated
+          ? `Estimated remaining balance is ${payoff}. That figure is amortization from the first payment date. It is not a payoff quote.`
+          : `The working figure on file is ${payoff}. Use that figure. Do not substitute a face total of payments.`} ${loanLine}`.trim(),
       facts: [
         { label: 'Payment on file', value: monthly },
-        { label: 'Payoff / buyout', value: payoff },
+        ...(financed ? [{ label: 'Amount financed', value: financed }] : []),
+        ...(apr ? [{ label: 'APR', value: apr }] : []),
+        ...(interestPaid ? [{ label: input.payoffEstimated ? 'Estimated interest paid' : 'Interest paid to date', value: interestPaid }] : []),
+        ...(firstPay ? [{ label: 'First payment date', value: firstPay }] : []),
+        { label: input.payoffEstimated ? 'Estimated remaining balance' : 'Payoff / buyout', value: payoff },
       ],
     },
     {

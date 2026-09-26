@@ -163,6 +163,63 @@ describe('loan-map document authority on FinalDesk cells', () => {
     expect(JSON.stringify(cell(facts, 'System size')?.cell)).toMatch(/8\.64/)
   })
 
+  it('a loan install agreement fills amount, APR, first pay, and a typed monthly without inventing a lender', () => {
+    const install = {
+      extractions: [{
+        detectedTypeKey: 'solar_contract',
+        status: 'COMPLETED',
+        sourceActive: true,
+        fields: [
+          field('product_type', 'loan'),
+          field('amount_financed', '36819.55'),
+          field('interest_rate', '2.99'),
+          field('term_months', '300'),
+          field('term_years', '25'),
+          field('first_payment_date', '2022-12-12'),
+          field('contract_counterparty', 'GoodLeap'),
+          field('installer_name', 'Titan Solar Power NV, Inc.'),
+        ],
+      }],
+    }
+    const client = source([install])
+    client.surveyResponses = [{ answers: { monthly_guess: '350', product_type_guess: 'loan', lender_guess: 'GoodLeap' } }]
+    const now = new Date('2026-09-26T12:00:00Z')
+    const facts = resolveCaseFacts(client, null, { now })
+    expect(cell(facts, 'Total / amount financed')?.cell).toMatchObject({ kind: 'value', amount: 36819.55 })
+    expect(cell(facts, 'Interest rate')?.cell).toMatchObject({ kind: 'value', amount: 2.99 })
+    expect(cell(facts, 'Monthly payment')?.cell).toMatchObject({ kind: 'value', amount: 350 })
+    expect(cell(facts, 'First payment date')?.cell).toMatchObject({ kind: 'value', display: '2022-12-12' })
+    expect(cell(facts, 'Term months')?.cell).toMatchObject({ kind: 'value', display: '300' })
+    expect(JSON.stringify(cell(facts, 'Lender')?.cell)).not.toMatch(/GoodLeap/)
+    const amort = amortize({
+      firstPayDate: '2022-12-12', termMonths: 300, aprPercent: 2.99, monthlyPayment: 350,
+      principal: 36819.55, now,
+    })
+    expect(cell(facts, 'Remaining balance')?.cell).toMatchObject({ kind: 'value', amount: amort.remaining.kind === 'value' ? amort.remaining.amount : 0 })
+    expect(cell(facts, 'Interest paid to date')?.cell).toMatchObject({ kind: 'value', amount: amort.interestPaid.kind === 'value' ? amort.interestPaid.amount : 0 })
+  })
+
+  it('a lender finance agreement still wins over a different figure on the install agreement', () => {
+    const install = {
+      extractions: [{
+        detectedTypeKey: 'solar_contract',
+        status: 'COMPLETED',
+        fields: [field('product_type', 'loan'), field('interest_rate', '4.60'), field('amount_financed', '1000')],
+      }],
+    }
+    const lender = {
+      extractions: [{
+        detectedTypeKey: 'finance_agreement',
+        status: 'COMPLETED',
+        fields: [field('interest_rate', '2.99'), field('amount_financed', '36819.55'), field('lender_name', 'GoodLeap')],
+      }],
+    }
+    const facts = resolveCaseFacts(source([install, lender]), null, { now })
+    expect(cell(facts, 'Interest rate')?.cell).toMatchObject({ amount: 2.99 })
+    expect(cell(facts, 'Total / amount financed')?.cell).toMatchObject({ amount: 36819.55 })
+    expect(cell(facts, 'Lender')?.cell).toMatchObject({ kind: 'value', display: 'GoodLeap' })
+  })
+
   it('lease fields populate when a leasing-act page parked the extract on finance_agreement', () => {
     const lease = {
       extractions: [{

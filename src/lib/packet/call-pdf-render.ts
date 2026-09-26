@@ -203,9 +203,13 @@ function drawReview(doc: PDFDocument, font: PDFFont, bold: PDFFont, input: Close
   numbers.drawLine({ start: { x: 40, y: 672 }, end: { x: 572, y: 672 }, thickness: 0.6, color: TEAL })
   const figureRows: [string, string][] = [
     ['Payment on file', payment],
+    ...(shown(input.contractValue, '') ? [['Amount financed', money(input.contractValue)] as [string, string]] : []),
+    ...(shown(input.apr, '') ? [['Interest rate', `${shown(input.apr)}%`] as [string, string]] : []),
     ['Escalator', escalator === 'Not on file' ? escalator : `${escalator}%`],
     ['Term', term === 'Not on file' ? term : `${term} months`],
-    ['Payoff / buyout', money(input.payoff)],
+    ...(shown(input.firstPayDate, '') ? [['First payment date', shown(input.firstPayDate)] as [string, string]] : []),
+    ...(shown(input.interestPaid, '') ? [[input.payoffEstimated ? 'Estimated interest paid' : 'Interest paid to date', money(input.interestPaid)] as [string, string]] : []),
+    [input.payoffEstimated ? 'Estimated remaining balance' : 'Payoff / buyout', money(input.payoff)],
     ['Working figure', 'Not on file'],
     ['Agreed processing fee', 'The fee written on this engagement'],
   ]

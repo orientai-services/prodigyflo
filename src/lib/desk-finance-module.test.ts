@@ -94,6 +94,21 @@ describe('collectFinanceFacts', () => {
     expect(facts.apr).toBe('')
   })
 
+  it('reads loan amount, APR, and a typed monthly from the install agreement', () => {
+    const facts = collectFinanceFacts('loan', (type, field) => {
+      if (type === 'solar_contract' && field === 'amount_financed') return '36819.55'
+      if (type === 'solar_contract' && field === 'apr') return '2.99'
+      if (type === 'solar_contract' && field === 'first_payment_date') return '2022-12-12'
+      if (type === 'solar_contract' && field === 'lender_name') return ''
+      return ''
+    }, { monthly_guess: '350' })
+    expect(facts.amountFinanced).toBe('36819.55')
+    expect(facts.apr).toBe('2.99')
+    expect(facts.firstPay).toBe('2022-12-12')
+    expect(facts.monthly).toBe('350')
+    expect(facts.lender).toBe('')
+  })
+
   it('does not take financed or APR off a solar contract even if present', () => {
     const facts = collectFinanceFacts('ppa', (type, field) => {
       if (type === 'solar_contract' && field === 'amount_financed') return '48000'
