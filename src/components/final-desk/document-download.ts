@@ -15,6 +15,20 @@ export function downloadHref(url: string | null | undefined): string | null {
 
 export type ProfileDownload = { id: string; href: string; version: number }
 
+/** One click saves every stored file. Calls happen in the same turn so the browser keeps the gesture. */
+export function saveProfileDownloads(hrefs: readonly string[], open: (href: string) => void = openDownload) {
+  for (const href of hrefs) open(href)
+}
+
+function openDownload(href: string) {
+  const link = document.createElement('a')
+  link.href = href
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
 /** Every stored file on a profile tile, in the tile's own order, without duplicates. */
 export function profileDownloads(tile: Pick<CaseDocTile, 'key' | 'documentId' | 'fileUrl' | 'files'>): ProfileDownload[] {
   const candidates = [
