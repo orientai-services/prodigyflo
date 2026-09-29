@@ -6,6 +6,5 @@ export const metadata = { title: 'Call Center' }
 
 export default async function CallCenterPage() {
   await requireUser()
-  const leads = listLeads()
-  return <CallCenterDesk initial={leads} />
+  return <CallCenterDesk initial={listLeads()} />
 }
