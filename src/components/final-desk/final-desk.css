@@ -114,7 +114,9 @@
 .final-desk .doc .doc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .final-desk .doc-acts{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
 .final-desk .lookbtn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:600;color:var(--teal);white-space:nowrap}
+.final-desk a.lookbtn{display:block;text-align:center;text-decoration:none}
 .final-desk .lookbtn:hover{background:var(--teal2)}
+.final-desk .lookbtn:disabled{opacity:.45;cursor:not-allowed}
 .final-desk .st{font-size:10px;text-transform:uppercase;letter-spacing:.06em}
 .final-desk .st.m{color:var(--amber)} .final-desk .st.g{color:var(--green)}
 .final-desk .lookbox{width:min(760px,94vw);max-height:86vh;overflow:auto;background:var(--card);border-radius:18px;padding:0}
