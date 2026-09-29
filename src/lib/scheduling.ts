@@ -71,6 +71,8 @@ export async function scheduleAppointment(tx: Prisma.TransactionClient, input: {
     await tx.appointment.update({ where: { id: previous.id }, data })
     await remember(previous.id, 'SAVED'); return current(previous.id, 'SAVED')
   }
-  const row = await tx.appointment.create({ data: { ...data, clientId: client.id, type: 'PRESENTATION', status: 'SCHEDULED', externalEventId: input.externalEventId, meetingUrl: input.meetingUrl } })
+  const prior = await tx.appointment.findMany({ where: { clientId: client.id, status: { in: ['SCHEDULED', 'CONFIRMED'] } }, orderBy: [{ startsAt: 'desc' }, { updatedAt: 'desc' }], take: 1 })
+  if (prior.length) await tx.appointment.updateMany({ where: { clientId: client.id, status: { in: ['SCHEDULED', 'CONFIRMED'] } }, data: { status: 'RESCHEDULED', outcome: 'Rescheduled' } })
+  const row = await tx.appointment.create({ data: { ...data, clientId: client.id, type: 'PRESENTATION', status: 'SCHEDULED', externalEventId: input.externalEventId, meetingUrl: input.meetingUrl, rescheduledFromId: prior[0]?.id } })
   await remember(row.id, 'SAVED'); return current(row.id, 'SAVED')
 }
