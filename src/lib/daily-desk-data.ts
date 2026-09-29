@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { matchDocKind } from '@/lib/daily-desk-docs'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
-import { DESK_TIMEZONE, civilDate, deskChipCloserName, deskMonthRange, monthGrid, monthTitle, parseMonth, timeLabel, type DeskBoard, type DeskChip } from '@/lib/daily-desk'
+import { DESK_TIMEZONE, civilDate, deskChipCloserName, deskChipsToDraw, deskMonthRange, monthGrid, monthTitle, parseMonth, timeLabel, type DeskBoard, type DeskChip } from '@/lib/daily-desk'
 
 export function canReadDesk(user: SessionUser): boolean {
   return can(user, 'appointments:read')
@@ -32,7 +32,7 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
     db.documentRequirement.findMany({ where: { isRequired: true, package: { organizationId: user.organizationId, isDefault: true } }, select: { key: true } }),
     canAssign ? db.user.findMany({ where: { organizationId: user.organizationId, role: { key: 'CLOSER' }, deletedAt: null, isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : Promise.resolve([]),
     db.appointment.findMany({
-      where: { client: scope, startsAt: { gte: rangeStart, lt: rangeEnd }, ...(user.role === 'CLOSER' ? { ownerId: user.id } : {}) },
+      where: { client: scope, status: { in: ['SCHEDULED', 'CONFIRMED'] }, startsAt: { gte: rangeStart, lt: rangeEnd }, ...(user.role === 'CLOSER' ? { ownerId: user.id } : {}) },
       orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
       select: { id: true, startsAt: true, updatedAt: true, status: true, client: { select: clientSelect } },
     }),
@@ -51,7 +51,7 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
     missingDocs: Math.max(0, requiredKeys.size - new Set(row.documents.map(doc => doc.requirement?.key ? canonicalKey(doc.requirement.key) : null).filter((key): key is string => Boolean(key && requiredKeys.has(key)))).size),
   })
   const chipsByDay = new Map<string, DeskChip[]>()
-  for (const appointment of appointments) {
+  for (const appointment of deskChipsToDraw(appointments.map((appointment) => ({ ...appointment, clientId: appointment.client.id })))) {
     const day = civilDate(appointment.startsAt, timezone)
     const chip: DeskChip = { ...lead(appointment.client), appointmentId: appointment.id, updatedAt: appointment.updatedAt.toISOString(), status: appointment.status,
       ownerName: deskChipCloserName(appointment.client.owner?.name ?? null), timeLabel: timeLabel(appointment.startsAt, timezone), startsAt: appointment.startsAt.toISOString() }

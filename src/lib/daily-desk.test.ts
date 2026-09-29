@@ -4,6 +4,7 @@ import {
   countsAsDeskBooking,
   deskBookingToShow,
   deskChipCloserName,
+  deskChipsToDraw,
   deskMonthRange,
   isoDate,
   missingDocsLabel,
@@ -112,6 +113,20 @@ describe('countsAsDeskBooking', () => {
       endsAt: new Date('2026-10-02T18:00:00.000Z'),
     }
     expect(deskBookingToShow([upcoming, finished], now, range.rangeStart, range.rangeEnd)).toBe(upcoming)
+  })
+
+  it('keeps the newer scheduled chip when two are already on this month', () => {
+    const first = {
+      clientId: 'william',
+      status: 'SCHEDULED',
+      startsAt: new Date('2026-09-24T20:30:00.000Z'),
+    }
+    const second = {
+      clientId: 'william',
+      status: 'SCHEDULED',
+      startsAt: new Date('2026-09-27T17:00:00.000Z'),
+    }
+    expect(deskChipsToDraw([first, second])).toEqual([second])
   })
 
   it('releases a no-show even when the start is on this month', () => {

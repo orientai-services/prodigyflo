@@ -224,7 +224,20 @@ export function deskBookingToShow<T extends { status: string; startsAt: Date; en
   const qualifying = appointments.filter((appt) => countsAsDeskBooking(appt, now, rangeStart, rangeEnd))
   const upcoming = qualifying
     .filter((appt) => appt.endsAt > now)
-    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())
   if (upcoming.length) return upcoming[0]
   return [...qualifying].sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())[0]
+}
+
+/** One scheduled chip per client. History stays on the file; the board draws the newer time. */
+export function deskChipsToDraw<T extends { clientId: string; status: string; startsAt: Date }>(
+  appointments: readonly T[],
+): T[] {
+  const live = appointments.filter((appt) => appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED')
+  const newest = new Map<string, T>()
+  for (const appt of live) {
+    const current = newest.get(appt.clientId)
+    if (!current || appt.startsAt.getTime() >= current.startsAt.getTime()) newest.set(appt.clientId, appt)
+  }
+  return [...newest.values()]
 }
