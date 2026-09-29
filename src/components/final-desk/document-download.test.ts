@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downloadHref, profileDownloads } from './document-download'
+import { downloadHref, profileDownloads, saveProfileDownloads } from './document-download'
 import type { CaseDocFile } from '@/lib/daily-desk-case-types'
 
 const file = (id: string, version: number, fileUrl: string | null): CaseDocFile => ({
@@ -29,5 +29,20 @@ describe('profile document downloads', () => {
 
   it('offers nothing when the tile has no file', () => {
     expect(profileDownloads({ key: 'id', documentId: null, fileUrl: null, files: [] })).toEqual([])
+  })
+
+  it('saves every stored file from one call', () => {
+    const opened: string[] = []
+    const rows = profileDownloads({
+      key: 'permit_records',
+      documentId: 'a',
+      fileUrl: '/api/documents/a/file?t=1',
+      files: [file('a', 2, '/api/documents/a/file?t=1'), file('b', 1, '/api/documents/b/file?t=2')],
+    })
+    saveProfileDownloads(rows.map((row) => row.href), (href) => opened.push(href))
+    expect(opened).toEqual([
+      '/api/documents/a/file?t=1&download=1',
+      '/api/documents/b/file?t=2&download=1',
+    ])
   })
 })

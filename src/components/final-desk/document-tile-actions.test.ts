@@ -18,7 +18,7 @@ const markup = (tile: { key: string; documentId: string | null; fileUrl: string 
   }))
 
 describe('document tile actions', () => {
-  it('places a download under upload for every stored file', () => {
+  it('uses one download button when the card has several stored files', () => {
     const html = markup({
       key: 'permit_records',
       documentId: 'a',
@@ -27,14 +27,23 @@ describe('document tile actions', () => {
     })
     const quick = html.indexOf('Quick look')
     const upload = html.indexOf('>Upload<')
-    const newer = html.indexOf('Download v2')
-    const older = html.indexOf('Download v1')
+    const download = html.indexOf('>Download<')
     expect(quick).toBeGreaterThanOrEqual(0)
     expect(quick).toBeLessThan(upload)
-    expect(upload).toBeLessThan(newer)
-    expect(newer).toBeLessThan(older)
-    expect(html).toContain('/api/documents/a/file?t=1&amp;download=1')
-    expect(html).toContain('/api/documents/b/file?t=2&amp;download=1')
+    expect(upload).toBeLessThan(download)
+    expect(html.match(/>Download/g)).toHaveLength(1)
+    expect(html).not.toContain('Download v')
+  })
+
+  it('links a single stored file directly', () => {
+    const html = markup({
+      key: 'utility_bill',
+      documentId: 'c',
+      fileUrl: '/api/documents/c/file?t=3',
+      files: [file('c', 1, '/api/documents/c/file?t=3')],
+    })
+    expect(html).toContain('href="/api/documents/c/file?t=3&amp;download=1"')
+    expect(html.match(/>Download</g)).toHaveLength(1)
   })
 
   it('keeps a disabled download in place when the tile has no file', () => {
