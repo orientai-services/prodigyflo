@@ -46,7 +46,7 @@ function paletteHrefs(user: SessionUser): string[] {
   return subroutesFor(user).map((i) => i.href)
 }
 
-const DAILY_RAIL = ['/board', '/pipeline', '/clients', '/queue', '/documents', '/submissions']
+const DAILY_RAIL = ['/board', '/pipeline', '/clients', '/queue', '/call-center', '/documents', '/submissions']
 const OFF_RAIL = ['/sales', '/marketing', '/inbox', '/attorney', '/reports', '/agency', '/settings/users']
 
 describe('SUBROUTES', () => {
@@ -84,7 +84,7 @@ describe('navigationFor', () => {
     expect(missing, `stale nav routes (no page.tsx on disk): ${missing.join(', ')}`).toEqual([])
   })
 
-  it('staff Daily rail is Board, Pipeline, Clients, Queue, Document lab, CYS', () => {
+  it('staff Daily rail is Board, Pipeline, Clients, Queue, Call Center, Document lab, CYS', () => {
     const everything = fixtureUser({ permissions: ALL_PERMISSIONS })
     expect(hrefsOf(everything)).toEqual(DAILY_RAIL)
   })

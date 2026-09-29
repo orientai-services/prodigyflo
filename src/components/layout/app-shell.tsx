@@ -110,6 +110,7 @@ function NavSections({
                 item.href === '/board' ? t.nav.board
                 : item.href === '/clients' ? t.nav.clients
                 : item.href === '/queue' ? t.nav.queue
+                : item.href === '/call-center' ? t.nav.callCenter
                 : item.href === '/documents' ? t.nav.documents
                 : item.href === '/submissions' ? t.nav.submissions
                 : item.href === '/pipeline' ? t.nav.pipeline
