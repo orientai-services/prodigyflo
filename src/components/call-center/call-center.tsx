@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import {
   CALL_CENTER_COPY,
@@ -20,7 +21,15 @@ import {
 import '../final-desk/final-desk.css'
 import './call-center.css'
 
-const RAIL = ['Board', 'Pipeline', 'Clients', 'Queue', 'Call Center', 'Document lab', 'CYS'] as const
+const RAIL = [
+  { href: '/board', label: 'Board' },
+  { href: '/pipeline', label: 'Pipeline' },
+  { href: '/clients', label: 'Clients' },
+  { href: '/queue', label: 'Queue' },
+  { href: '/call-center', label: 'Call Center' },
+  { href: '/documents', label: 'Document lab' },
+  { href: '/submissions', label: 'CYS' },
+] as const
 
 const TABS: { id: LeadTab; label: string }[] = [
   { id: 'all', label: 'All leads' },
@@ -123,11 +132,11 @@ export function CallCenter() {
             <strong>Prodigy<span className="flo">Flo</span></strong>
           </div>
           <nav className="nav" aria-label="Desk">
-            {RAIL.map((label) =>
-              label === 'Call Center' ? (
-                <span key={label} className="here" aria-current="page">{label}</span>
+            {RAIL.map((item) =>
+              item.href === '/call-center' ? (
+                <Link key={item.href} href={item.href} className="here" aria-current="page">{item.label}</Link>
               ) : (
-                <span key={label} className="dead">{label}</span>
+                <Link key={item.href} href={item.href}>{item.label}</Link>
               ),
             )}
           </nav>

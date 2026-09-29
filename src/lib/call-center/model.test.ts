@@ -94,7 +94,12 @@ describe('call center door', () => {
     expect(bundle).toContain('Working language')
     expect(bundle).not.toMatch(/\bfetch\s*\(/)
     expect(bundle).not.toMatch(/from ['"]twilio|graph\.facebook|meta\.com|process\.env|\bSES\b|\$\d/)
-    expect(screen).not.toMatch(/<a\b|href=|router\.push/)
+    expect(screen).not.toMatch(/router\.push/)
+    expect(screen).toContain('<Link')
+    expect(screen).toContain('href={item.href}')
+    for (const href of ['/board', '/pipeline', '/clients', '/queue', '/call-center', '/documents', '/submissions']) {
+      expect(screen).toContain(`href: '${href}'`)
+    }
     expect(screen).toContain('Spanish page later')
     expect(screen).toContain('aria-current="page"')
     expect(screen).toContain('lead.subtitle')
