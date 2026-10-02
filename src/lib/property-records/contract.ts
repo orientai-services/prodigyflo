@@ -14,8 +14,14 @@ export const recordsResult=z.object({version:z.literal('property-records-v1'),ca
   parcel:z.object({id:z.string(),address:addressSchema,source_url:z.string()}).nullable(),
   status:z.enum(['complete','partial','no_match','unsupported','paused']),
   outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused','assessor_copy','recorder_record_summary']),source_url:z.string().optional(),detail:z.string().optional()})),
-  originals:z.array(z.object({url:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/),mime:z.string(),filename:z.string(),category:z.enum(['deed','ucc','permit']),source_url:z.string(),provenance:z.enum(['assessor_copy','recorder_record_summary','city_permit','recorder_unofficial_copy','original']).optional(),record_key:z.string().regex(/^(deed|ucc|permit):[A-Za-z0-9:._-]{1,160}$/).optional()})),cached:z.boolean()})
+  originals:z.array(z.object({url:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/),mime:z.string(),filename:z.string(),category:z.enum(['deed','ucc','permit']),source_url:z.string(),provenance:z.enum(['assessor_copy','recorder_record_summary','city_permit','recorder_unofficial_copy','original']).optional(),record_key:z.string().regex(/^(deed|ucc|permit):[A-Za-z0-9:._-]{1,160}$/).optional(),amendment_only:z.boolean().optional()})),cached:z.boolean()})
 export type RecordsOriginal=z.infer<typeof recordsResult>['originals'][number]
+export const AMENDMENT_ONLY_LABEL='amendment only, original not on index'
+/** Tile label for a recorder summary. An index with no original financing statement says so. */
+export function uccTileLabel(file:{category:string;provenance?:string|null;amendment_only?:boolean|null}) {
+  if(file.category!=='ucc'||file.provenance!=='recorder_record_summary') return null
+  return file.amendment_only?AMENDMENT_ONLY_LABEL:'County record summary (not the filing)'
+}
 /** Stable filing identity. The same instrument or attachment keeps one key when the PDF bytes change. */
 export function filingIdentity(file:{category:string;filename:string;record_key?:string|null}) {
   const key=file.record_key?.trim()
