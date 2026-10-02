@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {addressVersion,validateRecordsResult} from './contract'
+import {addressVersion,filingIdentity,isSameFiling,validateRecordsResult} from './contract'
 const address={line1:'4416 Clear Brook Pl',city:'Las Vegas',state:'NV',postal_code:'89103'}
 const result={version:'property-records-v1',case_key:'case1234',address_version:addressVersion(address),address,parcel:{id:'parcel-1',address,source_url:'https://county.test'},status:'partial',outcomes:[{source:'clark',kind:'deed',status:'index_only'}],originals:[],cached:false}
 describe('property lookup identity and originals',()=>{
@@ -28,5 +28,17 @@ describe('property lookup identity and originals',()=>{
   expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'no_match'}],originals:[file('permit','city_permit')]},'case1234',address)).toThrow('no supported')
   expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'deed',status:'index_only'}],originals:[file('deed','assessor_copy')]},'case1234',address)).toThrow('no supported')
   expect(validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'original'}],originals:[file('permit','city_permit')]},'case1234',address).originals[0].category).toBe('permit')
+ })
+ it('treats the same instrument as one filing even when the file bytes change',()=>{
+  const deed={category:'deed',filename:'assessor-deed-2010052603910.pdf',record_key:'deed:20100526:03910'}
+  expect(filingIdentity(deed)).toBe('deed:20100526:03910')
+  expect(filingIdentity({category:'ucc',filename:'clark-recorder-summary-202103170002904.pdf'})).toBe('ucc:clark-recorder-summary-202103170002904.pdf')
+  expect(isSameFiling({fileName:'assessor-deed-2010052603910.pdf',internalComment:'Official original obtained via Records.'},deed)).toBe(true)
+  expect(isSameFiling({fileName:'assessor-deed-2010052603910.pdf',internalComment:'record_key: deed:20220125:02830 Official original.'},deed)).toBe(false)
+  expect(isSameFiling({fileName:'other.pdf',internalComment:'record_key: deed:20100526:03910 kept'},deed)).toBe(true)
+  expect(isSameFiling({fileName:'Building-Permit.pdf',internalComment:'record_key: permit:BOTH2019062934:file1'},{category:'permit',filename:'Building-Permit.pdf',record_key:'permit:BOTH2019062934'})).toBe(false)
+  const parsed=validateRecordsResult({...result,parcel:result.parcel,outcomes:[{source:'clark',kind:'deed',status:'assessor_copy'}],originals:[{url:'https://records.test/api/service/originals/hash',sha256:'b'.repeat(64),mime:'application/pdf',filename:'assessor-deed-2010052603910.pdf',category:'deed',source_url:'https://county.test',provenance:'assessor_copy',record_key:'deed:20100526:03910'}]},'case1234',address)
+  expect(parsed.originals[0].record_key).toBe('deed:20100526:03910')
+  expect(()=>validateRecordsResult({...result,parcel:result.parcel,outcomes:[{source:'clark',kind:'deed',status:'assessor_copy'}],originals:[{url:'https://records.test/api/service/originals/hash',sha256:'b'.repeat(64),mime:'application/pdf',filename:'deed.pdf',category:'deed',source_url:'https://county.test',provenance:'assessor_copy',record_key:'lien:nope'}]},'case1234',address)).toThrow()
  })
 })

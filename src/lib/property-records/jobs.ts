@@ -7,7 +7,7 @@ import {sha256,validateUpload} from '@/lib/extraction/sniff'
 import {scsRequirementId} from '@/lib/intake/scs-document-requirements'
 import {isSyntheticClient} from '@/lib/intake/synthetic'
 import {asRecord} from '@/lib/packet/schema'
-import {addressVersion,normalizeAddress,validateRecordsResult,type PropertyAddress} from './contract'
+import {addressVersion,isSameFiling,normalizeAddress,validateRecordsResult,type PropertyAddress} from './contract'
 
 type ImportedRecord={id:string; priorStatus?:DocumentStatus; suspendedAt?:string}
 function importedRecord(value:unknown):ImportedRecord|null {
@@ -91,6 +91,13 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
       for(const original of result.originals) {
         const latest=await db.propertyRecordsJob.findUniqueOrThrow({where:{id:job.id}})
         if(asRecord(latest.importedFiles)[original.sha256]) continue
+        const requirementId=await scsRequirementId(job.organizationId,`public_record_${original.category}`)
+        const already=await db.clientDocument.findMany({where:{clientId:job.clientId,requirementId,status:{notIn:['REJECTED','EXPIRED']}},select:{id:true,fileName:true,internalComment:true}})
+        const same=already.find(doc=>isSameFiling(doc,original))
+        if(same) {
+          await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token,status:'RUNNING'},data:{importedFiles:{...asRecord(latest.importedFiles),[original.sha256]:same.id} as Prisma.InputJsonValue}})
+          continue
+        }
         const url=new URL(original.url)
         if(url.origin!==base.origin||!url.pathname.startsWith('/api/service/originals/')||url.username||url.password) throw Error('Untrusted original record URL')
         const file=await fetch(url,{headers,redirect:'error',cache:'no-store',signal:AbortSignal.timeout(55_000)})
@@ -100,7 +107,6 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
         const bytes=Buffer.concat(chunks),validation=validateUpload({buffer:bytes,declaredMime:original.mime,maxSizeMb:25,allowedMimeTypes:[]})
         if(!validation.ok||sha256(bytes)!==original.sha256) throw Error('Original record failed format/checksum verification')
         const storage=getFileStorage(),saved=await storage.put(bytes,{fileName:original.filename,mimeType:validation.mimeType,clientId:job.clientId})
-        const requirementId=await scsRequirementId(job.organizationId,`public_record_${original.category}`)
         let committed=false
         try {await db.$transaction(async tx=>{
           await tx.$queryRaw`SELECT id FROM "Client" WHERE id=${job.clientId} FOR UPDATE`
@@ -109,8 +115,12 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
           const live=await tx.clientAddress.findFirst({where:{clientId:job.clientId,isPrimary:true}})
           if(current.claimToken!==token||current.status!=='RUNNING'||!live||addressVersion({line1:live.line1,city:live.city,state:live.state,postal_code:live.postalCode})!==job.addressVersion) throw Error('Property changed before original record import')
           if(asRecord(current.importedFiles)[original.sha256]) return
+          const held=await tx.clientDocument.findMany({where:{clientId:job.clientId,requirementId,status:{notIn:['REJECTED','EXPIRED']}},select:{id:true,fileName:true,internalComment:true}})
+          const prior=held.find(doc=>isSameFiling(doc,original))
+          if(prior) {await tx.propertyRecordsJob.update({where:{id:job.id},data:{importedFiles:{...asRecord(current.importedFiles),[original.sha256]:prior.id} as Prisma.InputJsonValue}});return}
           const summary=original.category==='ucc'&&original.provenance==='recorder_record_summary'
-          const doc=await tx.clientDocument.create({data:{clientId:job.clientId,requirementId,fileName:original.filename.slice(0,255),label:(summary?'County record summary (not the filing)':`${original.category} — ${original.filename}`).slice(0,120),storageKey:saved.key,mimeType:validation.mimeType,sizeBytes:bytes.length,checksum:original.sha256,scanStatus:'clean',status:'RECEIVED',receivedAt:new Date(),internalComment:summary?`County record summary (not the filing). Screenshot of the county record page, not the UCC filing image. Source: ${original.source_url}; parcel: ${result.parcel!.id}; address version: ${job.addressVersion}.`:`Official original obtained via Records. Source: ${original.source_url}; parcel: ${result.parcel!.id}; address version: ${job.addressVersion}.`}})
+          const note=summary?`County record summary (not the filing). Screenshot of the county record page, not the UCC filing image. Source: ${original.source_url}; parcel: ${result.parcel!.id}; address version: ${job.addressVersion}.`:`Official original obtained via Records. Source: ${original.source_url}; parcel: ${result.parcel!.id}; address version: ${job.addressVersion}.`
+          const doc=await tx.clientDocument.create({data:{clientId:job.clientId,requirementId,fileName:original.filename.slice(0,255),label:(summary?'County record summary (not the filing)':`${original.category} — ${original.filename}`).slice(0,120),storageKey:saved.key,mimeType:validation.mimeType,sizeBytes:bytes.length,checksum:original.sha256,scanStatus:'clean',status:'RECEIVED',receivedAt:new Date(),internalComment:`record_key: ${original.record_key??`${original.category}:${original.filename}`} ${note}`.slice(0,2000)}})
           await tx.propertyRecordsJob.update({where:{id:job.id},data:{importedFiles:{...asRecord(current.importedFiles),[original.sha256]:doc.id} as Prisma.InputJsonValue}})
           committed=true
         })} finally {if(!committed)await storage.delete(saved.key)}
