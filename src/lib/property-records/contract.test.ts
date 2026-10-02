@@ -20,4 +20,13 @@ describe('property lookup identity and originals',()=>{
   expect(()=>validateRecordsResult({...result,originals:[original]},'case1234',address)).toThrow('no supported')
   expect(()=>validateRecordsResult({...result,parcel:null,originals:[original]},'case1234',address)).toThrow('matched parcel')
  })
+ it('accepts an assessor deed copy and a recorder UCC summary, and still requires an original permit',()=>{
+  const file=(category:string,provenance?:string)=>({url:'https://records.test/api/service/originals/hash',sha256:'a'.repeat(64),mime:'application/pdf',filename:`${category}.pdf`,category,source_url:'https://county.test',...(provenance?{provenance}:{})})
+  const withParcel={...result,parcel:result.parcel,status:'partial'}
+  expect(validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'deed',status:'assessor_copy'}],originals:[file('deed','assessor_copy')]},'case1234',address).originals).toHaveLength(1)
+  expect(validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'ucc',status:'recorder_record_summary'}],originals:[file('ucc','recorder_record_summary')]},'case1234',address).originals[0].provenance).toBe('recorder_record_summary')
+  expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'no_match'}],originals:[file('permit','city_permit')]},'case1234',address)).toThrow('no supported')
+  expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'deed',status:'index_only'}],originals:[file('deed','assessor_copy')]},'case1234',address)).toThrow('no supported')
+  expect(validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'original'}],originals:[file('permit','city_permit')]},'case1234',address).originals[0].category).toBe('permit')
+ })
 })

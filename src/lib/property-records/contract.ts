@@ -13,13 +13,21 @@ export function addressVersion(address:PropertyAddress) {return createHash('sha2
 export const recordsResult=z.object({version:z.literal('property-records-v1'),case_key:z.string(),address_version:z.string(),address:addressSchema,
   parcel:z.object({id:z.string(),address:addressSchema,source_url:z.string()}).nullable(),
   status:z.enum(['complete','partial','no_match','unsupported','paused']),
-  outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused']),source_url:z.string().optional(),detail:z.string().optional()})),
-  originals:z.array(z.object({url:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/),mime:z.string(),filename:z.string(),category:z.enum(['deed','ucc','permit']),source_url:z.string()})),cached:z.boolean()})
+  outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused','assessor_copy','recorder_record_summary']),source_url:z.string().optional(),detail:z.string().optional()})),
+  originals:z.array(z.object({url:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/),mime:z.string(),filename:z.string(),category:z.enum(['deed','ucc','permit']),source_url:z.string(),provenance:z.enum(['assessor_copy','recorder_record_summary','city_permit','recorder_unofficial_copy','original']).optional()})),cached:z.boolean()})
+type RecordFile={category:'deed'|'ucc'|'permit';provenance?:'assessor_copy'|'recorder_record_summary'|'city_permit'|'recorder_unofficial_copy'|'original'}
+type RecordOutcome={kind:'parcel'|'permit'|'deed'|'ucc';status:string}
+/** Deed assessor images and UCC recorder screenshots are the only non-original files this desk accepts. */
+function outcomeSupports(file:RecordFile,outcomes:RecordOutcome[]) {
+  if(file.category==='deed'&&file.provenance==='assessor_copy') return outcomes.some(o=>o.kind==='deed'&&(o.status==='assessor_copy'||o.status==='original'))
+  if(file.category==='ucc'&&file.provenance==='recorder_record_summary') return outcomes.some(o=>o.kind==='ucc'&&o.status==='recorder_record_summary')
+  return outcomes.some(o=>o.kind===file.category&&o.status==='original')
+}
 export function validateRecordsResult(raw:unknown,caseKey:string,address:PropertyAddress) {
   const result=recordsResult.parse(raw)
   if(result.case_key!==caseKey||result.address_version!==addressVersion(address)||addressVersion(result.address)!==addressVersion(address)) throw Error('Public records response belongs to another case/property version')
   if(result.parcel&&addressVersion(result.parcel.address)!==addressVersion(address)) throw Error('Matched parcel address does not match the requested property')
   if(result.originals.length&&!result.parcel?.id) throw Error('Original records require a matched parcel')
-  for(const file of result.originals) if(!result.outcomes.some(o=>o.kind===file.category&&o.status==='original')) throw Error('Original record has no supported retrieval outcome')
+  for(const file of result.originals) if(!outcomeSupports(file,result.outcomes)) throw Error('Original record has no supported retrieval outcome')
   return result
 }

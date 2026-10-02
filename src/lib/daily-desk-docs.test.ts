@@ -35,6 +35,11 @@ describe('classifyDeskKind', () => {
     expect(classifyDeskKind({detectedType: 'public_record_summary', fileName: 'County-Permit-Record.pdf'})?.key).toBe('other')
     expect(classifyDeskKind({fileName: 'UCC-Fixture-Search-Summary.pdf'})?.key).toBe('other')
     expect(classifyDeskKind({fileName: 'County-Permit-Search-Summary.pdf'})?.key).toBe('other')
+    expect(classifyDeskKind({requirementKey: 'property_ownership', label: 'County record summary (not the filing)', fileName: 'deed.pdf'})?.key).toBe('other')
+    expect(classifyDeskKind({requirementKey: 'permit_records', label: 'County record summary (not the filing)', fileName: 'permit.pdf'})?.key).toBe('other')
+  })
+  it('keeps a labeled recorder UCC screenshot on the UCC tile', () => {
+    expect(classifyDeskKind({requirementKey: 'lien_filing', label: 'County record summary (not the filing)', fileName: 'clark-recorder-summary.pdf'})?.key).toBe('ucc_lien')
   })
   it('puts a lender PDF on finance and a Steele install PDF on solar', () => {
     expect(classifyDeskKind({ fileName: 'GoodLeap_TIL.pdf' })?.key).toBe('finance_agreement')
