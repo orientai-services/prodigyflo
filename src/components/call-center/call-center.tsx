@@ -1,7 +1,19 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import {
+  recordCallCenterAttempt,
+  recordCallCenterText,
+  revealCallCenterContact,
+  saveCallCenterNote,
+  saveCallCenterOutcome,
+  sendCallCenterIntakeLink,
+  skipCallCenterLead,
+  takeCallCenterLead,
+} from '@/lib/call-center/actions'
+import type { DeskResult } from '@/lib/call-center/desk-types'
 import {
   CALL_CENTER_COPY,
   CURRENT_REP,
@@ -106,7 +118,7 @@ function Recording({ seconds, label }: { seconds: number; label: string }) {
   )
 }
 
-function Person({ lead, onOpen }: { lead: CallLead; onOpen: (lead: CallLead) => void }) {
+function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (lead: CallLead) => void }) {
   return (
     <button type="button" className="person" disabled={lead.disabled} onClick={() => onOpen(lead)}>
       <b>{lead.name}</b>
@@ -117,13 +129,14 @@ function Person({ lead, onOpen }: { lead: CallLead; onOpen: (lead: CallLead) => 
         {lead.tries ? ` · ${triesLine(lead)}` : ''}
       </span>
       {lead.dnc ? <span className="mini">Do not call</span> : null}
-      {lockLabel(lead) ? <span className="mini">{lockLabel(lead)}</span> : null}
+      {lockLabel(lead, rep) ? <span className="mini">{lockLabel(lead, rep)}</span> : null}
     </button>
   )
 }
 
-export function CallCenter() {
-  const [leads, setLeads] = useState(seedLeads)
+export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead[]; viewerId?: string }) {
+  const router = useRouter()
+  const [draft, setDraft] = useState<{ source: CallLead[] | undefined; leads: CallLead[] } | null>(null)
   const [tab, setTab] = useState<LeadTab>('all')
   const [language, setLanguage] = useState<LanguageFilter>('all')
   const [query, setQuery] = useState('')
@@ -131,11 +144,15 @@ export function CallCenter() {
   const [now, setNow] = useState<string | null>(null)
   const [callAnywayId, setCallAnywayId] = useState<string | null>(null)
   const [note, setNote] = useState('')
-  const rows = visibleLeads(leads, tab, language, query)
-  const selected = rows.find((lead) => lead.id === selectedId && !lead.disabled) ?? null
+  const [dial, setDial] = useState<{ leadId: string; phone: string | null; email: string | null } | null>(null)
+  const [deskError, setDeskError] = useState<string | null>(null)
+  const leads = draft && draft.source === initialLeads ? draft.leads : (initialLeads ?? seedLeads())
 
   function replace(next: CallLead) {
-    setLeads((current) => current.map((lead) => (lead.id === next.id ? next : lead)))
+    setDraft({
+      source: initialLeads,
+      leads: leads.map((lead) => (lead.id === next.id ? next : lead)),
+    })
   }
 
   function stamp(): string {
@@ -143,6 +160,54 @@ export function CallCenter() {
     setNow(at)
     return at
   }
+
+  function repFor(lead: CallLead): string {
+    return lead.persisted ? (viewerId ?? '') : CURRENT_REP
+  }
+
+  function holding(lead: CallLead): boolean {
+    if (!lead.persisted) return true
+    return Boolean(viewerId) && lead.lockedBy === viewerId
+  }
+
+  async function commit(lead: CallLead, run: () => Promise<DeskResult>, local: () => void): Promise<boolean> {
+    if (!lead.persisted) {
+      local()
+      return true
+    }
+    const result = await run()
+    if (result.ok) {
+      replace(result.lead)
+      setDeskError(null)
+      router.refresh()
+      return true
+    }
+    setDeskError(result.error)
+    return false
+  }
+
+  const rows = visibleLeads(leads, tab, language, query)
+  const selected = rows.find((lead) => lead.id === selectedId && !lead.disabled) ?? null
+  const who = selected ? repFor(selected) : CURRENT_REP
+  const quietBlocked = Boolean(selected && now && callNeedsConfirm(selected, now) && callAnywayId !== selected.id)
+  const revealLeadId = selected?.persisted && viewerId && selected.lockedBy === viewerId && !selected.dnc
+    ? selected.id
+    : null
+  const dialPhone = revealLeadId && dial?.leadId === revealLeadId ? dial.phone : null
+  const dialEmail = revealLeadId && dial?.leadId === revealLeadId ? dial.email : null
+
+  useEffect(() => {
+    if (!revealLeadId) return
+    let cancel = false
+    revealCallCenterContact(revealLeadId).then((contact) => {
+      if (!cancel) setDial({ leadId: revealLeadId, phone: contact.phone, email: contact.email })
+    }).catch(() => {
+      if (!cancel) setDial({ leadId: revealLeadId, phone: null, email: null })
+    })
+    return () => {
+      cancel = true
+    }
+  }, [revealLeadId])
 
   function chooseLanguage(next: LanguageFilter) {
     setLanguage(next)
@@ -158,8 +223,17 @@ export function CallCenter() {
 
   function jump() {
     if (!selected) return
-    const next = nextCallableLead(rows, selected.id)
+    const next = nextCallableLead(rows, selected.id, who)
     if (next && next.id !== selected.id) openLead(next)
+  }
+
+  async function skipSelected() {
+    if (!selected) return
+    if (selected.persisted && holding(selected)) {
+      const ok = await commit(selected, () => skipCallCenterLead(selected.id), () => {})
+      if (!ok) return
+    }
+    jump()
   }
 
   return (
@@ -248,7 +322,7 @@ export function CallCenter() {
                         onClick={() => openLead(lead)}
                       >
                         <td>{formatWhen(lead.arrivedAt)}</td>
-                        <td><Person lead={lead} onOpen={openLead} /></td>
+                        <td><Person lead={lead} rep={repFor(lead)} onOpen={openLead} /></td>
                         <td>{channelLabel(lead.channel)}</td>
                         <td>{lead.contacted ? 'Yes' : 'No'}</td>
                         <td>{lead.status}</td>
@@ -266,14 +340,16 @@ export function CallCenter() {
                       <span className="tag">{languageLabel(selected.language)}</span>
                       <span className={`tag ${selected.contacted ? 'g' : 'w'}`}>{selected.contacted ? 'Contacted' : 'Not contacted'}</span>
                       <span className="tag">{selected.status}</span>
-                      {lockLabel(selected) ? <span className="tag">{lockLabel(selected)}</span> : null}
+                      {lockLabel(selected, who) ? <span className="tag">{lockLabel(selected, who)}</span> : null}
                       {selected.dnc ? <span className="tag">Do not call</span> : null}
                     </div>
                     <h2 className="who">{selected.name}</h2>
+                    {deskError ? <p className="muted" role="status">{deskError}</p> : null}
                     <dl className="facts">
                       <div><dt>Page</dt><dd>{selected.page}</dd></div>
                       <div><dt>ZIP</dt><dd>{selected.zip ?? '—'}</dd></div>
-                      <div><dt>Phone</dt><dd>{phoneLabel(selected)}</dd></div>
+                      <div><dt>Phone</dt><dd>{dialPhone ? <a href={`tel:${dialPhone}`}>{dialPhone}</a> : phoneLabel(selected)}</dd></div>
+                      {dialEmail ? <div><dt>Email</dt><dd>{dialEmail}</dd></div> : null}
                       <div><dt>Tries</dt><dd>{triesLine(selected)}</dd></div>
                       {nextTryLine(selected) ? <div><dt>Next try</dt><dd>{nextTryLine(selected)}</dd></div> : null}
                       {inboundFormMatch(selected, leads) ? <div><dt>Match</dt><dd>{inboundFormMatch(selected, leads)}</dd></div> : null}
@@ -284,7 +360,7 @@ export function CallCenter() {
                         <button
                           type="button"
                           className="btn secondary"
-                          disabled={!canCall(selected)}
+                          disabled={!canCall(selected, who) || !holding(selected)}
                           onClick={() => setCallAnywayId(selected.id)}
                         >
                           Call anyway
@@ -293,25 +369,35 @@ export function CallCenter() {
                     ) : null}
                     <h3>Queue</h3>
                     <div className="actions">
-                      <button type="button" className="btn secondary" disabled={!canTake(selected)} onClick={() => replace(takeLead(selected, CURRENT_REP, stamp()))}>Take</button>
-                      <button type="button" className="btn secondary" onClick={jump}>Skip</button>
+                      <button type="button" className="btn secondary" disabled={!canTake(selected, who)} onClick={() => { void commit(selected, () => takeCallCenterLead(selected.id), () => replace(takeLead(selected, CURRENT_REP, stamp()))) }}>Take</button>
+                      <button type="button" className="btn secondary" onClick={() => { void skipSelected() }}>Skip</button>
                       <button type="button" className="btn secondary" onClick={jump}>Next</button>
                     </div>
                     <h3>Contact</h3>
                     <div className="actions">
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={!canCall(selected) || (now != null && callNeedsConfirm(selected, now) && callAnywayId !== selected.id)}
-                        onClick={() => replace(applyLeadAction(selected, 'call', stamp()))}
-                      >
-                        Call
-                      </button>
+                      {dialPhone && holding(selected) && canCall(selected, who) && !quietBlocked ? (
+                        <a
+                          className="btn"
+                          href={`tel:${dialPhone}`}
+                          onClick={() => { void commit(selected, () => recordCallCenterAttempt(selected.id), () => {}) }}
+                        >
+                          Call
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={!canCall(selected, who) || !holding(selected) || quietBlocked || Boolean(selected.persisted)}
+                          onClick={() => replace(applyLeadAction(selected, 'call', stamp()))}
+                        >
+                          Call
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn secondary"
-                        disabled={!canText(selected)}
-                        onClick={() => replace(applyLeadAction(selected, 'text', stamp()))}
+                        disabled={!canText(selected, who) || !holding(selected)}
+                        onClick={() => { void commit(selected, () => recordCallCenterText(selected.id), () => replace(applyLeadAction(selected, 'text', stamp()))) }}
                       >
                         Text
                       </button>
@@ -324,8 +410,8 @@ export function CallCenter() {
                           key={item.id}
                           type="button"
                           className="btn secondary"
-                          disabled={!canRecordOutcome(selected)}
-                          onClick={() => replace(applyOutcome(selected, item.id, stamp()))}
+                          disabled={!canRecordOutcome(selected, who) || !holding(selected)}
+                          onClick={() => { void commit(selected, () => saveCallCenterOutcome(selected.id, item.id), () => replace(applyOutcome(selected, item.id, stamp()))) }}
                         >
                           {item.label}
                         </button>
@@ -336,8 +422,8 @@ export function CallCenter() {
                       <button
                         type="button"
                         className="btn secondary"
-                        disabled={!canSendIntake(selected)}
-                        onClick={() => replace(sendIntakeLink(selected, stamp()))}
+                        disabled={!canSendIntake(selected, who) || !holding(selected)}
+                        onClick={() => { void commit(selected, () => sendCallCenterIntakeLink(selected.id), () => replace(sendIntakeLink(selected, stamp()))) }}
                       >
                         Send intake link
                       </button>
@@ -348,17 +434,21 @@ export function CallCenter() {
                       value={note}
                       placeholder="Note on this attempt"
                       aria-label="Note on this attempt"
-                      disabled={!canSaveNote(selected)}
+                      disabled={!canSaveNote(selected, who) || !holding(selected)}
                       onChange={(event) => setNote(event.target.value)}
                     />
                     <div className="actions">
                       <button
                         type="button"
                         className="btn secondary"
-                        disabled={!canSaveNote(selected)}
+                        disabled={!canSaveNote(selected, who) || !holding(selected)}
                         onClick={() => {
-                          replace(saveNote(selected, note, stamp()))
-                          setNote('')
+                          const text = note
+                          void commit(
+                            selected,
+                            () => saveCallCenterNote(selected.id, text),
+                            () => replace(saveNote(selected, text, stamp())),
+                          ).then((ok) => { if (ok) setNote('') })
                         }}
                       >
                         Save note

@@ -2660,8 +2660,12 @@ model CallCenterLead {
   intakeLinkSentAt DateTime?
   /// Set only after SCS intake creates a Client. No foreign key.
   clientId       String?
-  /// Last four digits only. Never the full number.
+  /// Last four digits only. The list and every other rep see this, never the full number.
   phoneLast4     String?                @db.VarChar(4)
+  /// encryptSecret blob for the full phone. Never selected into the desk list.
+  phoneSecret    Json?
+  /// encryptSecret blob for the email. Never selected into the desk list.
+  emailSecret    Json?
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 
