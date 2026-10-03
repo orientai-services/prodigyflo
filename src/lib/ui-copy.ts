@@ -44,6 +44,7 @@ export const UI_COPY = {
     pipeline: 'Pipeline',
     clients: 'Clients',
     queue: 'Queue',
+    callCenter: 'Call Center',
     documents: 'Document lab',
     submissions: 'CYS',
     desk: 'Desk',

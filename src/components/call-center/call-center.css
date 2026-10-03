@@ -1,0 +1,75 @@
+.final-desk.call-center .brand .flo { color: #55bac2; }
+.final-desk.call-center .nav a {
+  display: block;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #c9d4d2;
+  text-decoration: none;
+}
+.final-desk.call-center .nav a.here { background: #1d3344; color: #fff; font-weight: 600; }
+.final-desk.call-center .nav a:hover { background: #1d3344; color: #fff; }
+.final-desk.call-center .top { gap: 16px; }
+.final-desk.call-center .search { flex: 1; max-width: 420px; }
+.final-desk.call-center .search input,
+.final-desk.call-center .lang select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+}
+.final-desk.call-center .top-right { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+.final-desk.call-center .lang { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.final-desk.call-center .lang select { width: auto; }
+.final-desk.call-center .voice { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.final-desk.call-center .page-title { margin-bottom: 14px; }
+.final-desk.call-center .page-title h2 { font-family: var(--font-fraunces), serif; font-size: 34px; font-weight: 500; }
+.final-desk.call-center .page-title p { margin-top: 6px; max-width: 640px; }
+.final-desk.call-center .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.final-desk.call-center .filters button {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: var(--ink);
+  font-size: 13px;
+}
+.final-desk.call-center .filters button.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+.final-desk.call-center .split { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .8fr); gap: 16px; align-items: start; }
+.final-desk.call-center tr.row.on { background: var(--teal2); }
+.final-desk.call-center tr.dead { opacity: .72; }
+.final-desk.call-center .person { display: block; background: none; border: 0; padding: 0; text-align: left; color: inherit; }
+.final-desk.call-center .person b,
+.final-desk.call-center .person span { display: block; }
+.final-desk.call-center .person span { margin-top: 2px; font-size: 12px; color: var(--muted); font-weight: 400; }
+.final-desk.call-center button.person:disabled { cursor: default; }
+.final-desk.call-center .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 14px; }
+.final-desk.call-center .facts div { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.final-desk.call-center .facts dt { font-size: 11px; color: var(--muted); }
+.final-desk.call-center .facts dd { font-size: 14px; font-weight: 600; }
+.final-desk.call-center .player { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; margin: 14px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.final-desk.call-center .track { height: 6px; background: #e8e2d6; border-radius: 99px; overflow: hidden; }
+.final-desk.call-center .track i { display: block; height: 100%; background: var(--teal); }
+.final-desk.call-center .player small,
+.final-desk.call-center .trail time { display: block; color: var(--muted); font-size: 11px; }
+.final-desk.call-center .trail { list-style: none; display: grid; gap: 8px; margin-top: 8px; }
+.final-desk.call-center .trail li { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.final-desk.call-center .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+@media (max-width: 980px) {
+  .final-desk.call-center .shell { flex-direction: column; }
+  .final-desk.call-center .rail { display: flex; width: 100%; flex-direction: column; align-items: stretch; gap: 8px; overflow: visible; padding: 12px 16px 8px; }
+  .final-desk.call-center .nav { flex-direction: row; flex-wrap: wrap; margin-top: 0; gap: 4px; }
+  .final-desk.call-center .nav a { padding: 6px 10px; }
+  .final-desk.call-center .brand { flex-shrink: 0; }
+  .final-desk.call-center .top { height: auto; flex-wrap: wrap; align-items: stretch; padding: 12px 16px; gap: 10px; }
+  .final-desk.call-center .search { max-width: none; min-width: 0; width: 100%; }
+  .final-desk.call-center .top-right { width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: space-between; }
+  .final-desk.call-center .voice { white-space: normal; }
+  .final-desk.call-center .split,
+  .final-desk.call-center .facts { grid-template-columns: 1fr; }
+  .final-desk.call-center .card { overflow-x: auto; }
+  .final-desk.call-center table { min-width: 680px; }
+}

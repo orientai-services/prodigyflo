@@ -37,6 +37,7 @@ const SECTIONS: NavSection[] = [
       { href: '/pipeline', label: 'Pipeline', icon: 'Columns3', roles: ['SUPER_ADMIN'] },
       { href: '/clients', label: 'Clients', icon: 'Users', anyOf: CLIENT_READ },
       { href: '/queue', label: 'Queue', icon: 'ListTodo', anyOf: CLIENT_READ },
+      { href: '/call-center', label: 'Call Center', icon: 'Phone', anyOf: CLIENT_READ },
       { href: '/documents', label: 'Document lab', icon: 'FileText', anyOf: ['documents:review'] },
       { href: '/submissions', label: 'CYS', icon: 'Send', anyOf: ['submissions:read'] },
     ],
