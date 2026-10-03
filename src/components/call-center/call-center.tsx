@@ -4,18 +4,39 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import {
   CALL_CENTER_COPY,
+  CURRENT_REP,
+  HELD_UNTIL_MORNING,
+  OUTCOMES,
   PREVIEW_BANNER,
+  QUIET_BANNER,
   applyLeadAction,
+  applyOutcome,
   badgeLabel,
+  callNeedsConfirm,
+  canCall,
+  canRecordOutcome,
+  canSaveNote,
+  canSendIntake,
+  canTake,
+  canText,
   channelLabel,
   formatWhen,
   hasCall,
+  inboundFormMatch,
   languageLabel,
+  lockLabel,
+  nextCallableLead,
+  nextTryLine,
+  phoneLabel,
+  saveNote,
   seedLeads,
+  sendIntakeLink,
+  takeLead,
+  textHeldUntilMorning,
+  triesLine,
   visibleLeads,
   type CallLead,
   type LanguageFilter,
-  type LeadAction,
   type LeadTab,
 } from '@/lib/call-center/model'
 import '../final-desk/final-desk.css'
@@ -32,12 +53,12 @@ const RAIL = [
 ] as const
 
 const TABS: { id: LeadTab; label: string }[] = [
-  { id: 'all', label: 'All leads' },
+  { id: 'all', label: 'All' },
   { id: 'forms', label: 'Forms' },
   { id: 'inbound', label: 'Inbound' },
   { id: 'uncontacted', label: 'Not contacted' },
-  { id: 'missed', label: 'Missed' },
-  { id: 'booked', label: 'Booked' },
+  { id: 'retry', label: 'Retry' },
+  { id: 'dnc', label: 'Do not call' },
 ]
 
 function clock(total: number): string {
@@ -93,7 +114,10 @@ function Person({ lead, onOpen }: { lead: CallLead; onOpen: (lead: CallLead) => 
       <span>
         {languageLabel(lead.language)}
         {lead.last4 ? ` · ${lead.last4}` : ''}
+        {lead.tries ? ` · ${triesLine(lead)}` : ''}
       </span>
+      {lead.dnc ? <span className="mini">Do not call</span> : null}
+      {lockLabel(lead) ? <span className="mini">{lockLabel(lead)}</span> : null}
     </button>
   )
 }
@@ -104,13 +128,20 @@ export function CallCenter() {
   const [language, setLanguage] = useState<LanguageFilter>('all')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [now, setNow] = useState<string | null>(null)
+  const [callAnywayId, setCallAnywayId] = useState<string | null>(null)
+  const [note, setNote] = useState('')
   const rows = visibleLeads(leads, tab, language, query)
   const selected = rows.find((lead) => lead.id === selectedId && !lead.disabled) ?? null
 
-  function act(action: LeadAction) {
-    if (!selected) return
+  function replace(next: CallLead) {
+    setLeads((current) => current.map((lead) => (lead.id === next.id ? next : lead)))
+  }
+
+  function stamp(): string {
     const at = new Date().toISOString()
-    setLeads((current) => current.map((lead) => (lead.id === selected.id ? applyLeadAction(lead, action, at) : lead)))
+    setNow(at)
+    return at
   }
 
   function chooseLanguage(next: LanguageFilter) {
@@ -121,6 +152,14 @@ export function CallCenter() {
   function openLead(lead: CallLead) {
     if (lead.disabled) return
     setSelectedId(lead.id)
+    setNote('')
+    setNow(new Date().toISOString())
+  }
+
+  function jump() {
+    if (!selected) return
+    const next = nextCallableLead(rows, selected.id)
+    if (next && next.id !== selected.id) openLead(next)
   }
 
   return (
@@ -204,7 +243,7 @@ export function CallCenter() {
                     {rows.map((lead) => (
                       <tr
                         key={lead.id}
-                        className={lead.disabled ? 'dead' : selectedId === lead.id ? 'row on' : 'row'}
+                        className={['row', lead.disabled || lead.dnc ? 'dead' : '', selectedId === lead.id ? 'on' : ''].filter(Boolean).join(' ')}
                         aria-selected={selectedId === lead.id}
                         onClick={() => openLead(lead)}
                       >
@@ -227,19 +266,103 @@ export function CallCenter() {
                       <span className="tag">{languageLabel(selected.language)}</span>
                       <span className={`tag ${selected.contacted ? 'g' : 'w'}`}>{selected.contacted ? 'Contacted' : 'Not contacted'}</span>
                       <span className="tag">{selected.status}</span>
+                      {lockLabel(selected) ? <span className="tag">{lockLabel(selected)}</span> : null}
+                      {selected.dnc ? <span className="tag">Do not call</span> : null}
                     </div>
                     <h2 className="who">{selected.name}</h2>
                     <dl className="facts">
                       <div><dt>Page</dt><dd>{selected.page}</dd></div>
                       <div><dt>ZIP</dt><dd>{selected.zip ?? '—'}</dd></div>
-                      <div><dt>Phone</dt><dd>{selected.last4 ? `···· ${selected.last4}` : '—'}</dd></div>
-                      <div><dt>Contacted</dt><dd>{selected.contacted ? 'Yes' : 'No'}</dd></div>
+                      <div><dt>Phone</dt><dd>{phoneLabel(selected)}</dd></div>
+                      <div><dt>Tries</dt><dd>{triesLine(selected)}</dd></div>
+                      {nextTryLine(selected) ? <div><dt>Next try</dt><dd>{nextTryLine(selected)}</dd></div> : null}
+                      {inboundFormMatch(selected, leads) ? <div><dt>Match</dt><dd>{inboundFormMatch(selected, leads)}</dd></div> : null}
                     </dl>
+                    {now && callNeedsConfirm(selected, now) ? (
+                      <div className="banner quiet" role="status">
+                        <span>{QUIET_BANNER}</span>
+                        <button
+                          type="button"
+                          className="btn secondary"
+                          disabled={!canCall(selected)}
+                          onClick={() => setCallAnywayId(selected.id)}
+                        >
+                          Call anyway
+                        </button>
+                      </div>
+                    ) : null}
+                    <h3>Queue</h3>
                     <div className="actions">
-                      <button type="button" className="btn" onClick={() => act('call')}>Call</button>
-                      <button type="button" className="btn secondary" onClick={() => act('text')}>Text</button>
-                      <button type="button" className="btn secondary" onClick={() => act('book')}>Book callback</button>
-                      <button type="button" className="btn secondary" onClick={() => act('missed')}>Missed</button>
+                      <button type="button" className="btn secondary" disabled={!canTake(selected)} onClick={() => replace(takeLead(selected, CURRENT_REP, stamp()))}>Take</button>
+                      <button type="button" className="btn secondary" onClick={jump}>Skip</button>
+                      <button type="button" className="btn secondary" onClick={jump}>Next</button>
+                    </div>
+                    <h3>Contact</h3>
+                    <div className="actions">
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={!canCall(selected) || (now != null && callNeedsConfirm(selected, now) && callAnywayId !== selected.id)}
+                        onClick={() => replace(applyLeadAction(selected, 'call', stamp()))}
+                      >
+                        Call
+                      </button>
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={!canText(selected)}
+                        onClick={() => replace(applyLeadAction(selected, 'text', stamp()))}
+                      >
+                        Text
+                      </button>
+                    </div>
+                    {now && textHeldUntilMorning(selected, now) ? <p className="muted">{HELD_UNTIL_MORNING}</p> : null}
+                    <h3>Result</h3>
+                    <div className="actions">
+                      {OUTCOMES.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className="btn secondary"
+                          disabled={!canRecordOutcome(selected)}
+                          onClick={() => replace(applyOutcome(selected, item.id, stamp()))}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                    <h3>Handoff</h3>
+                    <div className="actions">
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={!canSendIntake(selected)}
+                        onClick={() => replace(sendIntakeLink(selected, stamp()))}
+                      >
+                        Send intake link
+                      </button>
+                    </div>
+                    <h3>Note</h3>
+                    <textarea
+                      className="note"
+                      value={note}
+                      placeholder="Note on this attempt"
+                      aria-label="Note on this attempt"
+                      disabled={!canSaveNote(selected)}
+                      onChange={(event) => setNote(event.target.value)}
+                    />
+                    <div className="actions">
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={!canSaveNote(selected)}
+                        onClick={() => {
+                          replace(saveNote(selected, note, stamp()))
+                          setNote('')
+                        }}
+                      >
+                        Save note
+                      </button>
                     </div>
                     {hasCall(selected) && (
                       <Recording
