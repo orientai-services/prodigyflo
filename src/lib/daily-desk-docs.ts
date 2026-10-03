@@ -81,10 +81,13 @@ export function classifyDeskKind(input: {
 }): DeskDocKind | null {
   // Search summaries are evidence of a lookup, never the original deed, lien or permit.
   const sourceText = [input.requirementKey, input.detectedType, input.label, input.fileName].filter(Boolean).join(' ')
+  const slotted = matchDocKind(input.requirementKey)
   if (/public[_ -]record[_ -]summary|search[_ -]summary|records?[_ -]summary/i.test(sourceText)) {
+    // A Clark recorder screenshot is filed on the UCC tile and labeled as a
+    // summary. Deed and permit summaries stay in Other.
+    if (slotted?.key === 'ucc_lien' && /county record summary \(not the filing\)/i.test(input.label ?? '')) return slotted
     return CASE_DOC_KINDS.find(k => k.key === 'other') ?? null
   }
-  const slotted = matchDocKind(input.requirementKey)
   if (slotted && SLOTTED_RECORD_KEYS.has(slotted.key)) return slotted
   // Filename is the packet type. A deal typed "loan" must not move an install
   // / solar agreement PDF onto the finance tile. Lender names still win.
