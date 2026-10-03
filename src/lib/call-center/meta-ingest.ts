@@ -2,13 +2,13 @@ import 'server-only'
 import { db } from '@/lib/db'
 import { ingestMetaLead } from '@/lib/meta'
 import type { MetaLead } from '@/lib/meta/provider'
+import { contactSecrets } from './contact'
 import {
   callCenterLeadId,
   callCenterMetaRoute,
   callCenterPersonName,
   callCenterZip,
   facebookFormEventBody,
-  phoneLast4FromFields,
 } from './meta-route'
 
 export type RecordedMetaLead = {
@@ -24,7 +24,7 @@ function isUniqueViolation(err: unknown): boolean {
 
 /**
  * One English-page Facebook lead becomes one Call Center row plus one
- * "Facebook form" event. The full phone number is not stored.
+ * "Facebook form" event. Phone and email are stored only as encrypted secrets.
  * A second delivery of the same leadgen id returns the existing row.
  */
 export async function ingestCallCenterMetaLead(input: {
@@ -36,7 +36,7 @@ export async function ingestCallCenterMetaLead(input: {
   const existing = await db.callCenterLead.findUnique({ where: { id }, select: { id: true } })
   if (existing) return { duplicate: true, leadId: existing.id }
 
-  const phoneLast4 = phoneLast4FromFields(input.lead.fields)
+  const contact = contactSecrets(input.lead.fields)
   const body = facebookFormEventBody({
     leadgenId: input.lead.leadgenId,
     name: callCenterPersonName(input.lead.fields),
@@ -53,7 +53,9 @@ export async function ingestCallCenterMetaLead(input: {
           source: 'FORM',
           language: 'EN',
           status: 'WAITING',
-          phoneLast4,
+          phoneLast4: contact.phoneLast4,
+          phoneSecret: contact.phoneSecret ?? undefined,
+          emailSecret: contact.emailSecret ?? undefined,
         },
       })
       await tx.callCenterEvent.create({

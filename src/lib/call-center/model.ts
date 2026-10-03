@@ -83,6 +83,10 @@ export type CallLead = {
   recording: DummyRecording | null
   trail: TrailEvent[]
   lockedBy: string | null
+  /** Display name when another rep holds the lock. */
+  lockName?: string | null
+  /** Saved on the server. Seed rows omit this and stay on this screen only. */
+  persisted?: boolean
   tries: number
   nextAttemptAt: string | null
   dnc: boolean
@@ -439,7 +443,7 @@ export function lockedToOther(lead: CallLead, rep = CURRENT_REP): boolean {
 
 export function lockLabel(lead: CallLead, rep = CURRENT_REP): string | null {
   if (!lead.lockedBy) return null
-  return lead.lockedBy === rep ? 'Locked to you' : `Locked · ${lead.lockedBy}`
+  return lead.lockedBy === rep ? 'Locked to you' : `Locked · ${lead.lockName || lead.lockedBy}`
 }
 
 export function canCall(lead: CallLead, rep = CURRENT_REP): boolean {

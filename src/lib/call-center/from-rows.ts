@@ -60,6 +60,34 @@ function trailKind(type: string): TrailKind {
   }
 }
 
+type EventCopy = {
+  label?: string
+  detail?: string
+  action?: string
+  userId?: string
+  name?: string
+}
+
+function readCopy(body: string): EventCopy | null {
+  try {
+    const parsed = JSON.parse(body) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const copy: EventCopy = {}
+    if (typeof parsed.label === 'string') copy.label = parsed.label
+    if (typeof parsed.detail === 'string') copy.detail = parsed.detail
+    if (typeof parsed.action === 'string') copy.action = parsed.action
+    if (typeof parsed.userId === 'string') copy.userId = parsed.userId
+    if (typeof parsed.name === 'string') copy.name = parsed.name
+    return copy
+  } catch {
+    return null
+  }
+}
+
+function safeText(value: string): string {
+  return value.replace(/\d{5,}/g, '····').trim()
+}
+
 function trailLabel(type: string): string {
   switch (type) {
     case 'FORM': return 'Facebook form'
@@ -75,14 +103,20 @@ function trailLabel(type: string): string {
   }
 }
 
-function trailDetail(type: string, body: string, page: string): string {
+function trailDetail(type: string, body: string, page: string, viewerId?: string | null): string {
   if (type === 'FORM') {
     return page === 'Solar Contract Services'
       ? 'Form received on Solar Contract Services'
       : 'Facebook form'
   }
-  const cleaned = body.replace(/\d{5,}/g, '····').trim()
-  return cleaned || trailLabel(type)
+  const copy = readCopy(body)
+  if (type === 'LOCK' && copy?.action === 'take') {
+    const name = safeText(copy.name || 'Another rep') || 'Another rep'
+    return viewerId && copy.userId === viewerId ? 'You took this lead' : `${name} took this lead`
+  }
+  if (type === 'LOCK' && copy?.action === 'skip') return 'Skipped'
+  if (copy?.detail) return safeText(copy.detail) || trailLabel(type)
+  return safeText(body) || trailLabel(type)
 }
 
 function personName(row: StoredCallCenterLead): string {
@@ -103,7 +137,11 @@ function personZip(row: StoredCallCenterLead): string | null {
   return null
 }
 
-export function callLeadFromRow(row: StoredCallCenterLead): CallLead {
+export function callLeadFromRow(
+  row: StoredCallCenterLead,
+  viewerId?: string | null,
+  lockName?: string | null,
+): CallLead {
   const page = pageName(row)
   const language: LeadLanguage = row.language === 'ES' ? 'es' : 'en'
   const channel: LeadChannel = row.source === 'INBOUND' ? 'inbound' : 'form'
@@ -124,13 +162,18 @@ export function callLeadFromRow(row: StoredCallCenterLead): CallLead {
     arrivedAt: row.createdAt.toISOString(),
     disabled: false,
     recording: null,
-    trail: row.events.map((event) => ({
-      kind: trailKind(event.type),
-      at: event.createdAt.toISOString(),
-      label: trailLabel(event.type),
-      detail: trailDetail(event.type, event.body, page),
-    })),
+    trail: row.events.map((event) => {
+      const copy = event.type === 'FORM' ? null : readCopy(event.body)
+      return {
+        kind: trailKind(event.type),
+        at: event.createdAt.toISOString(),
+        label: copy?.label ? safeText(copy.label) || trailLabel(event.type) : trailLabel(event.type),
+        detail: trailDetail(event.type, event.body, page, viewerId),
+      }
+    }),
     lockedBy: row.lockedBy,
+    lockName: lockName ?? null,
+    persisted: true,
     tries: row.tries,
     nextAttemptAt: row.nextAttemptAt ? row.nextAttemptAt.toISOString() : null,
     dnc: row.doNotCallAt != null,
@@ -139,7 +182,11 @@ export function callLeadFromRow(row: StoredCallCenterLead): CallLead {
 }
 
 /** Real rows replace the seed. An empty table keeps the dummy desk. */
-export function callLeadsForDesk(rows: readonly StoredCallCenterLead[]): CallLead[] {
+export function callLeadsForDesk(
+  rows: readonly StoredCallCenterLead[],
+  viewerId?: string | null,
+  lockNames?: ReadonlyMap<string, string>,
+): CallLead[] {
   if (rows.length === 0) return seedLeads()
-  return rows.map((row) => callLeadFromRow(row))
+  return rows.map((row) => callLeadFromRow(row, viewerId, row.lockedBy ? lockNames?.get(row.lockedBy) ?? null : null))
 }
