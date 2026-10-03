@@ -1,9 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { after } from 'next/server'
-import { ingestMetaLead, metaVerifyToken } from '@/lib/meta'
+import { metaVerifyToken } from '@/lib/meta'
 import { GraphMetaAdsProvider } from '@/lib/meta/graph'
 import { resolveSigningContext } from '@/lib/meta/webhook-context'
 import { igniteLead } from '@/lib/meta/ignition'
+import { recordMetaWebhookLead } from '@/lib/call-center/meta-ingest'
+import { callCenterMetaRoute } from '@/lib/call-center/meta-route'
 
 /**
  * Meta Lead Ads webhook.
@@ -31,6 +33,8 @@ import { igniteLead } from '@/lib/meta/ignition'
  *  - Lead creation is synchronous (durable before the 200); a recoverable failure
  *    returns 503 so Meta redelivers, and the (source, leadgen id) idempotency key
  *    makes redelivery safe. Enrichment (Instant Lead Ignition) runs in after().
+ *  - The SCS English Page (and its form) is written as a Call Center lead.
+ *    That path does not create a Client and does not run ignition.
  */
 
 export async function GET(req: Request) {
@@ -53,9 +57,15 @@ function validSignature(raw: string, header: string | null, secret: string): boo
 
 type LeadgenChange = {
   field: string
-  value: { leadgen_id: string; ad_id?: string; adgroup_id?: string; form_id?: string }
+  value: {
+    leadgen_id: string
+    page_id?: string
+    ad_id?: string
+    adgroup_id?: string
+    form_id?: string
+  }
 }
-type WebhookBody = { object?: string; entry?: { changes?: LeadgenChange[] }[] }
+type WebhookBody = { object?: string; entry?: { id?: string; changes?: LeadgenChange[] }[] }
 
 export async function POST(req: Request) {
   const raw = await req.text()
@@ -99,15 +109,25 @@ export async function POST(req: Request) {
       const leadgenId = change.value.leadgen_id
       try {
         const lead = await provider.fetchLead(leadgenId)
-        const r = await ingestMetaLead(ctx.orgId, lead, {
+        const pageId = change.value.page_id ?? entry.id ?? null
+        const formId = change.value.form_id ?? null
+        const desk = callCenterMetaRoute({ pageId, formId }) === 'call-center'
+        const recorded = await recordMetaWebhookLead({
+          organizationId: ctx.orgId,
+          lead,
+          pageId,
+          formId,
           adExternalId: change.value.ad_id,
           adSetExternalId: change.value.adgroup_id,
-          formExternalId: change.value.form_id,
         })
-        const created = !r.duplicate && r.submission.createdClient && Boolean(r.submission.clientId)
-        results.push({ leadgenId: lead.leadgenId, duplicate: r.duplicate, status: r.submission.status, created })
-        if (created && r.submission.clientId) {
-          ignitions.push({ clientId: r.submission.clientId, leadgenId: lead.leadgenId })
+        results.push({
+          leadgenId: lead.leadgenId,
+          duplicate: recorded.duplicate,
+          status: recorded.status,
+          created: recorded.createdClient,
+        })
+        if (!desk && recorded.createdClient && recorded.clientId) {
+          ignitions.push({ clientId: recorded.clientId, leadgenId: lead.leadgenId })
         }
       } catch (err) {
         // The failure happened before any durable record. Returning 200 would let

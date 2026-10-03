@@ -122,8 +122,8 @@ function Person({ lead, onOpen }: { lead: CallLead; onOpen: (lead: CallLead) => 
   )
 }
 
-export function CallCenter() {
-  const [leads, setLeads] = useState(seedLeads)
+export function CallCenter({ initialLeads }: { initialLeads?: CallLead[] }) {
+  const [leads, setLeads] = useState(() => initialLeads ?? seedLeads())
   const [tab, setTab] = useState<LeadTab>('all')
   const [language, setLanguage] = useState<LanguageFilter>('all')
   const [query, setQuery] = useState('')
