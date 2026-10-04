@@ -56,7 +56,7 @@ describe('property lookup identity and originals',()=>{
   expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'no_permit_found',reason:'no_solar_permit'}],originals:[file]},'case1234',address)).toThrow('no supported')
  })
  it('carries a no permit found status and reason that staff can read',()=>{
-  const none=(reason?:string)=>validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'no_permit_found',...(reason?{reason}:{}),detail:'no permit found — needs human check: ...'}]},'case1234',address)
+  const none=(reason?:string)=>validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'no_permit_found',...(reason?{reason}:{})}]},'case1234',address)
   expect(none('needs_human_check').outcomes[0].reason).toBe('needs_human_check')
   expect(permitStatusNote(none('needs_human_check'))).toBe('No permit found — needs human check')
   expect(permitStatusNote(none('outside_service_area'))).toBe('No permit found — outside service area')
@@ -70,5 +70,11 @@ describe('property lookup identity and originals',()=>{
   expect(permitStatusNote({outcomes:[{kind:'permit',status:'permit_record_page'}]})).toBeNull()
   expect(permitStatusNote({outcomes:[{kind:'ucc',status:'failed'}]})).toBeNull()
   expect(permitStatusNote(null)).toBeNull()
+ })
+ it('shows the service headline and keeps the retry marker for the City of Las Vegas',()=>{
+  const clv=validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'no_permit_found',reason:'needs_human_check',retry_after:'2026-10-05T22:30:00Z',detail:'no permit found — City of Las Vegas site requires human verification: the permit record is only on www.lasvegasnevada.gov behind a Cloudflare check.'}]},'case1234',address)
+  expect(clv.outcomes[0].retry_after).toBe('2026-10-05T22:30:00Z')
+  expect(permitStatusNote(clv)).toBe('No permit found — City of Las Vegas site requires human verification')
+  expect(()=>validateRecordsResult({...result,outcomes:[{source:'x',kind:'permit',status:'no_permit_found',retry_after:'tomorrow'}]},'case1234',address)).toThrow()
  })
 })

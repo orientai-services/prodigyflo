@@ -16,7 +16,7 @@ export const PERMIT_REASON_TEXT:Record<typeof PERMIT_REASONS[number],string>={no
 export const recordsResult=z.object({version:z.literal('property-records-v1'),case_key:z.string(),address_version:z.string(),address:addressSchema,
   parcel:z.object({id:z.string(),address:addressSchema,source_url:z.string()}).nullable(),
   status:z.enum(['complete','partial','no_match','unsupported','paused']),
-  outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused','assessor_copy','recorder_record_summary','permit_record_page','no_permit_found']),reason:z.enum(PERMIT_REASONS).optional(),source_url:z.string().optional(),detail:z.string().optional()})),
+  outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused','assessor_copy','recorder_record_summary','permit_record_page','no_permit_found']),reason:z.enum(PERMIT_REASONS).optional(),retry_after:z.string().datetime().optional(),source_url:z.string().optional(),detail:z.string().optional()})),
   originals:z.array(z.object({url:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/),mime:z.string(),filename:z.string(),category:z.enum(['deed','ucc','permit']),source_url:z.string(),provenance:z.enum(['assessor_copy','recorder_record_summary','city_permit','recorder_unofficial_copy','original','permit_record_page']).optional(),record_key:z.string().regex(/^(deed|ucc|permit):[A-Za-z0-9:._-]{1,160}$/).optional(),amendment_only:z.boolean().optional()})),cached:z.boolean()})
 export type RecordsOriginal=z.infer<typeof recordsResult>['originals'][number]
 export const AMENDMENT_ONLY_LABEL='amendment only, original not on index'
@@ -37,7 +37,9 @@ export function permitStatusNote(result:unknown):string|null {
   const permit=outcomes.find((o:unknown)=>(o as {kind?:unknown})?.kind==='permit') as {status?:string;reason?:string;detail?:string}|undefined
   if(!permit) return null
   const reason=permit.reason&&permit.reason in PERMIT_REASON_TEXT?PERMIT_REASON_TEXT[permit.reason as keyof typeof PERMIT_REASON_TEXT]:null
-  if(permit.status==='no_permit_found') return `No permit found — ${reason??'see records detail'}`
+  // The service's detail opens with 'no permit found — <headline>:'; a source-specific headline beats the generic reason text.
+  const headline=permit.detail?.match(/^no permit found — ([^:]{3,120}):/i)?.[1]?.trim()
+  if(permit.status==='no_permit_found') return `No permit found — ${headline??reason??'see records detail'}`
   const legacy:Record<string,string>={no_match:'no solar permit on record',unsupported:'outside service area',failed:'lookup failed',budget_paused:'lookup paused'}
   return legacy[permit.status??'']?`No permit found — ${legacy[permit.status!]}`:null
 }
