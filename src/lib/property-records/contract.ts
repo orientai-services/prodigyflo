@@ -26,9 +26,17 @@ export function uccTileLabel(file:{category:string;provenance?:string|null;amend
   return file.amendment_only?AMENDMENT_ONLY_LABEL:'County record summary (not the filing)'
 }
 export const PERMIT_RECORD_PAGE_LABEL='Permit record page (not the permit document)'
-/** Tile label for a permit portal screenshot, used when the portal offers no permit PDF. */
-export function permitTileLabel(file:{category:string;provenance?:string|null}) {
+export const OPEN_DATA_RECORD_LABEL='City of Las Vegas open data permit record (not the permit document)'
+const isOpenDataRecord=(file:{category:string;provenance?:string|null;record_key?:string|null})=>file.category==='permit'&&file.provenance==='permit_record_page'&&Boolean(file.record_key?.startsWith('permit:clv-opendata:'))
+/** Tile label for a permit portal screenshot (the portal offers no permit PDF) or a City of Las Vegas open-data permit record. */
+export function permitTileLabel(file:{category:string;provenance?:string|null;record_key?:string|null}) {
+  if(isOpenDataRecord(file)) return OPEN_DATA_RECORD_LABEL
   return file.category==='permit'&&file.provenance==='permit_record_page'?PERMIT_RECORD_PAGE_LABEL:null
+}
+/** One sentence for the document note saying what a non-original records file is. */
+export function recordFileNote(file:{category:string;provenance?:string|null;record_key?:string|null}) {
+  if(isOpenDataRecord(file)) return 'Rendered from the City of Las Vegas open-data permit layer, not the permit document.'
+  return file.category==='permit'?'Screenshot of the permit record page, not the permit document.':'Screenshot of the county record page, not the UCC filing image.'
 }
 /** Staff-facing line for a permit lookup that filed no document. Null when a permit file was filed or the result is unreadable. */
 export function permitStatusNote(result:unknown):string|null {

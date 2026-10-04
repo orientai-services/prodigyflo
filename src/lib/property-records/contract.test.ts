@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {addressVersion,AMENDMENT_ONLY_LABEL,filingIdentity,isSameFiling,PERMIT_RECORD_PAGE_LABEL,permitStatusNote,permitTileLabel,uccTileLabel,validateRecordsResult} from './contract'
+import {addressVersion,AMENDMENT_ONLY_LABEL,filingIdentity,isSameFiling,OPEN_DATA_RECORD_LABEL,PERMIT_RECORD_PAGE_LABEL,permitStatusNote,permitTileLabel,recordFileNote,uccTileLabel,validateRecordsResult} from './contract'
 const address={line1:'4416 Clear Brook Pl',city:'Las Vegas',state:'NV',postal_code:'89103'}
 const result={version:'property-records-v1',case_key:'case1234',address_version:addressVersion(address),address,parcel:{id:'parcel-1',address,source_url:'https://county.test'},status:'partial',outcomes:[{source:'clark',kind:'deed',status:'index_only'}],originals:[],cached:false}
 describe('property lookup identity and originals',()=>{
@@ -70,6 +70,22 @@ describe('property lookup identity and originals',()=>{
   expect(permitStatusNote({outcomes:[{kind:'permit',status:'permit_record_page'}]})).toBeNull()
   expect(permitStatusNote({outcomes:[{kind:'ucc',status:'failed'}]})).toBeNull()
   expect(permitStatusNote(null)).toBeNull()
+ })
+ it('labels a City of Las Vegas open-data permit record as its own kind of permit record',()=>{
+  const file={url:'https://records.test/api/service/originals/hash',sha256:'c'.repeat(64),mime:'application/pdf',filename:'clv-opendata-permit-R19-13733-2019-09-10.pdf',category:'permit' as const,source_url:'https://services1.arcgis.com/x/FeatureServer/0/query',provenance:'permit_record_page' as const,record_key:'permit:clv-opendata:R19-13733'}
+  const parsed=validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'permit_record_page',detail:'City of Las Vegas open data permit record (open-data record, not the permit document): newest solar/PV permit R19-13733'}],originals:[file]},'case1234',address)
+  expect(permitTileLabel(parsed.originals[0])).toBe(OPEN_DATA_RECORD_LABEL)
+  expect(OPEN_DATA_RECORD_LABEL.startsWith('City of Las Vegas open data permit record')).toBe(true)
+  expect(recordFileNote(parsed.originals[0])).toMatch(/open-data permit layer, not the permit document/)
+  expect(permitStatusNote(parsed)).toBeNull()
+  expect(permitTileLabel({category:'permit',provenance:'permit_record_page',record_key:'permit:nlv:BUILD-1'})).toBe(PERMIT_RECORD_PAGE_LABEL)
+  expect(recordFileNote({category:'permit',provenance:'permit_record_page',record_key:'permit:nlv:BUILD-1'})).toBe('Screenshot of the permit record page, not the permit document.')
+  expect(recordFileNote({category:'ucc',provenance:'recorder_record_summary'})).toBe('Screenshot of the county record page, not the UCC filing image.')
+ })
+ it('reads the Boulder City headlines',()=>{
+  const bc=(reason:string,detail:string)=>validateRecordsResult({...result,status:'complete',outcomes:[{source:'boulder_city_portal',kind:'permit',status:'no_permit_found',reason,detail}]},'case1234',address)
+  expect(permitStatusNote(bc('needs_human_check','no permit found — Boulder City portal login expired: the shared records browser is signed out'))).toBe('No permit found — Boulder City portal login expired')
+  expect(permitStatusNote(bc('login_required','no permit found — Boulder City portal has no public permit search: the portal shows only applications'))).toBe('No permit found — Boulder City portal has no public permit search')
  })
  it('shows the service headline and keeps the retry marker for the City of Las Vegas',()=>{
   const clv=validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'no_permit_found',reason:'needs_human_check',retry_after:'2026-10-05T22:30:00Z',detail:'no permit found — City of Las Vegas site requires human verification: the permit record is only on www.lasvegasnevada.gov behind a Cloudflare check.'}]},'case1234',address)
