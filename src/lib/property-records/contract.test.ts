@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {addressVersion,AMENDMENT_ONLY_LABEL,filingIdentity,isSameFiling,uccTileLabel,validateRecordsResult} from './contract'
+import {addressVersion,AMENDMENT_ONLY_LABEL,filingIdentity,isSameFiling,PERMIT_RECORD_PAGE_LABEL,permitStatusNote,permitTileLabel,uccTileLabel,validateRecordsResult} from './contract'
 const address={line1:'4416 Clear Brook Pl',city:'Las Vegas',state:'NV',postal_code:'89103'}
 const result={version:'property-records-v1',case_key:'case1234',address_version:addressVersion(address),address,parcel:{id:'parcel-1',address,source_url:'https://county.test'},status:'partial',outcomes:[{source:'clark',kind:'deed',status:'index_only'}],originals:[],cached:false}
 describe('property lookup identity and originals',()=>{
@@ -44,5 +44,31 @@ describe('property lookup identity and originals',()=>{
   const amendment=validateRecordsResult({...result,parcel:result.parcel,outcomes:[{source:'clark',kind:'ucc',status:'recorder_record_summary'}],originals:[{url:'https://records.test/api/service/originals/hash',sha256:'c'.repeat(64),mime:'application/pdf',filename:'clark-recorder-summary-200807230001221.pdf',category:'ucc',source_url:'https://county.test',provenance:'recorder_record_summary',record_key:'ucc:200807230001221',amendment_only:true}]},'case1234',address)
   expect(amendment.originals[0].amendment_only).toBe(true)
   expect(()=>validateRecordsResult({...result,parcel:result.parcel,outcomes:[{source:'clark',kind:'deed',status:'assessor_copy'}],originals:[{url:'https://records.test/api/service/originals/hash',sha256:'b'.repeat(64),mime:'application/pdf',filename:'deed.pdf',category:'deed',source_url:'https://county.test',provenance:'assessor_copy',record_key:'lien:nope'}]},'case1234',address)).toThrow()
+ })
+ it('accepts a permit record-page screenshot only with a matching permit outcome',()=>{
+  const file={url:'https://records.test/api/service/originals/hash',sha256:'a'.repeat(64),mime:'application/pdf',filename:'nlv-permit-BUILD-011787-2026-2026-09-30.pdf',category:'permit',source_url:'https://eg.cityofnorthlasvegas.com',provenance:'permit_record_page',record_key:'permit:nlv:BUILD-011787-2026'}
+  const withParcel={...result,parcel:result.parcel,status:'complete'}
+  const parsed=validateRecordsResult({...withParcel,outcomes:[{source:'north_las_vegas_energov',kind:'permit',status:'permit_record_page'}],originals:[file]},'case1234',address)
+  expect(parsed.originals[0].provenance).toBe('permit_record_page')
+  expect(permitTileLabel(parsed.originals[0])).toBe(PERMIT_RECORD_PAGE_LABEL)
+  expect(permitTileLabel({category:'permit',provenance:'city_permit'})).toBeNull()
+  expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'north_las_vegas_energov',kind:'permit',status:'original'}],originals:[file]},'case1234',address)).toThrow('no supported')
+  expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'no_permit_found',reason:'no_solar_permit'}],originals:[file]},'case1234',address)).toThrow('no supported')
+ })
+ it('carries a no permit found status and reason that staff can read',()=>{
+  const none=(reason?:string)=>validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'no_permit_found',...(reason?{reason}:{}),detail:'no permit found — needs human check: ...'}]},'case1234',address)
+  expect(none('needs_human_check').outcomes[0].reason).toBe('needs_human_check')
+  expect(permitStatusNote(none('needs_human_check'))).toBe('No permit found — needs human check')
+  expect(permitStatusNote(none('outside_service_area'))).toBe('No permit found — outside service area')
+  expect(permitStatusNote(none('no_solar_permit'))).toBe('No permit found — no solar permit on record')
+  expect(permitStatusNote(none('login_required'))).toBe('No permit found — portal needs a login')
+  expect(permitStatusNote(none())).toBe('No permit found — see records detail')
+  expect(()=>none('made_up')).toThrow()
+  expect(permitStatusNote({outcomes:[{kind:'permit',status:'unsupported'}]})).toBe('No permit found — outside service area')
+  expect(permitStatusNote({outcomes:[{kind:'permit',status:'no_match'}]})).toBe('No permit found — no solar permit on record')
+  expect(permitStatusNote({outcomes:[{kind:'permit',status:'original'}]})).toBeNull()
+  expect(permitStatusNote({outcomes:[{kind:'permit',status:'permit_record_page'}]})).toBeNull()
+  expect(permitStatusNote({outcomes:[{kind:'ucc',status:'failed'}]})).toBeNull()
+  expect(permitStatusNote(null)).toBeNull()
  })
 })

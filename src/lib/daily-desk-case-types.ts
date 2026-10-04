@@ -28,6 +28,8 @@ export type CaseDocTile = {
   fileUrl: string | null
   mimeType: string | null
   extract: { kicker: string; title: string; fields: { label: string; value: string }[]; note: string } | null
+  /** Records lookup status shown under an empty tile, e.g. "No permit found — outside service area". */
+  records?: string | null
 }
 
 export type CaseFileData = {
