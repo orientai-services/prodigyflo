@@ -8,6 +8,8 @@ it('keeps final interface within its visible surfaces and two roles',()=>{
  expect(staffRouteAllowed('SUPER_ADMIN','/pipeline')).toBe(false)
  expect(staffRouteAllowed('SUPER_ADMIN','/settings/phone-numbers')).toBe(false)
  expect(staffRouteAllowed('CLOSER','/settings/users')).toBe(false)
+ expect(staffRouteAllowed('CLOSER','/call-center')).toBe(true)
+ expect(staffRouteAllowed('SUPER_ADMIN','/call-center')).toBe(true)
  expect(staffRouteAllowed('CLOSER','/clients/client-1/questionnaire')).toBe(true)
  expect(staffRouteAllowed('CLOSER','/clients/client-1/closeops')).toBe(false)
  expect(staffRouteAllowed('ADMIN','/board')).toBe(false)

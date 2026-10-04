@@ -377,6 +377,8 @@ model Organization {
   phoneNumbers         PhoneNumber[]
   telephonyWallet      TelephonyWallet?
   walletEntries        WalletEntry[]
+  callCenterLeads        CallCenterLead[]
+  callCenterSuppressions CallCenterSuppression[]
 
   @@index([parentOrganizationId])
 }
@@ -2606,4 +2608,97 @@ model PropertyRecordsJob {
   client Client @relation(fields:[clientId],references:[id],onDelete:Cascade)
   @@unique([clientId,addressVersion])
   @@index([status,nextAttemptAt])
+}
+
+// Call Center trail. A lead is not a Client. clientId stays empty until SCS
+// intake finishes, and it is not a relation, so Client is unchanged.
+// The full phone number is never stored. The app layer keeps last-4 only.
+// ES is a stored language. The Spanish Page is not connected.
+
+enum CallCenterLeadSource {
+  FORM
+  INBOUND
+}
+
+enum CallCenterLeadLanguage {
+  EN
+  ES
+}
+
+enum CallCenterLeadStatus {
+  WAITING
+  INBOUND
+  MISSED
+  BOOKED
+}
+
+enum CallCenterEventType {
+  FORM
+  INBOUND
+  CALL
+  SMS
+  MESSENGER
+  OUTCOME
+  NOTE
+  INTAKE_LINK
+  LOCK
+}
+
+model CallCenterLead {
+  id             String                 @id @default(cuid())
+  organizationId String
+  /// English Page id, when one is known. Null while the Page is not connected.
+  pageId         String?
+  source         CallCenterLeadSource
+  language       CallCenterLeadLanguage
+  status         CallCenterLeadStatus   @default(WAITING)
+  tries          Int                    @default(0)
+  nextAttemptAt  DateTime?
+  /// Staff user id. No relation, so User stays unchanged.
+  lockedBy       String?
+  doNotCallAt    DateTime?
+  intakeLinkSentAt DateTime?
+  /// Set only after SCS intake creates a Client. No foreign key.
+  clientId       String?
+  /// Last four digits only. The list and every other rep see this, never the full number.
+  phoneLast4     String?                @db.VarChar(4)
+  /// encryptSecret blob for the full phone. Never selected into the desk list.
+  phoneSecret    Json?
+  /// encryptSecret blob for the email. Never selected into the desk list.
+  emailSecret    Json?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  events       CallCenterEvent[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, nextAttemptAt])
+  @@index([clientId])
+}
+
+model CallCenterEvent {
+  id        String              @id @default(cuid())
+  leadId    String
+  type      CallCenterEventType
+  body      String              @default("")
+  createdAt DateTime            @default(now())
+
+  lead CallCenterLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
+}
+
+model CallCenterSuppression {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// Hash of the number. The number itself is not stored.
+  numberHash     String
+  reason         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, numberHash])
+  @@index([organizationId])
 }

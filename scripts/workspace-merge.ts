@@ -5,7 +5,7 @@ import { CLOSER_PERMISSIONS, ALL_PERMISSIONS, PERMISSIONS } from '../src/lib/per
 
 // Deliberately reviewed, not a blanket mutation of every future org-scoped table.
 const ORG_TABLES = [
-  'AdSet', 'AuditEvent', 'Campaign', 'Client', 'CloserBrief', 'CoachingNote', 'Connector',
+  'AdSet', 'AuditEvent', 'CallCenterLead', 'CallCenterSuppression', 'Campaign', 'Client', 'CloserBrief', 'CoachingNote', 'Connector',
   'ConnectorCredential', 'CysFieldDefinition', 'DeployRun', 'DocumentPackage', 'EngineRun',
   'ExternalDocumentImport', 'HotLeadReview', 'InboundDocument', 'InboundEvent', 'Insight',
   'IntakeSource', 'IntakeSubmission', 'Invite', 'LeadSource', 'MessageTemplate', 'Notification',

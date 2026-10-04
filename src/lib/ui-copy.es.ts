@@ -46,6 +46,7 @@ export const UI_COPY_ES = {
     pipeline: 'Embudo',
     clients: 'Clientes',
     queue: 'Cola',
+    callCenter: 'Centro de llamadas',
     documents: 'Laboratorio de documentos',
     submissions: 'CYS',
     desk: 'Escritorio',
