@@ -16,6 +16,29 @@ function importedRecord(value:unknown):ImportedRecord|null {
   return typeof record.id==='string'?record as ImportedRecord:null
 }
 
+function serviceUnreachable(error:unknown):Error {
+  if(!(error instanceof Error)) return Error('Records service unreachable')
+  const cause=error.cause
+  const code=cause&&typeof cause==='object'&&'code' in cause?String((cause as {code?:unknown}).code??''):''
+  const network=error.name==='TimeoutError'||error.name==='AbortError'||/fetch failed|timeout|aborted|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN/i.test(`${error.message} ${code}`)
+  return network?Error('Records service unreachable'):error
+}
+
+function docTypes(result:unknown) {
+  const originals=asRecord(result).originals
+  if(!Array.isArray(originals)) return 'none'
+  const found=new Set(originals.flatMap(item=>{
+    const category=asRecord(item).category
+    return category==='deed'||category==='ucc'||category==='permit'?[category]:[]
+  }))
+  const picked=(['deed','ucc','permit'] as const).filter(kind=>found.has(kind))
+  return picked.length?picked.join(','):'none'
+}
+
+function logJobFinish(job:{id:string;clientId:string;claimedAt:Date|null},outcome:string,reason:string|null,attempts:number,result:unknown) {
+  console.log(JSON.stringify({event:'property_records_job',job_id:job.id,client_id:job.clientId,doc_type:docTypes(result),outcome,reason,attempts,started_at:job.claimedAt?new Date(job.claimedAt).toISOString():null,finished_at:new Date().toISOString()}))
+}
+
 export async function queuePropertyRecords(args:{organizationId:string;clientId:string;sourceLeadId?:string;address:PropertyAddress},store:Prisma.TransactionClient=db):Promise<PropertyRecordsJob> {
   if(store===db) return db.$transaction(tx=>queuePropertyRecords(args,tx))
   await store.$queryRaw`SELECT id FROM "Client" WHERE id=${args.clientId} FOR UPDATE`
@@ -74,10 +97,11 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
       const live=await db.clientAddress.findFirst({where:{clientId:job.clientId,isPrimary:true}})
       if(!live||addressVersion({line1:live.line1,city:live.city,state:live.state,postal_code:live.postalCode})!==job.addressVersion) {
         await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token},data:{status:'SUPERSEDED',claimToken:null,claimedAt:null,error:'Property changed before lookup execution'}})
+        logJobFinish(job,'SUPERSEDED','Property changed before lookup execution',job.attempts,null)
         continue
       }
-      const response=job.result?null:await fetch(new URL('/api/service/property-records',base),{method:'POST',headers:{...headers,'Content-Type':'application/json','idempotency-key':job.id},body:JSON.stringify({address,address_version:job.addressVersion}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(180_000)})
-      if(response&&!response.ok) throw Error(`Records service returned ${response.status}`)
+      const response=job.result?null:await fetch(new URL('/api/service/property-records',base),{method:'POST',headers:{...headers,'Content-Type':'application/json','idempotency-key':job.id},body:JSON.stringify({address,address_version:job.addressVersion}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(180_000)}).catch((error:unknown)=>{throw serviceUnreachable(error)})
+      if(response&&!response.ok) throw Error(response.status===404?'Records service endpoint not found (404)':`Records service returned ${response.status}`)
       const result=validateRecordsResult(job.result??await response!.json(),job.caseKey,address)
       const persisted=await db.$transaction(async tx=>{
         await tx.$queryRaw`SELECT id FROM "Client" WHERE id=${job.clientId} FOR UPDATE`
@@ -87,7 +111,7 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
         return saved.count===1
       })
       if(!persisted) continue
-      if(result.status==='paused') {await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token},data:{status:'PAUSED',claimedAt:null,error:'Records provider budget/configuration paused; staff action required.'}});counts.paused++;continue}
+      if(result.status==='paused') {await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token},data:{status:'PAUSED',claimedAt:null,error:'Records provider budget/configuration paused; staff action required.'}});logJobFinish(job,'PAUSED','Records provider budget/configuration paused; staff action required.',job.attempts,result);counts.paused++;continue}
       for(const original of result.originals) {
         const latest=await db.propertyRecordsJob.findUniqueOrThrow({where:{id:job.id}})
         if(asRecord(latest.importedFiles)[original.sha256]) continue
@@ -100,7 +124,8 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
         }
         const url=new URL(original.url)
         if(url.origin!==base.origin||!url.pathname.startsWith('/api/service/originals/')||url.username||url.password) throw Error('Untrusted original record URL')
-        const file=await fetch(url,{headers,redirect:'error',cache:'no-store',signal:AbortSignal.timeout(55_000)})
+        const file=await fetch(url,{headers,redirect:'error',cache:'no-store',signal:AbortSignal.timeout(55_000)}).catch((error:unknown)=>{throw serviceUnreachable(error)})
+        if(file.status===404) throw Error('Record file expired on service')
         if(!file.ok||!file.body) throw Error(`Original record download failed (${file.status})`)
         const reader=file.body.getReader(),chunks:Uint8Array[]=[];let total=0
         try{while(true){const p=await reader.read();if(p.done)break;total+=p.value.byteLength;if(total>25*1024*1024)throw Error('Original record exceeds 25 MB');chunks.push(p.value)}}finally{await reader.cancel()}
@@ -125,16 +150,22 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
           committed=true
         })} finally {if(!committed)await storage.delete(saved.key)}
       }
+      let finished:'COMPLETED'|'SUPERSEDED'='COMPLETED'
       await db.$transaction(async tx=>{
         await tx.$queryRaw`SELECT id FROM "Client" WHERE id=${job.clientId} FOR UPDATE`
         const live=await tx.clientAddress.findFirst({where:{clientId:job.clientId,isPrimary:true}})
         const active=live&&addressVersion({line1:live.line1,city:live.city,state:live.state,postal_code:live.postalCode})===job.addressVersion
-        await tx.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token,status:'RUNNING'},data:{status:active?'COMPLETED':'SUPERSEDED',claimedAt:null,error:active?null:'Property address changed; result retained only as historical evidence.'}})
+        finished=active?'COMPLETED':'SUPERSEDED'
+        await tx.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token,status:'RUNNING'},data:{status:finished,claimedAt:null,error:active?null:'Property address changed; result retained only as historical evidence.'}})
       })
+      logJobFinish(job,finished,finished==='COMPLETED'?null:'Property address changed; result retained only as historical evidence.',job.attempts,result)
       counts.completed++
     } catch(error) {
       const message=error instanceof Error?error.message:'Records lookup failed'
-      await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token,status:'RUNNING'},data:{status:job.attempts+1>=3?'PAUSED':'FAILED',attempts:{increment:1},error:message,claimedAt:null,nextAttemptAt:new Date(Date.now()+30_000)}})
+      const outcome=job.attempts+1>=3?'PAUSED':'FAILED'
+      const attempts=job.attempts+1
+      await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token,status:'RUNNING'},data:{status:outcome,attempts:{increment:1},error:message,claimedAt:null,nextAttemptAt:new Date(Date.now()+30_000)}})
+      logJobFinish(job,outcome,message,attempts,job.result)
       counts.failed++
     }
   }
