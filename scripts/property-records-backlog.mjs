@@ -1,6 +1,7 @@
 /** Read-only counts of open property-records jobs. Never updates or deletes. */
-const {Client} = require('pg')
+import pg from 'pg'
 
+const {Client} = pg
 const PREVIEW_DATABASE = 'pf_e2e_01a0b8f2'
 const OPEN = ['PENDING', 'RUNNING', 'FAILED', 'PAUSED']
 
