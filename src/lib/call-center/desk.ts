@@ -239,6 +239,27 @@ async function heldLead(organizationId: string, actor: DeskActor, leadId: string
   return { ok: true, row, lead }
 }
 
+function trailKey(event: TrailEvent): string {
+  return JSON.stringify([event.kind, event.at, event.label, event.detail])
+}
+
+/** A new event can sort ahead of a row saved later, so the tail is not the new set. */
+function addedTrailEvents(before: CallLead, after: CallLead): TrailEvent[] {
+  const remaining = new Map<string, number>()
+  for (const event of before.trail) {
+    const key = trailKey(event)
+    remaining.set(key, (remaining.get(key) ?? 0) + 1)
+  }
+  const added: TrailEvent[] = []
+  for (const event of after.trail) {
+    const key = trailKey(event)
+    const count = remaining.get(key) ?? 0
+    if (count > 0) remaining.set(key, count - 1)
+    else added.push(event)
+  }
+  return added
+}
+
 async function writeTrail(
   organizationId: string,
   actor: DeskActor,
@@ -261,7 +282,7 @@ async function writeTrail(
         },
       })
       if (updated.count !== 1) throw new Error('LOCK_LOST')
-      for (const event of after.trail.slice(before.trail.length)) {
+      for (const event of addedTrailEvents(before, after)) {
         await tx.callCenterEvent.create({
           data: { leadId, type: eventType(event.kind), body: eventBody(event), createdAt: at },
         })
