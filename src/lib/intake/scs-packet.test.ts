@@ -5,6 +5,7 @@ import { flattenSurveyAnswers, resolveField } from '@/lib/cys/resolve'
 const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   queue: vi.fn(),
+  records: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({
@@ -16,6 +17,7 @@ vi.mock('@/lib/db', () => ({
 }))
 vi.mock('@/lib/cys/data', () => ({ refreshCysMirror: mocks.refresh }))
 vi.mock('./scs-document-import', () => ({ queueScsDocumentImports: mocks.queue }))
+vi.mock('@/lib/property-records/jobs', () => ({ queuePropertyRecords: mocks.records }))
 
 import { ingestScsPacket, scsLeadId, intakeAnswersFromPacket } from './scs-packet'
 
@@ -109,6 +111,42 @@ describe('ingestScsPacket document import queue', () => {
       },
     })
     expect(mocks.queue).toHaveBeenCalledTimes(1)
+  })
+
+  it('queues one property-records lookup from the Contact step 1 packet (lead.received)', async () => {
+    const create = vi.fn()
+    const store = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      survey: { findFirst: vi.fn().mockResolvedValue(null) },
+      clientAddress: { findFirst: vi.fn().mockResolvedValue(null), create, update: vi.fn() },
+      externalDocumentImport: { updateMany: vi.fn() },
+    } as unknown as Prisma.TransactionClient
+    await ingestScsPacket({ organizationId: 'org_1', clientId: 'client_1', intakeSubmissionId: 'submission_1', rawPayload: {
+      lead_id: 'lead_1', event: 'lead.received',
+      data: { schema_version: 'schema_42.v1', stage1_answers: {
+        first_name: 'Example', last_name: 'Owner', email: 'owner@example.test', phone: '5555550100',
+        property_street: '909 Bartona St', city: 'Las Vegas', state: 'NV', zip: '89107',
+      } },
+    } }, store)
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ clientId: 'client_1', line1: '909 Bartona St', city: 'Las Vegas', state: 'NV', postalCode: '89107', isPrimary: true }) })
+    expect(mocks.records).toHaveBeenCalledTimes(1)
+    expect(mocks.records).toHaveBeenCalledWith({ organizationId: 'org_1', clientId: 'client_1', sourceLeadId: 'lead_1',
+      address: { line1: '909 Bartona St', city: 'Las Vegas', state: 'NV', postal_code: '89107' } }, store)
+    // The address is saved before the lookup is queued, so the job matches the live primary address.
+    expect(create.mock.invocationCallOrder[0]).toBeLessThan(mocks.records.mock.invocationCallOrder[0])
+  })
+
+  it('does not queue a lookup until Contact has the full property address', async () => {
+    const store = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      survey: { findFirst: vi.fn().mockResolvedValue(null) },
+      clientAddress: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn(), update: vi.fn() },
+      externalDocumentImport: { updateMany: vi.fn() },
+    } as unknown as Prisma.TransactionClient
+    await ingestScsPacket({ organizationId: 'org_1', clientId: 'client_1', intakeSubmissionId: 'submission_1', rawPayload: {
+      lead_id: 'lead_1', data: { schema_version: 'schema_42.v1', stage1_answers: { first_name: 'Example', property_street: '909 Bartona St', city: 'Las Vegas' } },
+    } }, store)
+    expect(mocks.records).not.toHaveBeenCalled()
   })
 
   it('uses the durable SCS case id, never a delivery-attempt id', () => {
