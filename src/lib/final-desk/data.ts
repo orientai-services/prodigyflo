@@ -40,13 +40,13 @@ async function loadFinalClients(user: SessionUser): Promise<FinalClient[]> {
       appointments: { where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: new Date() } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, timezone: true } },
       surveyResponses: { orderBy: { updatedAt: 'desc' }, select: { answers: true, survey: { select: { name: true } } } },
       documents: { where: { storageKey: { not: null }, status: { notIn: ['REJECTED', 'EXPIRED'] } },
-        select: { id: true, label: true, fileName: true, requirement: { select: { key: true } },
+        select: { id: true, label: true, fileName: true, internalComment: true, requirement: { select: { key: true } },
           extractions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, detectedTypeKey: true, sourceActive:true, fields: { select: { verification: true } } } } } } } })
   return rows.map(c => {
     const source = asRecord(c.surveyResponses.find(r => r.survey.name !== QUESTIONNAIRE_NAME)?.answers)
     const saved = asRecord(c.surveyResponses.find(r => r.survey.name === QUESTIONNAIRE_NAME)?.answers)
     const docs = c.documents.map(d => {
-      const e = d.extractions[0], kind = classifyDeskKind({ requirementKey: d.requirement?.key, detectedType: e?.detectedTypeKey, label: d.label, fileName: d.fileName })
+      const e = d.extractions[0], kind = classifyDeskKind({ requirementKey: d.requirement?.key, detectedType: e?.detectedTypeKey, label: d.label, fileName: d.fileName, note: d.internalComment })
       return { id: d.id, key: kind?.key ?? 'other', label: d.fileName || d.label || 'Document', state: tileState({ hasFile: true, extractionStatus: e?.status ?? null, fieldCount: e?.fields.length ?? 0, verifiedCount: e?.fields.filter(f => ['VERIFIED', 'CORRECTED'].includes(f.verification)).length ?? 0 }) }
     })
     const agreement = docs.filter(d => ['finance_agreement', 'signed_contract'].includes(d.key))

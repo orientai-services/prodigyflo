@@ -104,6 +104,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
       detectedType: d.extractions[0]?.detectedTypeKey,
       label: d.label,
       fileName: d.fileName,
+      note: d.internalComment,
     })
     if (!kind) continue
     const prev = docsByKind.get(kind.key)
@@ -142,7 +143,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     const verifyNote = verified === fields.length && fields.length > 0 ? 'Verified extract.' : extractFields.length > 0 ? 'Unverified extract.' : ''
     tiles.push({
       key: kind.key,
-      files: await Promise.all(client.documents.filter((file) => Boolean(file.storageKey) && classifyDeskKind({ requirementKey: file.requirement?.key, detectedType: file.extractions[0]?.detectedTypeKey, label: file.label, fileName: file.fileName })?.key === kind.key)
+      files: await Promise.all(client.documents.filter((file) => Boolean(file.storageKey) && classifyDeskKind({ requirementKey: file.requirement?.key, detectedType: file.extractions[0]?.detectedTypeKey, label: file.label, fileName: file.fileName, note: file.internalComment })?.key === kind.key)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .map(async (file) => ({ id: file.id, label: file.fileName || file.label || kind.label, version: file.version, status: file.status, fileUrl: await signedDocumentFileUrl(file), mimeType: file.mimeType }))),
       label: kind.label,

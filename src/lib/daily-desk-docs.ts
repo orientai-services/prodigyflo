@@ -73,19 +73,31 @@ export function matchDocKind(raw: string | null | undefined): DeskDocKind | null
  * Lender names → finance. Install / Steele → signed contract.
  * Unknown files remain accessible in Other documents.
  */
+/** Clark recorder UCC screenshots filed on lien_filing. Broader than the exact tile label. */
+export function isRecorderUccSummary(input: { label?: string | null; fileName?: string | null; note?: string | null }): boolean {
+  const text = [input.label, input.fileName, input.note].filter(Boolean).join('\n')
+  if (!text) return false
+  return (
+    /county\s+record\s+summary/i.test(text) ||
+    /\bclark-ucc-/i.test(text) ||
+    /\brecord_key:\s*ucc:/i.test(text)
+  )
+}
+
 export function classifyDeskKind(input: {
   requirementKey?: string | null
   detectedType?: string | null
   label?: string | null
   fileName?: string | null
+  note?: string | null
 }): DeskDocKind | null {
   // Search summaries are evidence of a lookup, never the original deed, lien or permit.
-  const sourceText = [input.requirementKey, input.detectedType, input.label, input.fileName].filter(Boolean).join(' ')
+  const sourceText = [input.requirementKey, input.detectedType, input.label, input.fileName, input.note].filter(Boolean).join(' ')
   const slotted = matchDocKind(input.requirementKey)
   if (/public[_ -]record[_ -]summary|search[_ -]summary|records?[_ -]summary/i.test(sourceText)) {
-    // A Clark recorder screenshot is filed on the UCC tile and labeled as a
-    // summary. Deed and permit summaries stay in Other.
-    if (slotted?.key === 'ucc_lien' && /county record summary \(not the filing\)/i.test(input.label ?? '')) return slotted
+    // A Clark recorder UCC screenshot is filed on lien_filing with a summary label
+    // (or clark-ucc- filename / record_key: ucc:). Deed and permit summaries stay in Other.
+    if (slotted?.key === 'ucc_lien' && isRecorderUccSummary(input)) return slotted
     return CASE_DOC_KINDS.find(k => k.key === 'other') ?? null
   }
   if (slotted && SLOTTED_RECORD_KEYS.has(slotted.key)) return slotted

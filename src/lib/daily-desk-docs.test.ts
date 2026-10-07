@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CASE_DOC_KINDS, classifyDeskKind, matchDocKind, tileState } from '@/lib/daily-desk-docs'
+import { CASE_DOC_KINDS, classifyDeskKind, isRecorderUccSummary, matchDocKind, tileState } from '@/lib/daily-desk-docs'
 
 describe('CASE_DOC_KINDS', () => {
   it('is the 13-kind case-file strip', () => {
@@ -40,6 +40,45 @@ describe('classifyDeskKind', () => {
   })
   it('keeps a labeled recorder UCC screenshot on the UCC tile', () => {
     expect(classifyDeskKind({requirementKey: 'lien_filing', label: 'County record summary (not the filing)', fileName: 'clark-recorder-summary.pdf'})?.key).toBe('ucc_lien')
+  })
+
+  it('keeps Bartona/Arizona live lien_filing recorder summaries on ucc_lien without the exact phrase', () => {
+    // Live Clark recorder uploads (Bartona Test 2 / Arizona Test 2): shorter label, clark-ucc- filename, or record_key note.
+    expect(classifyDeskKind({
+      requirementKey: 'lien_filing',
+      detectedType: 'public_record_summary',
+      label: 'County record summary',
+      fileName: 'clark-ucc-201910160000384-2019-10-16.pdf',
+    })?.key).toBe('ucc_lien')
+    expect(classifyDeskKind({
+      requirementKey: 'lien_filing',
+      detectedType: 'public_record_summary',
+      label: null,
+      fileName: 'clark-ucc-200807230001221-2008-07-23.pdf',
+    })?.key).toBe('ucc_lien')
+    expect(classifyDeskKind({
+      requirementKey: 'lien_filing',
+      detectedType: 'public_record_summary',
+      label: 'UCC Fixture / Lien',
+      fileName: 'recorder-summary.pdf',
+      note: 'record_key: ucc:201910160000384 Official recorder summary.',
+    })?.key).toBe('ucc_lien')
+    expect(isRecorderUccSummary({ label: 'County record summary' })).toBe(true)
+    expect(isRecorderUccSummary({ fileName: 'clark-ucc-201910160000384-2019-10-16.pdf' })).toBe(true)
+    expect(isRecorderUccSummary({ note: 'record_key: ucc:201910160000384' })).toBe(true)
+  })
+
+  it('still sends deed and permit County record summaries to Other', () => {
+    expect(classifyDeskKind({
+      requirementKey: 'property_ownership',
+      label: 'County record summary',
+      fileName: 'deed-summary.pdf',
+    })?.key).toBe('other')
+    expect(classifyDeskKind({
+      requirementKey: 'permit_records',
+      label: 'County record summary (not the filing)',
+      fileName: 'permit-summary.pdf',
+    })?.key).toBe('other')
   })
   it('puts a lender PDF on finance and a Steele install PDF on solar', () => {
     expect(classifyDeskKind({ fileName: 'GoodLeap_TIL.pdf' })?.key).toBe('finance_agreement')
