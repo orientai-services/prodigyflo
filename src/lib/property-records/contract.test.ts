@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {addressVersion,validateRecordsResult} from './contract'
+import {addressVersion,AMENDMENT_ONLY_LABEL,filingIdentity,isSameFiling,OPEN_DATA_RECORD_LABEL,PERMIT_RECORD_PAGE_LABEL,permitStatusNote,permitTileLabel,recordFileNote,uccTileLabel,validateRecordsResult} from './contract'
 const address={line1:'4416 Clear Brook Pl',city:'Las Vegas',state:'NV',postal_code:'89103'}
 const result={version:'property-records-v1',case_key:'case1234',address_version:addressVersion(address),address,parcel:{id:'parcel-1',address,source_url:'https://county.test'},status:'partial',outcomes:[{source:'clark',kind:'deed',status:'index_only'}],originals:[],cached:false}
 describe('property lookup identity and originals',()=>{
@@ -19,5 +19,78 @@ describe('property lookup identity and originals',()=>{
   const original={url:'https://records.test/api/service/originals/hash',sha256:'a'.repeat(64),mime:'application/pdf',filename:'deed.pdf',category:'deed',source_url:'https://county.test'}
   expect(()=>validateRecordsResult({...result,originals:[original]},'case1234',address)).toThrow('no supported')
   expect(()=>validateRecordsResult({...result,parcel:null,originals:[original]},'case1234',address)).toThrow('matched parcel')
+ })
+ it('accepts an assessor deed copy and a recorder UCC summary, and still requires an original permit',()=>{
+  const file=(category:string,provenance?:string)=>({url:'https://records.test/api/service/originals/hash',sha256:'a'.repeat(64),mime:'application/pdf',filename:`${category}.pdf`,category,source_url:'https://county.test',...(provenance?{provenance}:{})})
+  const withParcel={...result,parcel:result.parcel,status:'partial'}
+  expect(validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'deed',status:'assessor_copy'}],originals:[file('deed','assessor_copy')]},'case1234',address).originals).toHaveLength(1)
+  expect(validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'ucc',status:'recorder_record_summary'}],originals:[file('ucc','recorder_record_summary')]},'case1234',address).originals[0].provenance).toBe('recorder_record_summary')
+  expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'no_match'}],originals:[file('permit','city_permit')]},'case1234',address)).toThrow('no supported')
+  expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'deed',status:'index_only'}],originals:[file('deed','assessor_copy')]},'case1234',address)).toThrow('no supported')
+  expect(validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'original'}],originals:[file('permit','city_permit')]},'case1234',address).originals[0].category).toBe('permit')
+ })
+ it('treats the same instrument as one filing even when the file bytes change',()=>{
+  const deed={category:'deed',filename:'assessor-deed-2010052603910.pdf',record_key:'deed:20100526:03910'}
+  expect(filingIdentity(deed)).toBe('deed:20100526:03910')
+  expect(filingIdentity({category:'ucc',filename:'clark-recorder-summary-202103170002904.pdf'})).toBe('ucc:clark-recorder-summary-202103170002904.pdf')
+  expect(isSameFiling({fileName:'assessor-deed-2010052603910.pdf',internalComment:'Official original obtained via Records.'},deed)).toBe(true)
+  expect(isSameFiling({fileName:'assessor-deed-2010052603910.pdf',internalComment:'record_key: deed:20220125:02830 Official original.'},deed)).toBe(false)
+  expect(isSameFiling({fileName:'other.pdf',internalComment:'record_key: deed:20100526:03910 kept'},deed)).toBe(true)
+  expect(isSameFiling({fileName:'Building-Permit.pdf',internalComment:'record_key: permit:BOTH2019062934:file1'},{category:'permit',filename:'Building-Permit.pdf',record_key:'permit:BOTH2019062934'})).toBe(false)
+  const parsed=validateRecordsResult({...result,parcel:result.parcel,outcomes:[{source:'clark',kind:'deed',status:'assessor_copy'}],originals:[{url:'https://records.test/api/service/originals/hash',sha256:'b'.repeat(64),mime:'application/pdf',filename:'assessor-deed-2010052603910.pdf',category:'deed',source_url:'https://county.test',provenance:'assessor_copy',record_key:'deed:20100526:03910'}]},'case1234',address)
+  expect(parsed.originals[0].record_key).toBe('deed:20100526:03910')
+  expect(uccTileLabel({category:'ucc',provenance:'recorder_record_summary'})).toBe('County record summary (not the filing)')
+  expect(uccTileLabel({category:'ucc',provenance:'recorder_record_summary',amendment_only:true})).toBe(AMENDMENT_ONLY_LABEL)
+  const amendment=validateRecordsResult({...result,parcel:result.parcel,outcomes:[{source:'clark',kind:'ucc',status:'recorder_record_summary'}],originals:[{url:'https://records.test/api/service/originals/hash',sha256:'c'.repeat(64),mime:'application/pdf',filename:'clark-recorder-summary-200807230001221.pdf',category:'ucc',source_url:'https://county.test',provenance:'recorder_record_summary',record_key:'ucc:200807230001221',amendment_only:true}]},'case1234',address)
+  expect(amendment.originals[0].amendment_only).toBe(true)
+  expect(()=>validateRecordsResult({...result,parcel:result.parcel,outcomes:[{source:'clark',kind:'deed',status:'assessor_copy'}],originals:[{url:'https://records.test/api/service/originals/hash',sha256:'b'.repeat(64),mime:'application/pdf',filename:'deed.pdf',category:'deed',source_url:'https://county.test',provenance:'assessor_copy',record_key:'lien:nope'}]},'case1234',address)).toThrow()
+ })
+ it('accepts a permit record-page screenshot only with a matching permit outcome',()=>{
+  const file={url:'https://records.test/api/service/originals/hash',sha256:'a'.repeat(64),mime:'application/pdf',filename:'nlv-permit-BUILD-011787-2026-2026-09-30.pdf',category:'permit',source_url:'https://eg.cityofnorthlasvegas.com',provenance:'permit_record_page',record_key:'permit:nlv:BUILD-011787-2026'}
+  const withParcel={...result,parcel:result.parcel,status:'complete'}
+  const parsed=validateRecordsResult({...withParcel,outcomes:[{source:'north_las_vegas_energov',kind:'permit',status:'permit_record_page'}],originals:[file]},'case1234',address)
+  expect(parsed.originals[0].provenance).toBe('permit_record_page')
+  expect(permitTileLabel(parsed.originals[0])).toBe(PERMIT_RECORD_PAGE_LABEL)
+  expect(permitTileLabel({category:'permit',provenance:'city_permit'})).toBeNull()
+  expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'north_las_vegas_energov',kind:'permit',status:'original'}],originals:[file]},'case1234',address)).toThrow('no supported')
+  expect(()=>validateRecordsResult({...withParcel,outcomes:[{source:'clark',kind:'permit',status:'no_permit_found',reason:'no_solar_permit'}],originals:[file]},'case1234',address)).toThrow('no supported')
+ })
+ it('carries a no permit found status and reason that staff can read',()=>{
+  const none=(reason?:string)=>validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'no_permit_found',...(reason?{reason}:{})}]},'case1234',address)
+  expect(none('needs_human_check').outcomes[0].reason).toBe('needs_human_check')
+  expect(permitStatusNote(none('needs_human_check'))).toBe('No permit found — needs human check')
+  expect(permitStatusNote(none('outside_service_area'))).toBe('No permit found — outside service area')
+  expect(permitStatusNote(none('no_solar_permit'))).toBe('No permit found — no solar permit on record')
+  expect(permitStatusNote(none('login_required'))).toBe('No permit found — portal needs a login')
+  expect(permitStatusNote(none())).toBe('No permit found — see records detail')
+  expect(()=>none('made_up')).toThrow()
+  expect(permitStatusNote({outcomes:[{kind:'permit',status:'unsupported'}]})).toBe('No permit found — outside service area')
+  expect(permitStatusNote({outcomes:[{kind:'permit',status:'no_match'}]})).toBe('No permit found — no solar permit on record')
+  expect(permitStatusNote({outcomes:[{kind:'permit',status:'original'}]})).toBeNull()
+  expect(permitStatusNote({outcomes:[{kind:'permit',status:'permit_record_page'}]})).toBeNull()
+  expect(permitStatusNote({outcomes:[{kind:'ucc',status:'failed'}]})).toBeNull()
+  expect(permitStatusNote(null)).toBeNull()
+ })
+ it('labels a City of Las Vegas open-data permit record as its own kind of permit record',()=>{
+  const file={url:'https://records.test/api/service/originals/hash',sha256:'c'.repeat(64),mime:'application/pdf',filename:'clv-opendata-permit-R19-13733-2019-09-10.pdf',category:'permit' as const,source_url:'https://services1.arcgis.com/x/FeatureServer/0/query',provenance:'permit_record_page' as const,record_key:'permit:clv-opendata:R19-13733'}
+  const parsed=validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'permit_record_page',detail:'City of Las Vegas open data permit record (open-data record, not the permit document): newest solar/PV permit R19-13733'}],originals:[file]},'case1234',address)
+  expect(permitTileLabel(parsed.originals[0])).toBe(OPEN_DATA_RECORD_LABEL)
+  expect(OPEN_DATA_RECORD_LABEL.startsWith('City of Las Vegas open data permit record')).toBe(true)
+  expect(recordFileNote(parsed.originals[0])).toMatch(/open-data permit layer, not the permit document/)
+  expect(permitStatusNote(parsed)).toBeNull()
+  expect(permitTileLabel({category:'permit',provenance:'permit_record_page',record_key:'permit:nlv:BUILD-1'})).toBe(PERMIT_RECORD_PAGE_LABEL)
+  expect(recordFileNote({category:'permit',provenance:'permit_record_page',record_key:'permit:nlv:BUILD-1'})).toBe('Screenshot of the permit record page, not the permit document.')
+  expect(recordFileNote({category:'ucc',provenance:'recorder_record_summary'})).toBe('Screenshot of the county record page, not the UCC filing image.')
+ })
+ it('reads the Boulder City headlines',()=>{
+  const bc=(reason:string,detail:string)=>validateRecordsResult({...result,status:'complete',outcomes:[{source:'boulder_city_portal',kind:'permit',status:'no_permit_found',reason,detail}]},'case1234',address)
+  expect(permitStatusNote(bc('needs_human_check','no permit found — Boulder City portal login expired: the shared records browser is signed out'))).toBe('No permit found — Boulder City portal login expired')
+  expect(permitStatusNote(bc('login_required','no permit found — Boulder City portal has no public permit search: the portal shows only applications'))).toBe('No permit found — Boulder City portal has no public permit search')
+ })
+ it('shows the service headline and keeps the retry marker for the City of Las Vegas',()=>{
+  const clv=validateRecordsResult({...result,status:'complete',outcomes:[{source:'las_vegas_building',kind:'permit',status:'no_permit_found',reason:'needs_human_check',retry_after:'2026-10-05T22:30:00Z',detail:'no permit found — City of Las Vegas site requires human verification: the permit record is only on www.lasvegasnevada.gov behind a Cloudflare check.'}]},'case1234',address)
+  expect(clv.outcomes[0].retry_after).toBe('2026-10-05T22:30:00Z')
+  expect(permitStatusNote(clv)).toBe('No permit found — City of Las Vegas site requires human verification')
+  expect(()=>validateRecordsResult({...result,outcomes:[{source:'x',kind:'permit',status:'no_permit_found',retry_after:'tomorrow'}]},'case1234',address)).toThrow()
  })
 })

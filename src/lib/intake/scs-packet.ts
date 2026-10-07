@@ -110,6 +110,12 @@ export async function ingestScsPacket(opts: {
     }
   }
 
+  // Property-records trigger. SCS sends its first packet (lead.received) when the
+  // homeowner presses NEXT on Contact, intake step 1, with name, email, mobile and
+  // the property address. That packet creates the profile and saves the primary
+  // address here, then queues the lookup. Later packets (documents, Review
+  // confirm) reach this same call; queuePropertyRecords keeps one job per
+  // client + address, so they do not add a second lookup.
   const street = str(answers.property_street)
   const city = str(answers.city)
   if (street && city) {

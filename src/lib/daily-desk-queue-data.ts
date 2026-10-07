@@ -63,6 +63,7 @@ export async function loadDeskQueue(user: SessionUser): Promise<DeskQueue> {
           select: {
             storageKey: true,
             label: true,
+            fileName: true,
             requirement: { select: { key: true } },
             extractions: { orderBy: { createdAt: 'desc' }, take: 1, select: { detectedTypeKey: true } },
           },
@@ -119,6 +120,7 @@ export async function loadDeskQueue(user: SessionUser): Promise<DeskQueue> {
         requirementKey: d.requirement?.key ?? null,
         detectedTypeKey: d.extractions[0]?.detectedTypeKey ?? null,
         label: d.label,
+        fileName: d.fileName,
         hasFile: Boolean(d.storageKey),
       })),
     )

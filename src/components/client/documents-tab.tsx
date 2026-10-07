@@ -117,6 +117,7 @@ export async function DocumentsTab({ clientId }: { clientId: string }) {
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
             <span className="text-muted-foreground text-xs font-medium">v{doc.version}</span>
             <DocumentStatusBadge status={doc.status} />
+            {doc.label && doc.label !== doc.fileName && <span className="truncate text-xs font-medium">{doc.label}</span>}
             {doc.fileName && <span className="text-muted-foreground truncate text-xs">{doc.fileName}</span>}
             {extraction && <ProviderBadge provider={extraction.provider} model={extraction.model} />}
           </div>

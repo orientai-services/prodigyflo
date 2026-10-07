@@ -1,4 +1,4 @@
-import { CASE_DOC_KINDS, matchDocKind } from '@/lib/daily-desk-docs'
+import { CASE_DOC_KINDS, classifyDeskKind, matchDocKind } from '@/lib/daily-desk-docs'
 
 export const QUEUE_BUCKETS = ['unassigned', 'unscheduled', 'missing_docs', 'cys'] as const
 export type QueueBucketKey = (typeof QUEUE_BUCKETS)[number]
@@ -31,11 +31,27 @@ export function queueReasons(input: QueueRowInput): QueueReason[] {
   return out
 }
 
-export function missingPacketKinds(docs: { requirementKey: string | null; detectedTypeKey: string | null; label: string | null; hasFile: boolean }[]): string[] {
+export function missingPacketKinds(docs: {
+  requirementKey: string | null
+  detectedTypeKey: string | null
+  label: string | null
+  fileName?: string | null
+  hasFile: boolean
+}[]): string[] {
   const present = new Set<string>()
   for (const d of docs) {
     if (!d.hasFile) continue
-    const kind = matchDocKind(d.requirementKey) || matchDocKind(d.detectedTypeKey) || matchDocKind(d.label)
+    // Prefer the same classifier the profile tiles use so lien_filing UCC summaries count.
+    const kind =
+      classifyDeskKind({
+        requirementKey: d.requirementKey,
+        detectedType: d.detectedTypeKey,
+        label: d.label,
+        fileName: d.fileName,
+      }) ||
+      matchDocKind(d.requirementKey) ||
+      matchDocKind(d.detectedTypeKey) ||
+      matchDocKind(d.label)
     if (kind) present.add(kind.key)
   }
   return CASE_DOC_KINDS.filter((k) => !present.has(k.key)).map((k) => k.label)

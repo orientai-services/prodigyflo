@@ -35,4 +35,17 @@ describe('missingPacketKinds', () => {
     expect(missing).toContain('Solar Production Report')
     expect(missing).not.toContain('Government ID')
   })
+
+  it('does not mark UCC Fixture / Lien missing when a lien_filing recorder summary is present', () => {
+    const missing = missingPacketKinds([
+      {
+        requirementKey: 'lien_filing',
+        detectedTypeKey: 'public_record_summary',
+        label: 'County record summary',
+        fileName: 'clark-ucc-201910160000384-2019-10-16.pdf',
+        hasFile: true,
+      },
+    ])
+    expect(missing).not.toContain('UCC Fixture / Lien')
+  })
 })

@@ -7,6 +7,7 @@ import { loadCaseFile } from '@/lib/daily-desk-case'
 import { loadDeskBoard } from '@/lib/daily-desk-data'
 import { classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { asRecord, str } from '@/lib/packet/schema'
+import { permitStatusNote } from '@/lib/property-records/contract'
 import { DOCUMENT_MODULES, mergeQuestionnaire, prefillQuestionnaire, prefillFromDocuments, applyQuestionnaireDispositions, profileCells } from './mapping'
 import { QUESTIONNAIRE_NAME, QUESTIONNAIRE_VERSION, answerCount } from './questions'
 import type { FinalClient, FinalDeskPayload, DeskView } from './types'
@@ -39,13 +40,13 @@ async function loadFinalClients(user: SessionUser): Promise<FinalClient[]> {
       appointments: { where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: new Date() } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, timezone: true } },
       surveyResponses: { orderBy: { updatedAt: 'desc' }, select: { answers: true, survey: { select: { name: true } } } },
       documents: { where: { storageKey: { not: null }, status: { notIn: ['REJECTED', 'EXPIRED'] } },
-        select: { id: true, label: true, fileName: true, requirement: { select: { key: true } },
+        select: { id: true, label: true, fileName: true, internalComment: true, requirement: { select: { key: true } },
           extractions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, detectedTypeKey: true, sourceActive:true, fields: { select: { verification: true } } } } } } } })
   return rows.map(c => {
     const source = asRecord(c.surveyResponses.find(r => r.survey.name !== QUESTIONNAIRE_NAME)?.answers)
     const saved = asRecord(c.surveyResponses.find(r => r.survey.name === QUESTIONNAIRE_NAME)?.answers)
     const docs = c.documents.map(d => {
-      const e = d.extractions[0], kind = classifyDeskKind({ requirementKey: d.requirement?.key, detectedType: e?.detectedTypeKey, label: d.label, fileName: d.fileName })
+      const e = d.extractions[0], kind = classifyDeskKind({ requirementKey: d.requirement?.key, detectedType: e?.detectedTypeKey, label: d.label, fileName: d.fileName, note: d.internalComment })
       return { id: d.id, key: kind?.key ?? 'other', label: d.fileName || d.label || 'Document', state: tileState({ hasFile: true, extractionStatus: e?.status ?? null, fieldCount: e?.fields.length ?? 0, verifiedCount: e?.fields.filter(f => ['VERIFIED', 'CORRECTED'].includes(f.verification)).length ?? 0 }) }
     })
     const agreement = docs.filter(d => ['finance_agreement', 'signed_contract'].includes(d.key))
@@ -67,10 +68,15 @@ export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?
   if (['queue', 'engine', 'documents', 'submissions'].includes(view)) payload.clients = clients
   if (view === 'clients') Object.assign(payload, await loadFilteredClients(user, query))
   if ((view === 'profile' || view === 'questionnaire') && clientId) {
-    const [file, questionnaire] = await Promise.all([loadCaseFile(user, clientId), loadFinalQuestionnaire(user, clientId)])
+    const [file, questionnaire, records] = await Promise.all([loadCaseFile(user, clientId), loadFinalQuestionnaire(user, clientId),
+      db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: 'COMPLETED' }, orderBy: { updatedAt: 'desc' }, select: { result: true } })])
     if (!file || !questionnaire) throw Error('Not found')
     const cells = profileCells(file)
-    const docs = DOCUMENT_MODULES.map(([key, label]) => ({ ...file.docs.find(d => d.key === key)!, key, label }))
+    const permitNote = permitStatusNote(records?.result)
+    const docs = DOCUMENT_MODULES.map(([key, label]) => {
+      const tile = { ...file.docs.find(d => d.key === key)!, key, label }
+      return key === 'county_permit' && tile.state === 'missing' && permitNote ? { ...tile, records: permitNote } : tile
+    })
     payload.file = { ...file, ...cells, availableFiles: file.docs.flatMap(d=>d.files), docs, docsPresent: docs.filter(d => d.state !== 'missing').length }
     payload.questionnaire = questionnaire
   }
