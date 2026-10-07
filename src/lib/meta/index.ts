@@ -5,6 +5,7 @@ import { hashValue } from '@/lib/crypto'
 import { processInbound } from '@/lib/intake/apply'
 import { MockMetaAdsProvider } from './mock'
 import { GraphMetaAdsProvider } from './graph'
+import { leadArea, storedAttribution, withWebhookIds } from './attribution'
 import {
   credentialsConfigured, metaConfigured, metaCredentialsFor,
   type MetaAdsProvider, type MetaLead,
@@ -106,7 +107,7 @@ export async function ensureMetaIntakeSource(organizationId: string) {
 export async function ingestMetaLead(
   organizationId: string,
   lead: MetaLead,
-  attribution: { adExternalId?: string; adSetExternalId?: string; formExternalId?: string } = {},
+  attribution: { adExternalId?: string; adSetExternalId?: string; formExternalId?: string; pageId?: string | null } = {},
 ) {
   const source = await ensureMetaIntakeSource(organizationId)
 
@@ -136,7 +137,7 @@ export async function ingestMetaLead(
     first_name: lead.fields.first_name ?? first ?? '',
     last_name: lead.fields.last_name ?? rest.join(' '),
     utm_source: 'meta',
-    utm_campaign: campaign?.utmCampaign ?? campaign?.name ?? undefined,
+    utm_campaign: campaign?.utmCampaign ?? campaign?.name ?? lead.attribution?.campaignName ?? undefined,
     leadgen_id: lead.leadgenId,
   }
 
@@ -149,7 +150,43 @@ export async function ingestMetaLead(
       data: { campaignId: campaign.id },
     })
   }
+  if (!result.duplicate && result.submission.clientId) {
+    await saveLeadAttribution(result.submission.clientId, organizationId, lead, attribution)
+  }
   return result
+}
+
+/**
+ * Lead source attribution + the out-of-area flag onto the client. A brand-new
+ * client always gets them; a client matched from an earlier lead keeps its
+ * first-touch attribution (only filled when it had none).
+ */
+async function saveLeadAttribution(
+  clientId: string,
+  organizationId: string,
+  lead: MetaLead,
+  webhook: { adExternalId?: string; adSetExternalId?: string; formExternalId?: string; pageId?: string | null },
+) {
+  const existing = await db.client.findFirst({
+    where: { id: clientId, organizationId },
+    select: { leadAttribution: true },
+  })
+  if (!existing || existing.leadAttribution != null) return
+  const area = leadArea(lead.fields)
+  const stored = storedAttribution({
+    leadgenId: lead.leadgenId,
+    attribution: withWebhookIds(lead.attribution, {
+      adId: webhook.adExternalId,
+      adsetId: webhook.adSetExternalId,
+      formId: webhook.formExternalId,
+    }),
+    pageId: webhook.pageId,
+    area,
+  })
+  await db.client.update({
+    where: { id: clientId },
+    data: { leadAttribution: stored, outOfArea: area.outOfArea },
+  })
 }
 
 export { metaConfigured, metaVerifyToken, metaCredentials, metaCredentialsFor } from './provider'

@@ -290,6 +290,17 @@ export class MockMetaAdsProvider implements MetaAdsProvider {
         email: `${first}.${last}.${leadgenId.slice(-4)}@example.test`.toLowerCase(),
         phone_number: `+1702555${String(1000 + (r % 9000))}`,
       },
+      attribution: {
+        adId: `mock_ad_${r % 97}`,
+        adName: 'Mock ad',
+        adsetId: `mock_as_${r % 89}`,
+        adsetName: 'Mock ad set',
+        campaignId: `mock_c_${r % 83}`,
+        campaignName: 'Mock campaign',
+        formId: `mock_form_${r % 7}`,
+        platform: r % 2 ? 'ig' : 'fb',
+        isOrganic: false,
+      },
     }
   }
 }

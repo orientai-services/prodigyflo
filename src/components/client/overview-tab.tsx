@@ -6,6 +6,7 @@ import { getAIProvider } from '@/lib/ai'
 import { listAssistViews } from '@/lib/ai/assists'
 import { OverviewForm } from '@/app/(app)/clients/[clientId]/overview-form'
 import { AIPanel } from '@/app/(app)/clients/[clientId]/ai-panel'
+import { attributionRows } from '@/lib/meta/attribution'
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -147,6 +148,10 @@ export async function OverviewTab({ clientId }: { clientId: string }) {
           <Row label="UTM source" value={client.utmSource ?? '—'} />
           <Row label="UTM medium" value={client.utmMedium ?? '—'} />
           <Row label="UTM campaign" value={client.utmCampaign ?? '—'} />
+          {attributionRows(client.leadAttribution).map((r) => (
+            <Row key={r.label} label={`Meta · ${r.label}`} value={r.value} />
+          ))}
+          {client.outOfArea && <Row label="Service area" value="Out of area (outside NV)" />}
         </Section>
 
         <section className="bg-card rounded-lg border p-4 lg:col-span-2">

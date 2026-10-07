@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -150,7 +150,22 @@ export function CaseFileView({ data, children, cys }: { data: CaseFileData; chil
             >
               {data.cysApproved ? 'CYS ready' : 'CYS not ready'}
             </span>
+            {data.outOfArea && (
+              <span className="desk-tag warn" data-testid="out-of-area">
+                Out of area
+              </span>
+            )}
           </div>
+          {!!data.leadAttribution?.length && (
+            <dl className="desk-muted" data-testid="lead-attribution" style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 12px' }}>
+              {data.leadAttribution.map((r) => (
+                <Fragment key={r.label}>
+                  <dt style={{ fontWeight: 600 }}>{r.label}</dt>
+                  <dd style={{ margin: 0 }}>{r.value}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          )}
         </div>
         <div className="desk-actions-row">
           {data.canAssign && (

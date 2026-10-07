@@ -6,6 +6,8 @@ import { resolveSigningContext } from '@/lib/meta/webhook-context'
 import { igniteLead } from '@/lib/meta/ignition'
 import { recordMetaWebhookLead } from '@/lib/call-center/meta-ingest'
 import { callCenterMetaRoute } from '@/lib/call-center/meta-route'
+import { fixtureLeadFrom, metaFixtureModeEnabled } from '@/lib/meta/fixture'
+import type { MetaLead } from '@/lib/meta/provider'
 
 /**
  * Meta Lead Ads webhook.
@@ -35,6 +37,11 @@ import { callCenterMetaRoute } from '@/lib/call-center/meta-route'
  *    makes redelivery safe. Enrichment (Instant Lead Ignition) runs in after().
  *  - The SCS English Page (and its form) is written as a Call Center lead.
  *    That path does not create a Client and does not run ignition.
+ *  - Every lead carries its source attribution (ad, ad set, campaign, form,
+ *    platform, is_organic) and an out-of-area flag (state != NV).
+ *  - Preview fixture mode (META_FIXTURE_LEADS=true, never in production — see
+ *    src/lib/meta/fixture.ts) reads the lead from a signed, Graph-shaped
+ *    `fixture_lead` instead of calling Meta. The signature check is unchanged.
  */
 
 export async function GET(req: Request) {
@@ -63,6 +70,8 @@ type LeadgenChange = {
     ad_id?: string
     adgroup_id?: string
     form_id?: string
+    /** Preview fixture mode only: a mocked Graph lead response. Ignored otherwise. */
+    fixture_lead?: unknown
   }
 }
 type WebhookBody = { object?: string; entry?: { id?: string; changes?: LeadgenChange[] }[] }
@@ -78,9 +87,12 @@ export async function POST(req: Request) {
   const ctx = await resolveSigningContext()
   if (!ctx) return Response.json({ error: 'No organization.' }, { status: 500 })
 
+  // Fixture mode never reads Graph, so it needs only the signing secret.
+  const fixture = metaFixtureModeEnabled()
+
   // Not fully configured → we cannot authenticate a real delivery and must not
   // fabricate one. 503 is retryable, so Meta redelivers once credentials land.
-  if (!ctx.live) {
+  if (fixture ? !ctx.secret : !ctx.live) {
     return Response.json({ error: 'Meta Ads not configured.' }, { status: 503 })
   }
 
@@ -108,7 +120,9 @@ export async function POST(req: Request) {
       if (change.field !== 'leadgen' || !change.value?.leadgen_id) continue
       const leadgenId = change.value.leadgen_id
       try {
-        const lead = await provider.fetchLead(leadgenId)
+        const lead: MetaLead = fixture
+          ? fixtureLeadFrom(change.value as Record<string, unknown>, leadgenId)
+          : await provider.fetchLead(leadgenId)
         const pageId = change.value.page_id ?? entry.id ?? null
         const formId = change.value.form_id ?? null
         const desk = callCenterMetaRoute({ pageId, formId }) === 'call-center'

@@ -2,6 +2,7 @@ import 'server-only'
 import { db } from '@/lib/db'
 import { centsToUsd, spendCapToCents, usdToCents } from './money'
 import { metaCredentials } from './provider'
+import { GRAPH_LEAD_FIELDS, leadFromGraphResponse, type GraphLeadResponse } from './attribution'
 import type {
   MetaAccountInfo, MetaAdAccountInput, MetaAdSet, MetaAdsProvider, MetaCampaign,
   MetaCampaignInput, MetaDailyStat, MetaLead,
@@ -348,16 +349,13 @@ export class GraphMetaAdsProvider implements MetaAdsProvider {
   }
 
   async fetchLead(leadgenId: string): Promise<MetaLead> {
-    type Res = { id: string; created_time: string; field_data: { name: string; values: string[] }[] }
     // Leadgen reads want the PAGE token; a System User token with leads_retrieval
     // is an accepted fallback, so a single system-user credential can run the
     // whole webhook without a separately-minted Page token.
     const leadToken = this.creds.pageAccessToken ?? this.creds.systemUserToken ?? ''
-    const res = await this.graph<Res>(`/${leadgenId}`, { fields: 'id,created_time,field_data' }, undefined, leadToken)
-    return {
-      leadgenId: res.id,
-      createdTime: res.created_time,
-      fields: Object.fromEntries(res.field_data.map((f) => [f.name, f.values[0] ?? ''])),
-    }
+    // Attribution (ad/ad set/campaign/form/platform/is_organic) rides on the same
+    // read, so no extra Graph call per lead.
+    const res = await this.graph<GraphLeadResponse>(`/${leadgenId}`, { fields: GRAPH_LEAD_FIELDS }, undefined, leadToken)
+    return leadFromGraphResponse(res)
   }
 }
