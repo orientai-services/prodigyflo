@@ -1,5 +1,6 @@
 import 'server-only'
 import { hashValue } from '@/lib/crypto'
+import type { MetaLeadAttribution } from './attribution'
 
 /**
  * Contract for the Meta (Facebook) Ads integration. Two implementations:
@@ -65,6 +66,8 @@ export type MetaLead = {
   leadgenId: string
   createdTime: string
   fields: Record<string, string> // field_name -> value, e.g. full_name/email/phone_number
+  /** Ad / ad set / campaign / form / platform the lead came from (Graph lead fields). */
+  attribution?: MetaLeadAttribution
 }
 
 export interface MetaAdsProvider {

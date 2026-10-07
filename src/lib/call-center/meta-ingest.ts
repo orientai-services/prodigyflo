@@ -2,6 +2,7 @@ import 'server-only'
 import { db } from '@/lib/db'
 import { ingestMetaLead } from '@/lib/meta'
 import type { MetaLead } from '@/lib/meta/provider'
+import { leadArea, storedAttribution, withWebhookIds } from '@/lib/meta/attribution'
 import { contactSecrets } from './contact'
 import {
   callCenterLeadId,
@@ -31,12 +32,26 @@ export async function ingestCallCenterMetaLead(input: {
   organizationId: string
   lead: MetaLead
   pageId: string | null
+  formId?: string | null
+  adExternalId?: string
+  adSetExternalId?: string
 }): Promise<{ duplicate: boolean; leadId: string }> {
   const id = callCenterLeadId(input.organizationId, input.lead.leadgenId)
   const existing = await db.callCenterLead.findUnique({ where: { id }, select: { id: true } })
   if (existing) return { duplicate: true, leadId: existing.id }
 
   const contact = contactSecrets(input.lead.fields)
+  const area = leadArea(input.lead.fields)
+  const attribution = storedAttribution({
+    leadgenId: input.lead.leadgenId,
+    attribution: withWebhookIds(input.lead.attribution, {
+      adId: input.adExternalId,
+      adsetId: input.adSetExternalId,
+      formId: input.formId,
+    }),
+    pageId: input.pageId,
+    area,
+  })
   const body = facebookFormEventBody({
     leadgenId: input.lead.leadgenId,
     name: callCenterPersonName(input.lead.fields),
@@ -56,6 +71,8 @@ export async function ingestCallCenterMetaLead(input: {
           phoneLast4: contact.phoneLast4,
           phoneSecret: contact.phoneSecret ?? undefined,
           emailSecret: contact.emailSecret ?? undefined,
+          leadAttribution: attribution,
+          outOfArea: area.outOfArea,
         },
       })
       await tx.callCenterEvent.create({
@@ -89,6 +106,9 @@ export async function recordMetaWebhookLead(input: {
       organizationId: input.organizationId,
       lead: input.lead,
       pageId: input.pageId?.trim() || null,
+      formId: input.formId ?? null,
+      adExternalId: input.adExternalId,
+      adSetExternalId: input.adSetExternalId,
     })
     return {
       duplicate: saved.duplicate,
@@ -102,6 +122,7 @@ export async function recordMetaWebhookLead(input: {
     adExternalId: input.adExternalId,
     adSetExternalId: input.adSetExternalId,
     formExternalId: input.formId ?? undefined,
+    pageId: input.pageId ?? null,
   })
   const createdClient = !result.duplicate && result.submission.createdClient && Boolean(result.submission.clientId)
   return {

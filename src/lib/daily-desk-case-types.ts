@@ -41,6 +41,10 @@ export type CaseFileData = {
   state: string
   zip: string
   source: string
+  /** Lead source attribution rows (Meta ad / ad set / campaign / form / platform). Empty when none. */
+  leadAttribution?: { label: string; value: string }[]
+  /** Form says the lead is outside Nevada. Kept, only flagged. */
+  outOfArea?: boolean
   stage: string
   ownerName: string | null
   appointmentLabel: string | null

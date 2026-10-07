@@ -10,6 +10,7 @@ import { listBriefViews } from '@/lib/ai/closeops-ai'
 import { civilDate, timeLabel } from '@/lib/daily-desk'
 import { CASE_DOC_KINDS, classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { resolveCaseFacts } from '@/lib/case-facts'
+import { attributionRows } from '@/lib/meta/attribution'
 import type { CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
 
 export type { CaseCell, CaseDocTile, CaseFileData } from '@/lib/daily-desk-case-types'
@@ -193,6 +194,8 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     state: confirmed('state') || str(answers.state) || addr?.state || '',
     zip: confirmed('zip') || str(answers.zip) || addr?.postalCode || '',
     source: client.leadSource?.name ?? 'Unknown source',
+    leadAttribution: attributionRows(client.leadAttribution),
+    outOfArea: client.outOfArea,
     stage: client.currentStage.name,
     ownerName: client.owner?.name ?? null,
     appointmentLabel,

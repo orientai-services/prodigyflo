@@ -699,6 +699,12 @@ model Client {
   utmCampaign  String?
   utmTerm      String?
   utmContent   String?
+  /// Lead source attribution captured at intake (Meta: ad, ad set, campaign,
+  /// form, platform fb/ig, is_organic, lead state). Null for other sources.
+  leadAttribution Json?
+  /// True when the lead's form says it is outside Nevada. The lead is kept;
+  /// the flag only feeds later texting rules.
+  outOfArea    Boolean @default(false)
 
   estimatedValue       Decimal?  @db.Decimal(12, 2)
   probability          Int?
@@ -2666,6 +2672,10 @@ model CallCenterLead {
   phoneSecret    Json?
   /// encryptSecret blob for the email. Never selected into the desk list.
   emailSecret    Json?
+  /// Meta lead source attribution (ad, ad set, campaign, form, platform, organic).
+  leadAttribution Json?
+  /// True when the form says the lead is outside Nevada. Kept, only flagged.
+  outOfArea      Boolean                @default(false)
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 
