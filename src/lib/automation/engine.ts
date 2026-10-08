@@ -28,11 +28,70 @@ export function retryBackoffMs(attemptsSoFar: number): number {
 }
 
 export type JobRunResult = {
-  scheduled: { sent: number; retried: number; failed: number }
-  sequences: { sent: number; advanced: number; completed: number; stopped: number; failed: number }
+  scheduled: { sent: number; retried: number; failed: number; deferred: number }
+  sequences: { sent: number; advanced: number; completed: number; stopped: number; failed: number; deferred: number }
+}
+
+/** How long a text held for an admin's opt-out review waits before it is checked again. */
+export const REVIEW_HOLD_RECHECK_MS = 2 * 60 * 60_000
+
+/** How long a text waiting for the client's time zone waits before it is checked again. */
+export const ZONE_RECHECK_MS = 6 * 60 * 60_000
+
+/** What staff see on a text or sequence parked until someone sets the client's time zone. */
+export const ZONE_WAIT_NOTE = "Waiting for this client's time zone. Set it on the client and this text goes out."
+
+/**
+ * Refusals that are not failures, with when to look again (the attempt is not
+ * counted):
+ *  - outside the person's calling hours → the next opening (deferUntil).
+ *    Automation sends are always 'marketing' for the calling rules.
+ *  - held while an admin reviews a possible opt-out → a while later. Lifted,
+ *    the text goes out; confirmed, the next check refuses it for good.
+ *  - no known time zone for the client → parked (ZONE_WAIT_NOTE) and checked
+ *    again now and then. Setting the zone (setContactTimeZone) wakes it at once.
+ */
+function deferral(outcome: SendOutcome, now: Date): Date | null {
+  if (outcome.ok) return null
+  if (outcome.code === 'SUPPRESSED' && outcome.held) return new Date(now.getTime() + REVIEW_HOLD_RECHECK_MS)
+  if (outcome.code === 'UNKNOWN_TIMEZONE') return new Date(now.getTime() + ZONE_RECHECK_MS)
+  if (outcome.code !== 'OUTSIDE_HOURS' || !outcome.retryAt) return null
+  const at = new Date(outcome.retryAt)
+  return Number.isNaN(at.getTime()) ? null : at
+}
+
+/**
+ * The calling-rules check itself could not run (a database read failed, or
+ * PHONE_HASH_KEY isn't set yet): nothing was sent and nothing was decided, so
+ * it is retried like a provider error instead of failing for good.
+ */
+function checkFailed(outcome: SendOutcome): string | null {
+  return !outcome.ok && outcome.code === 'CHECK_FAILED' ? outcome.error : null
 }
 
 const CONSENT_CODES = new Set(['NO_CONSENT', 'CONSENT_DECLINED', 'CONSENT_REVOKED', 'CONSENT_EXPIRED', 'OPTED_OUT'])
+
+function waitingForZone(outcome: SendOutcome): boolean {
+  return !outcome.ok && outcome.code === 'UNKNOWN_TIMEZONE'
+}
+
+/** Tell the sender, once, that an automated text is parked until the client's time zone is set. */
+async function notifyZoneWait(actor: SessionUser, clientId: string, what: string): Promise<void> {
+  try {
+    await db.notification.create({
+      data: {
+        organizationId: actor.organizationId,
+        userId: actor.id,
+        kind: 'SYSTEM',
+        title: 'Text waiting for a time zone',
+        body: `${what} is on hold: we don't know this client's time zone. Set it on the client and it goes out.`,
+        href: `/clients/${clientId}`,
+      },
+    })
+  } catch {
+    // A missed notice never blocks the run; the note on the text still shows.
+  }
+}
 
 type SendableChannel = 'EMAIL' | 'SMS'
 
@@ -129,6 +188,7 @@ async function runScheduledMessages(now: Date, result: JobRunResult, opts: RunOp
       outcome = await sendMessage(actor, {
         clientId: sm.clientId,
         channel,
+        automated: true,
         ...(templateId ? { templateId } : { subject: sm.subject ?? undefined, body: sm.body ?? undefined }),
       })
     } catch (err) {
@@ -137,6 +197,33 @@ async function runScheduledMessages(now: Date, result: JobRunResult, opts: RunOp
         continue
       }
       throw err
+    }
+
+    const later = deferral(outcome, now)
+    if (later) {
+      const parked = waitingForZone(outcome)
+      await db.scheduledMessage.update({
+        where: { id: sm.id },
+        data: { sendAt: later, status: 'PENDING', ...(parked ? { error: ZONE_WAIT_NOTE } : sm.error === ZONE_WAIT_NOTE ? { error: null } : {}) },
+      })
+      if (parked && sm.error !== ZONE_WAIT_NOTE) await notifyZoneWait(actor, sm.clientId, `A scheduled ${channel.toLowerCase()}`)
+      result.scheduled.deferred += 1
+      continue
+    }
+
+    const checkError = checkFailed(outcome)
+    if (checkError) {
+      const attempts = sm.attempts + 1
+      if (attempts >= MAX_ATTEMPTS) {
+        await fail(`Gave up after ${attempts} attempts. Last error: ${checkError}`, actor)
+      } else {
+        await db.scheduledMessage.update({
+          where: { id: sm.id },
+          data: { status: 'PENDING', attempts, sendAt: new Date(now.getTime() + retryBackoffMs(attempts)), error: checkError.slice(0, 500) },
+        })
+        result.scheduled.retried += 1
+      }
+      continue
     }
 
     if (isPermanentRefusal(outcome)) {
@@ -304,7 +391,7 @@ async function runSequenceEnrollments(now: Date, result: JobRunResult, opts: Run
 
     let outcome: SendOutcome
     try {
-      outcome = await sendMessage(actor, { clientId: e.clientId, channel, templateId })
+      outcome = await sendMessage(actor, { clientId: e.clientId, channel, templateId, automated: true })
     } catch (err) {
       if (err instanceof ForbiddenError) {
         await stopEnrollment(e.id, 'STOPPED', `The sender is no longer allowed to message this client: ${err.message}`, actor, orgId, seqName)
@@ -312,6 +399,34 @@ async function runSequenceEnrollments(now: Date, result: JobRunResult, opts: Run
         continue
       }
       throw err
+    }
+
+    const later = deferral(outcome, now)
+    if (later) {
+      const parked = waitingForZone(outcome)
+      await db.sequenceEnrollment.update({
+        where: { id: e.id },
+        data: { nextRunAt: later, ...(parked ? { stoppedReason: ZONE_WAIT_NOTE } : e.stoppedReason === ZONE_WAIT_NOTE ? { stoppedReason: null } : {}) },
+      })
+      if (parked && e.stoppedReason !== ZONE_WAIT_NOTE) await notifyZoneWait(actor, e.clientId, `Step ${e.currentStep + 1} of “${seqName}”`)
+      result.sequences.deferred += 1
+      continue
+    }
+
+    const checkError = checkFailed(outcome)
+    if (checkError) {
+      // Same step again on the usual backoff, up to MAX_ATTEMPTS; then the
+      // enrollment fails instead of retrying (and auditing a block) forever.
+      const attempts = (e.attempts ?? 0) + 1
+      if (attempts >= MAX_ATTEMPTS) {
+        await db.sequenceEnrollment.update({ where: { id: e.id }, data: { attempts } })
+        await stopEnrollment(e.id, 'FAILED', `Gave up after ${attempts} attempts. Last error: ${checkError}`, actor, orgId, seqName)
+        result.sequences.failed += 1
+      } else {
+        await db.sequenceEnrollment.update({ where: { id: e.id }, data: { attempts, nextRunAt: new Date(now.getTime() + retryBackoffMs(attempts)) } })
+        result.sequences.deferred += 1
+      }
+      continue
     }
 
     if (!outcome.ok) {
@@ -332,13 +447,13 @@ async function runSequenceEnrollments(now: Date, result: JobRunResult, opts: Run
     if (next) {
       await db.sequenceEnrollment.update({
         where: { id: e.id },
-        data: { currentStep: e.currentStep + 1, nextRunAt: new Date(now.getTime() + next.delayHours * 3_600_000) },
+        data: { currentStep: e.currentStep + 1, nextRunAt: new Date(now.getTime() + next.delayHours * 3_600_000), attempts: null, stoppedReason: null },
       })
       result.sequences.advanced += 1
     } else {
       await db.sequenceEnrollment.update({
         where: { id: e.id },
-        data: { currentStep: e.currentStep + 1, status: 'COMPLETED', nextRunAt: null, stoppedReason: null },
+        data: { currentStep: e.currentStep + 1, status: 'COMPLETED', nextRunAt: null, stoppedReason: null, attempts: null },
       })
       result.sequences.completed += 1
       await recordAudit(actor, {
@@ -354,8 +469,8 @@ async function runSequenceEnrollments(now: Date, result: JobRunResult, opts: Run
 /** Process everything due at `now`. Called by POST /api/jobs/run. */
 export async function runDueWork(now: Date = new Date(), opts: RunOptions = {}): Promise<JobRunResult> {
   const result: JobRunResult = {
-    scheduled: { sent: 0, retried: 0, failed: 0 },
-    sequences: { sent: 0, advanced: 0, completed: 0, stopped: 0, failed: 0 },
+    scheduled: { sent: 0, retried: 0, failed: 0, deferred: 0 },
+    sequences: { sent: 0, advanced: 0, completed: 0, stopped: 0, failed: 0, deferred: 0 },
   }
   await runScheduledMessages(now, result, opts)
   await runSequenceEnrollments(now, result, opts)

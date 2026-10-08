@@ -10,8 +10,11 @@ const ORG_TABLES = [
   'ExternalDocumentImport', 'HotLeadReview', 'InboundDocument', 'InboundEvent', 'Insight',
   'IntakeSource', 'IntakeSubmission', 'Invite', 'LeadSource', 'MessageTemplate', 'Notification',
   'NurtureTouch', 'PhoneNumber', 'Pipeline', 'PropertyRecordsJob', 'Region', 'Role', 'SavedFilter', 'ScheduledMessage',
-  'Sequence', 'Survey', 'Team', 'TelephonyWallet', 'User', 'WalletEntry',
+  'Sequence', 'Survey', 'Team', 'TelephonyWallet', 'User', 'VoiceCall', 'WalletEntry',
 ].sort()
+// Org-scoped rows that are only a live heartbeat (no id, nothing to keep):
+// cleared for both organizations instead of moved.
+const EPHEMERAL_ORG_TABLES = ['VoicePresence']
 const q = (name: string) => '"' + name.replaceAll('"', '""') + '"'
 export type MergeOptions = { sourceId: string; targetId: string; commit?: boolean; runId?: string }
 export type MergeReport = { runId: string; committed: boolean; clients: number; documents: number; historicalUsers: number; archivedRows: number; tablesChecked: number }
@@ -27,7 +30,7 @@ export async function mergeWorkspace(pg: PoolClient, options: MergeOptions): Pro
     await pg.query("SET LOCAL statement_timeout='5min'")
     await pg.query("SELECT pg_advisory_xact_lock(hashtext('prodigy-workspace-merge'))")
     const catalog = await pg.query<{ table_name: string }>(`SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='organizationId' ORDER BY table_name`)
-    if (JSON.stringify(catalog.rows.map(r => r.table_name)) !== JSON.stringify(ORG_TABLES)) throw new Error('Organization table catalog changed; review the migration allowlist before proceeding.')
+    if (JSON.stringify(catalog.rows.map(r => r.table_name)) !== JSON.stringify([...ORG_TABLES, ...EPHEMERAL_ORG_TABLES].sort())) throw new Error('Organization table catalog changed; review the migration allowlist before proceeding.')
     const all = await pg.query<{ table_name: string }>(`SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='id' AND table_name <> '_prisma_migrations' ORDER BY table_name`)
     // Block concurrent writes to every affected table, including child records and intake.
     await pg.query(`LOCK TABLE ${all.rows.map(r => q(r.table_name)).join(', ')}, "RolePermission" IN EXCLUSIVE MODE`)
@@ -124,6 +127,7 @@ export async function mergeWorkspace(pg: PoolClient, options: MergeOptions): Pro
     await pg.query(`DELETE FROM "Region" WHERE "organizationId"=ANY($1::text[])`, [both])
     await pg.query(`DELETE FROM "WalletEntry" WHERE "organizationId"=$1`, [sourceId])
     await pg.query(`DELETE FROM "TelephonyWallet" WHERE "organizationId"=$1`, [sourceId])
+    for (const table of EPHEMERAL_ORG_TABLES) await pg.query(`DELETE FROM ${q(table)} WHERE "organizationId"=ANY($1::text[])`, [both])
     for (const table of ORG_TABLES) await pg.query(`UPDATE ${q(table)} SET "organizationId"=$2 WHERE "organizationId"=$1`, both)
     for (const table of ORG_TABLES) if ((await pg.query(`SELECT 1 FROM ${q(table)} WHERE "organizationId"=$1 LIMIT 1`, [sourceId])).rowCount) throw new Error(`Unmoved organization reference in ${table}`)
     await pg.query(`UPDATE "Organization" SET name='Team Prodigy',kind='CLIENT',"parentOrganizationId"=NULL WHERE id=$1`, [targetId])

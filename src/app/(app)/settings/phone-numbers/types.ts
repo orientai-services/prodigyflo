@@ -27,6 +27,16 @@ export type NumberVM = {
   monthlyLabel: string
   renewsLabel: string | null
   provider: string
+  /** "Oct 8" when the line came in through number sync, else null. */
+  importedLabel: string | null
+  /** Host the carrier sends this line's calls to when it isn't this app. */
+  driftHost: string | null
+  /** Stored switch: null = ring browsers unless the line is voicemail-only. */
+  ringBrowsers: boolean | null
+  /** The switch's effect after that default. */
+  ringsBrowsers: boolean
+  /** Its inbound path reaches a person, so it may be used as caller ID. */
+  takesCallbacks: boolean
 }
 
 export type LedgerRowVM = {
@@ -76,4 +86,8 @@ export type ConsoleVM = {
   numbers: NumberVM[]
   ledger: LedgerRowVM[]
   members: MemberVM[]
+  /** Show "Sync numbers from Twilio" (platform owner, or a manager on the org's own Twilio). */
+  showSync: boolean
+  /** Organizations a shared-account number can be assigned to (platform owner only). */
+  syncOrganizations: { id: string; name: string }[]
 }

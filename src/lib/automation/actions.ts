@@ -148,7 +148,7 @@ export async function enrollClientAction(raw: { clientId: string; sequenceId: st
     const enrollment = existing
       ? await db.sequenceEnrollment.update({
           where: { id: existing.id },
-          data: { status: 'ACTIVE', currentStep: 0, nextRunAt, stoppedReason: null, enrolledById: user.id },
+          data: { status: 'ACTIVE', currentStep: 0, nextRunAt, stoppedReason: null, attempts: null, enrolledById: user.id },
         })
       : await db.sequenceEnrollment.create({
           data: { sequenceId, clientId, status: 'ACTIVE', currentStep: 0, nextRunAt, enrolledById: user.id },

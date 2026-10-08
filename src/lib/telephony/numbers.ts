@@ -6,11 +6,15 @@ import { recordAudit } from '@/lib/audit'
 import { requireStepUp, StepUpRequiredError } from '@/lib/stepup'
 import {
   getTelephonyProvider,
+  platformCredentials,
   telephonyCredentials,
   webhooksFor,
   type AvailableNumber,
   type SearchNumbersInput,
+  type TelephonyProvider,
 } from './index'
+import { MockTelephonyProvider } from './mock'
+import { TwilioTelephonyProvider } from './twilio'
 import { formatE164, toE164 } from './provider'
 import { money, quoteNumber } from './pricing'
 import { applyMovement, checkFunding, ensureWallet, InsufficientFundsError } from './billing'
@@ -188,6 +192,7 @@ export async function provisionNumber(
           locality: bought.locality,
           provider: provider.name,
           providerSid: bought.providerSid,
+          providerAccountSid: provider.isMock ? null : creds.accountSid,
           capabilities: bought.capabilities as unknown as Prisma.InputJsonValue,
           routing,
           forwardTo,
@@ -208,6 +213,7 @@ export async function provisionNumber(
           locality: bought.locality,
           provider: provider.name,
           providerSid: bought.providerSid,
+          providerAccountSid: provider.isMock ? null : creds.accountSid,
           capabilities: bought.capabilities as unknown as Prisma.InputJsonValue,
           routing,
           forwardTo,
@@ -216,6 +222,7 @@ export async function provisionNumber(
           setupCostCents: quote.setupCents,
           nextRenewalAt,
           releasedAt: null,
+          importedAt: null,
           createdById: user.id,
         },
         select: { id: true },
@@ -433,10 +440,20 @@ export async function releaseNumber(
   if (!number) return { ok: false, code: 'NOT_FOUND', error: 'That number is not on an account you manage.' }
   if (number.status === 'RELEASED') return { ok: true }
 
-  const provider = getTelephonyProvider()
-  const creds = provider.isMock
-    ? { accountSid: '', authToken: '' }
-    : await telephonyCredentials(number.organizationId)
+  // Hand the number back to the carrier that SOLD it (row.provider), on the
+  // account it lives on — never whichever adapter happens to be configured now.
+  const provider = providerFor(number.provider)
+  if (!provider) {
+    return { ok: false, code: 'CARRIER_ERROR', error: `This number came from "${number.provider}", which this app can no longer reach.` }
+  }
+  const creds = provider.isMock ? { accountSid: '', authToken: '' } : await releaseCredentials(number)
+  if (!provider.isMock && number.providerSid && !creds) {
+    return {
+      ok: false,
+      code: 'NO_CREDENTIALS',
+      error: "The carrier account this number lives on isn't reachable with the stored credentials, so it was not released.",
+    }
+  }
 
   if (number.providerSid && creds) {
     const res = await provider.release(number.providerSid, creds)
@@ -470,6 +487,21 @@ export async function releaseNumber(
   return { ok: true }
 }
 
+/** The adapter a stored row was bought through. */
+function providerFor(name: string): TelephonyProvider | null {
+  if (name === 'mock') return new MockTelephonyProvider()
+  if (name === 'twilio') return new TwilioTelephonyProvider()
+  return null
+}
+
+/** Credentials for the account the number actually lives on (providerAccountSid when known). */
+async function releaseCredentials(number: { organizationId: string; providerAccountSid: string | null }) {
+  const own = await telephonyCredentials(number.organizationId)
+  if (!number.providerAccountSid || own?.accountSid === number.providerAccountSid) return own
+  const platform = platformCredentials()
+  return platform?.accountSid === number.providerAccountSid ? platform : null
+}
+
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 const NUMBER_SELECT = {
@@ -484,6 +516,7 @@ const NUMBER_SELECT = {
   locality: true,
   provider: true,
   providerSid: true,
+  providerAccountSid: true,
   capabilities: true,
   routing: true,
   forwardTo: true,

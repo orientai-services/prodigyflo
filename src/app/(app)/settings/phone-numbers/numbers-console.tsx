@@ -33,8 +33,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState } from '@/components/empty-state'
+import { Switch } from '@/components/ui/switch'
+import { SyncNumbersDialog } from '@/components/telephony/sync-numbers-dialog'
 import { cn } from '@/lib/utils'
-import { releaseNumberAction, setPrimaryNumberAction } from './actions'
+import { releaseNumberAction, setPrimaryNumberAction, setRingBrowsersAction } from './actions'
 import { BuyNumberDialog } from './buy-number-dialog'
 import { FundsDialog } from './funds-dialog'
 import { PassphraseCard } from './passphrase-card'
@@ -64,6 +66,18 @@ export function NumbersConsole({ vm }: { vm: ConsoleVM }) {
       const res = await setPrimaryNumberAction(n.id)
       if (res.ok) {
         toast.success(`${n.display} is now the main line.`)
+        router.refresh()
+      } else {
+        toast.error(res.error)
+      }
+    })
+  }
+
+  const setRinging = (n: NumberVM, on: boolean) => {
+    startTransition(async () => {
+      const res = await setRingBrowsersAction(n.id, on)
+      if (res.ok) {
+        toast.success(on ? `${n.display} rings signed-in browsers first.` : `${n.display} no longer rings browsers.`)
         router.refresh()
       } else {
         toast.error(res.error)
@@ -148,9 +162,10 @@ export function NumbersConsole({ vm }: { vm: ConsoleVM }) {
           <CardDescription>
             Clients call and text these. The main line is what outbound texts come from.
           </CardDescription>
-          {vm.canManage && (
-            <CardAction>
-              <BuyNumberDialog vm={vm} />
+          {(vm.canManage || vm.showSync) && (
+            <CardAction className="flex flex-wrap gap-2">
+              {vm.showSync && <SyncNumbersDialog organizations={vm.syncOrganizations} />}
+              {vm.canManage && <BuyNumberDialog vm={vm} />}
             </CardAction>
           )}
         </CardHeader>
@@ -171,6 +186,7 @@ export function NumbersConsole({ vm }: { vm: ConsoleVM }) {
                     <TableHead>Number</TableHead>
                     <TableHead>Label</TableHead>
                     <TableHead>Answers with</TableHead>
+                    <TableHead>Rings browsers</TableHead>
                     <TableHead className="text-right">Monthly</TableHead>
                     <TableHead>Status</TableHead>
                     {vm.canManage && <TableHead className="w-10" />}
@@ -190,9 +206,34 @@ export function NumbersConsole({ vm }: { vm: ConsoleVM }) {
                           )}
                         </div>
                         {n.place && <p className="text-muted-foreground mt-0.5 text-xs">{n.place}</p>}
+                        {n.importedLabel && (
+                          <p className="text-muted-foreground mt-0.5 text-xs">Imported {n.importedLabel}</p>
+                        )}
+                        {n.driftHost && (
+                          <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                            Points elsewhere: {n.driftHost}
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell className="max-w-48 truncate">{n.friendlyName}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{answersWith(n)}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {answersWith(n)}
+                        {n.status === 'ACTIVE' && !n.takesCallbacks && (
+                          <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">Can&rsquo;t take callbacks</p>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {vm.canManage ? (
+                          <Switch
+                            checked={n.ringsBrowsers}
+                            disabled={pending || n.status !== 'ACTIVE'}
+                            onCheckedChange={(on) => setRinging(n, on)}
+                            aria-label={`Ring signed-in browsers for ${n.display}`}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground text-sm">{n.ringsBrowsers ? 'Yes' : 'No'}</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{n.monthlyLabel}</TableCell>
                       <TableCell>
                         <StatusBadge n={n} />

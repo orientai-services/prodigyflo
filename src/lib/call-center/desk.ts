@@ -1,11 +1,15 @@
 import 'server-only'
-import type { CallCenterEventType, CallCenterLeadStatus } from '@prisma/client'
+import type { CallCenterEventType, CallCenterLeadStatus, VoiceCall } from '@prisma/client'
 import { db } from '@/lib/db'
+import { isUniqueViolation, recordingPath } from '@/lib/telephony/voice-calls'
+import { last4Of, phoneHashOrNull } from '@/lib/telephony/compliance-core'
 import { readSecret } from './contact'
 import { callLeadsForDesk, type StoredCallCenterLead } from './from-rows'
 import {
+  PREVIEW_BANNER,
   applyLeadAction,
   applyOutcome,
+  nextRetryAt,
   saveNote,
   sendIntakeLink,
   type CallLead,
@@ -21,8 +25,11 @@ function missingRelation(err: unknown): boolean {
   const code = 'code' in err ? String((err as { code?: unknown }).code ?? '') : ''
   if (code === 'P2021' || code === 'P2022' || code === '42P01' || code === '42703') return true
   const message = err instanceof Error ? err.message : ''
-  return /CallCenterLead/i.test(message) && /does not exist|undefined_table|P2021|P2022/i.test(message)
+  return /CallCenterLead|VoiceCall/i.test(message) && /does not exist|undefined_table|P2021|P2022/i.test(message)
 }
+
+/** Shown on a desk "Call" made through the phone's own dialer (tel: link). */
+export const TEL_DIAL_DETAIL = 'Dialled from a phone after the calling-rules check. Not recorded.'
 
 function dbStatus(lead: CallLead): CallCenterLeadStatus {
   if (lead.status === 'booked') return 'BOOKED'
@@ -75,8 +82,39 @@ function toStored(row: {
   phoneLast4: string | null
   createdAt: Date
   events: { type: string; body: string; createdAt: Date }[]
+  timeZone?: string | null
 }): StoredCallCenterLead {
   return row
+}
+
+/**
+ * Real recordings and open missed calls for the desk, keyed for from-rows.
+ * Only the internal playback path is handed out — never Twilio's URL — and
+ * the playback route checks access again on every request.
+ */
+async function deskCallExtras(organizationId: string, leadIds: string[]) {
+  const recordings = new Map<string, { src: string; seconds: number }>()
+  const missedByLead = new Map<string, string>()
+  if (leadIds.length === 0) return { recordings, missedByLead }
+  const calls = await db.voiceCall.findMany({
+    where: { organizationId, callCenterLeadId: { in: leadIds } },
+    orderBy: { startedAt: 'desc' },
+    select: {
+      id: true,
+      callCenterLeadId: true,
+      recordingSid: true,
+      recordingDurationSeconds: true,
+      needsAction: true,
+      handledAt: true,
+    },
+  })
+  for (const vc of calls) {
+    if (vc.recordingSid) recordings.set(vc.id, { src: recordingPath(vc.id), seconds: vc.recordingDurationSeconds ?? 0 })
+    if (vc.needsAction && !vc.handledAt && vc.callCenterLeadId && !missedByLead.has(vc.callCenterLeadId)) {
+      missedByLead.set(vc.callCenterLeadId, vc.id)
+    }
+  }
+  return { recordings, missedByLead }
 }
 
 /** Desk list for one org. Secrets stay on the server. */
@@ -96,11 +134,17 @@ export async function loadCallCenterLeadsFor(organizationId: string, viewerId: s
       doNotCallAt: true,
       phoneLast4: true,
       createdAt: true,
+      timeZone: true,
       events: { orderBy: { createdAt: 'asc' }, select: { type: true, body: true, createdAt: true } },
     },
   })
   const names = await lockNames(organizationId, rows.map((row) => row.lockedBy || ''))
-  return callLeadsForDesk(rows.map(toStored), viewerId, names)
+  const extras = await deskCallExtras(organizationId, rows.map((row) => row.id)).catch((err) => {
+    // An unmigrated VoiceCall table must not take the desk down.
+    if (missingRelation(err)) return undefined
+    throw err
+  })
+  return callLeadsForDesk(rows.map(toStored), viewerId, names, extras)
 }
 
 async function publicLead(organizationId: string, viewerId: string, leadId: string): Promise<CallLead | null> {
@@ -309,9 +353,71 @@ export async function recordCallCenterOutcomeFor(
   const stamp = at.toISOString()
   const after = applyOutcome(held.lead, outcome, stamp, actor.id)
   if (after === held.lead) return { ok: false, error: 'Not allowed' }
-  return writeTrail(organizationId, actor, leadId, held.lead, after, at, {
+  const result = await writeTrail(organizationId, actor, leadId, held.lead, after, at, {
     doNotCallAt: after.dnc ? held.row.doNotCallAt ?? at : null,
   })
+  if (result.ok && outcome === 'do_not_call') await suppressLeadNumber(organizationId, leadId, actor.id, at)
+  return result
+}
+
+/**
+ * "Do not call" puts the NUMBER on the org's do-not-contact list (calls and
+ * texts), not only the lead row — so a second lead, a client, or an inbound
+ * caller with the same number is blocked too. A save failure is reported to
+ * the admins rather than dropped.
+ */
+async function suppressLeadNumber(organizationId: string, leadId: string, userId: string, at: Date): Promise<void> {
+  try {
+    const row = await db.callCenterLead.findFirst({
+      where: { id: leadId, organizationId },
+      select: { phoneSecret: true, phoneHash: true, phoneLast4: true },
+    })
+    const phone = readSecret(row?.phoneSecret)
+    const hash = row?.phoneHash ?? phoneHashOrNull(phone)
+    if (!hash) throw new Error('No phone hash for this lead.')
+    const { blockNumber } = await import('@/lib/telephony/suppressions')
+    await blockNumber(
+      {
+        organizationId,
+        numberHash: hash,
+        last4: row?.phoneLast4 ?? last4Of(phone),
+        sms: 'call_center',
+        call: 'call_center',
+        reason: 'Do not call (Call Center)',
+        createdById: userId,
+      },
+      at,
+    )
+    await db.auditEvent.create({
+      data: {
+        organizationId,
+        actorId: userId,
+        actorLabel: 'Call Center',
+        action: 'telephony.suppression_added',
+        entityType: 'CallCenterLead',
+        entityId: leadId,
+        summary: `Number ending ${row?.phoneLast4 ?? '····'} added to the do-not-call list`,
+        after: { source: 'call_center', last4: row?.phoneLast4 ?? null },
+      },
+    })
+  } catch {
+    const admins = await db.user.findMany({
+      where: { organizationId, isActive: true, deletedAt: null, role: { key: 'SUPER_ADMIN' } },
+      select: { id: true },
+    })
+    if (admins.length) {
+      await db.notification.createMany({
+        data: admins.map((a) => ({
+          organizationId,
+          userId: a.id,
+          kind: 'SYSTEM' as const,
+          title: 'Do-not-call not saved',
+          body: 'A Call Center "Do not call" could not be added to the list. Add it by hand under Phone setup.',
+          href: '/call-center',
+        })),
+      })
+    }
+  }
 }
 
 export async function recordCallCenterNoteFor(
@@ -353,9 +459,100 @@ export async function recordCallCenterAttemptFor(
   const held = await heldLead(organizationId, actor, leadId)
   if (!held.ok) return { ok: false, error: held.error }
   if (held.row.doNotCallAt) return { ok: false, error: 'Do not call' }
-  const after = applyLeadAction(held.lead, 'call', at.toISOString(), actor.id)
-  if (after === held.lead) return { ok: false, error: 'Not allowed' }
+  const stamp = at.toISOString()
+  const dialled = applyLeadAction(held.lead, 'call', stamp, actor.id)
+  if (dialled === held.lead) return { ok: false, error: 'Not allowed' }
+  // The tel: flow dials from the rep's own phone: say so, not "preview".
+  const after = {
+    ...dialled,
+    trail: dialled.trail.map((event) =>
+      event.kind === 'call' && event.at === stamp && event.detail === PREVIEW_BANNER ? { ...event, detail: TEL_DIAL_DETAIL } : event,
+    ),
+  }
   return writeTrail(organizationId, actor, leadId, held.lead, after, at)
+}
+
+/**
+ * A real carrier call to a lead (P0b browser calls). System write — the
+ * webhook has no session — of a CALL event with what actually happened, plus
+ * the same tries rule the desk uses for an unanswered attempt.
+ *
+ * Once per call: the event carries the call's id under a unique
+ * (voiceCallId, type) key, so when two callbacks finish the same call at once
+ * the second insert fails and its whole transaction (the tries update too)
+ * rolls back.
+ *
+ * A call whose result never arrived (the sweep's give-up: status 'unknown',
+ * no outcome) is not guessed at: the trail says "Call result unknown" and the
+ * lead's tries, next attempt and status stay as they were, for a rep to set.
+ */
+export const CALL_RESULT_UNKNOWN = 'Call result unknown'
+
+export async function recordCarrierCallFor(
+  organizationId: string,
+  leadId: string,
+  voiceCall: Pick<VoiceCall, 'id' | 'outcome' | 'status' | 'talkSeconds' | 'endedAt' | 'userId'>,
+  at = new Date(),
+): Promise<void> {
+  const marker = `"voiceCallId":"${voiceCall.id}"`
+  const already = await db.callCenterEvent.findFirst({
+    where: { leadId, type: 'CALL', OR: [{ voiceCallId: voiceCall.id }, { body: { contains: marker } }] },
+    select: { id: true },
+  })
+  if (already) return
+  const lead = await db.callCenterLead.findFirst({
+    where: { id: leadId, organizationId },
+    select: { tries: true, status: true, doNotCallAt: true },
+  })
+  if (!lead) return
+  const event = (detail: string) =>
+    db.callCenterEvent.create({
+      data: {
+        leadId,
+        type: 'CALL',
+        voiceCallId: voiceCall.id,
+        createdAt: voiceCall.endedAt ?? at,
+        body: JSON.stringify({ label: 'Call', detail, voiceCallId: voiceCall.id, userId: voiceCall.userId ?? undefined }),
+      },
+    })
+  const unknown = !voiceCall.outcome || (voiceCall.status === 'unknown' && voiceCall.outcome !== 'CONNECTED')
+  if (unknown) {
+    try {
+      await event(CALL_RESULT_UNKNOWN)
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err
+    }
+    return
+  }
+  const talk = Math.max(0, voiceCall.talkSeconds ?? 0)
+  const clock = `${Math.floor(talk / 60)}:${String(talk % 60).padStart(2, '0')}`
+  const detail =
+    voiceCall.outcome === 'CONNECTED'
+      ? `Connected · ${clock}`
+      : voiceCall.outcome === 'BUSY'
+        ? 'Busy'
+        : voiceCall.outcome === 'FAILED'
+          ? 'The call failed'
+          : 'No answer'
+  const answered = voiceCall.outcome === 'CONNECTED'
+  const tries = answered ? lead.tries : lead.tries + 1
+  const nextAttemptAt = answered ? null : nextRetryAt(tries, (voiceCall.endedAt ?? at).toISOString())
+  try {
+    await db.$transaction([
+      event(detail),
+      db.callCenterLead.update({
+        where: { id: leadId },
+        data: {
+          tries,
+          nextAttemptAt: nextAttemptAt ? new Date(nextAttemptAt) : null,
+          ...(answered || lead.status === 'BOOKED' ? {} : { status: 'MISSED' as const }),
+        },
+      }),
+    ])
+  } catch (err) {
+    // Another callback already recorded this call: nothing more to write.
+    if (!isUniqueViolation(err)) throw err
+  }
 }
 
 export async function recordCallCenterTextFor(

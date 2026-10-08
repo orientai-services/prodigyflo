@@ -261,13 +261,15 @@ describe('what a caller hears', () => {
     expect(xml).toContain('timeout="20"')
   })
 
-  it('rings a team in the order they were chosen', () => {
+  it('rings a team in turn: only the first teammate is in the first answer', () => {
     const xml = voiceAnswerTwiml({
       ...base,
       routing: 'TEAM',
       teamNumbers: ['+17025550111', '+17025550222'],
     })
-    expect(xml.indexOf('+17025550111')).toBeLessThan(xml.indexOf('+17025550222'))
+    expect(xml).toContain('<Number>+17025550111</Number>')
+    expect(xml).not.toContain('+17025550222')
+    expect(xml.match(/<Number/g)).toHaveLength(1)
   })
 
   it('takes a voicemail when that is the whole plan', () => {

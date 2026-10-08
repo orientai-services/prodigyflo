@@ -188,6 +188,36 @@ export async function releaseNumberAction(phoneNumberId: string): Promise<Result
   return res
 }
 
+/**
+ * Whether a line rings signed-in browsers before its own routing (plan §2.4,
+ * §2.5). Stored on the row as an explicit true/false; null (never set) keeps
+ * the default, which leaves voicemail-only lines exactly as they were.
+ * Changing it can make a line able (or unable) to take callbacks, so it is
+ * audited like any other call-handling change.
+ */
+export async function setRingBrowsersAction(phoneNumberId: string, on: boolean): Promise<Result> {
+  const user = await requireManage()
+  if (!user) return FORBIDDEN
+  const number = await db.phoneNumber.findFirst({
+    where: { id: phoneNumberId, organizationId: user.organizationId },
+    select: { id: true, e164: true, status: true, ringBrowsers: true },
+  })
+  if (!number) return { ok: false, code: 'NOT_FOUND', error: 'That number is not on this account.' }
+  if (number.status !== 'ACTIVE') return { ok: false, code: 'NOT_ACTIVE', error: 'Only an active line can ring browsers.' }
+
+  await db.phoneNumber.update({ where: { id: number.id }, data: { ringBrowsers: on } })
+  await recordAudit(user, {
+    action: 'telephony.number_updated',
+    entityType: 'PhoneNumber',
+    entityId: number.id,
+    summary: `${on ? 'Turned on' : 'Turned off'} browser ringing for the line ending ${number.e164.slice(-4)}`,
+    before: { ringBrowsers: number.ringBrowsers },
+    after: { ringBrowsers: on },
+  })
+  revalidate()
+  return { ok: true }
+}
+
 // ── Funding ──────────────────────────────────────────────────────────────────
 
 /**

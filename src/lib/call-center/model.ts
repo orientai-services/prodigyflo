@@ -59,8 +59,11 @@ export type TrailEvent = {
   at: string
   label: string
   detail: string
+  /** A real recording (voicemail or recorded call), played through /api/voice/recordings/<id>. */
+  recording?: { src: string; seconds: number }
 }
 
+/** Seed data only. Real calls carry TrailEvent.recording instead. */
 export type DummyRecording = {
   seconds: number
   label: string
@@ -92,6 +95,8 @@ export type CallLead = {
   dnc: boolean
   /** IANA zone for this lead's quiet hours. */
   timeZone: string
+  /** The newest unhandled missed call from this lead (VoiceCall id), for "Call back" / ?missed=. */
+  missedCallId?: string
 }
 
 export const ZONE = 'America/Los_Angeles'
