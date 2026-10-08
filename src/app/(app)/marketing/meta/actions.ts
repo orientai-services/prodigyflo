@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requirePermission } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
-import { getMetaProviderFor, ingestMetaLead } from '@/lib/meta'
+import { getMetaAdsWriteProviderFor, getMetaProviderFor, ingestMetaLead } from '@/lib/meta'
 import { igniteLead } from '@/lib/meta/ignition'
 import { parseConsoleCommand } from '@/lib/meta/console'
 import {
@@ -34,7 +34,8 @@ export async function createCampaignAction(_prev: MetaActionState, formData: For
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   try {
-    const provider = await getMetaProviderFor(user.organizationId)
+    // Writes use the ads credentials, never the lead-intake ones.
+    const provider = await getMetaAdsWriteProviderFor(user.organizationId)
     const c = await provider.createCampaign(user.organizationId, parsed.data)
     await recordAudit(user, {
       action: 'meta.campaign_created',

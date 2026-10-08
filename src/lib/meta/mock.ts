@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { spendCapToCents } from './money'
+import { mockAdAccountId } from './ads/allowlist'
 import type {
   MetaAccountInfo, MetaAdAccountInput, MetaAdSet, MetaAdsProvider, MetaCampaign,
   MetaCampaignInput, MetaDailyStat, MetaLead,
@@ -130,6 +131,9 @@ async function ensureAdSets(campaign: { id: string; organizationId: string; exte
           name: AUDIENCES[(r + i * 7) % AUDIENCES.length],
           status: 'active',
           dailyBudget: per,
+          // Mock rows always carry the workspace's mock account id, so they
+          // show only where mock mode is allowed (src/lib/meta/ads/where.ts).
+          adAccountId: mockAdAccountId(campaign.organizationId),
         },
       })
     }
@@ -190,6 +194,7 @@ export class MockMetaAdsProvider implements MetaAdsProvider {
         startedAt: new Date(),
         budget: input.dailyBudget,
         utmCampaign: input.objective.toLowerCase(),
+        adAccountId: mockAdAccountId(organizationId),
       },
     })
     await backfill(c)
@@ -291,12 +296,13 @@ export class MockMetaAdsProvider implements MetaAdsProvider {
         phone_number: `+1702555${String(1000 + (r % 9000))}`,
       },
       attribution: {
+        // Ids only, like a real lead read (names are never requested from Graph).
         adId: `mock_ad_${r % 97}`,
-        adName: 'Mock ad',
+        adName: null,
         adsetId: `mock_as_${r % 89}`,
-        adsetName: 'Mock ad set',
+        adsetName: null,
         campaignId: `mock_c_${r % 83}`,
-        campaignName: 'Mock campaign',
+        campaignName: null,
         formId: `mock_form_${r % 7}`,
         platform: r % 2 ? 'ig' : 'fb',
         isOrganic: false,

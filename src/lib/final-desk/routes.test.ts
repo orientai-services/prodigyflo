@@ -15,6 +15,15 @@ it('keeps final interface within its visible surfaces and two roles',()=>{
  expect(staffRouteAllowed('ADMIN','/board')).toBe(false)
  expect(staffRouteAllowed('CLOSER','/api/documents/doc-1/file')).toBe(true)
 })
+it('final desk lets Super Admin open the Meta Ads page; closers stay out',()=>{
+ vi.stubEnv('PRODIGYFLO_FINAL_DESK','true')
+ expect(staffRouteAllowed('SUPER_ADMIN','/marketing/meta')).toBe(true)
+ expect(staffRouteAllowed('SUPER_ADMIN','/marketing/meta/anything')).toBe(true)
+ expect(staffRouteAllowed('SUPER_ADMIN','/marketing/metadata')).toBe(false)
+ expect(staffRouteAllowed('SUPER_ADMIN','/marketing')).toBe(false)
+ expect(staffRouteAllowed('CLOSER','/marketing/meta')).toBe(false)
+ expect(staffRouteAllowed('ADMIN','/marketing/meta')).toBe(false)
+})
 it('turning off the flag restores the legacy admin route boundary',()=>{
  vi.stubEnv('PRODIGYFLO_FINAL_DESK','false')
  expect(staffRouteAllowed('SUPER_ADMIN','/settings/phone-numbers')).toBe(true)

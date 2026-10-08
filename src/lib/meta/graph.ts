@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHmac } from 'node:crypto'
 import { db } from '@/lib/db'
 import { centsToUsd, spendCapToCents, usdToCents } from './money'
 import { metaCredentials } from './provider'
@@ -8,8 +9,16 @@ import type {
   MetaCampaignInput, MetaDailyStat, MetaLead,
 } from './provider'
 import type { MetaCredentials } from './provider'
+import { assertAllowedAdAccount } from './ads/allowlist'
+import { graphBase } from './ads/graph-client'
 
-const GRAPH = 'https://graph.facebook.com/v21.0'
+// Version from META_GRAPH_VERSION (default v25.0). The request shape is unchanged.
+const GRAPH = graphBase()
+
+async function guardWrite(organizationId: string, externalId: string): Promise<void> {
+  const { assertWritableObject } = await import('./ads/sync')
+  await assertWritableObject(organizationId, externalId)
+}
 
 /** account_status codes from GET /act_X — anything unknown renders as the raw code. */
 const ACCOUNT_STATUS: Record<number, string> = {
@@ -18,6 +27,26 @@ const ACCOUNT_STATUS: Record<number, string> = {
 }
 
 type GraphError = { message?: string; code?: number; error_subcode?: number }
+
+/** Plain error for a failed legacy Graph call. */
+function graphFailure(res: Response, error: GraphError | undefined): Error {
+  const err = error ?? {}
+  // Codes 10/200/294 (+ HTTP 403) are Meta's permission family. The usual
+  // culprit: a Page access token on an ads_management call. Say so plainly
+  // instead of parroting an opaque OAuth message.
+  const permissionProblem =
+    res.status === 403 || err.code === 10 || err.code === 200 || err.code === 294 ||
+    /permission|ads_management/i.test(err.message ?? '')
+  if (permissionProblem) {
+    return new Error(
+      `Meta refused this call${err.message ? ` (${err.message})` : ''}. ` +
+      'Page access tokens usually cannot manage ads — use a System User token with the ' +
+      'ads_management permission (META_SYSTEM_USER_TOKEN) for campaign, ad set, budget, ' +
+      'and account operations.',
+    )
+  }
+  return new Error(`Meta API: ${err.message ?? res.statusText}`)
+}
 
 /**
  * Real adapter over the Marketing API. Active only when credentials exist;
@@ -31,7 +60,14 @@ type GraphError = { message?: string; code?: number; error_subcode?: number }
 export class GraphMetaAdsProvider implements MetaAdsProvider {
   readonly kind = 'graph' as const
 
-  constructor(private readonly creds: MetaCredentials = metaCredentials()) {}
+  /**
+   * `organizationId` binds ad-account calls to the workspace allowlist; without
+   * it every /act_X call is refused. The lead path (fetchLead) doesn't need it.
+   */
+  constructor(
+    private readonly creds: MetaCredentials = metaCredentials(),
+    private readonly organizationId?: string,
+  ) {}
 
   /**
    * Ads-management calls prefer the System User token: Page tokens are the
@@ -44,44 +80,48 @@ export class GraphMetaAdsProvider implements MetaAdsProvider {
   private act(): string {
     const { adAccountId } = this.creds
     if (!adAccountId) throw new Error('META_AD_ACCOUNT_ID is not set.')
-    return adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`
+    // Only an allowlisted account of the bound workspace; anything else throws.
+    return assertAllowedAdAccount(adAccountId, this.organizationId ?? '')
   }
 
-  /** GET when `form` is absent, POST x-www-form-urlencoded when present. */
+  /**
+   * GET when `form` is absent (token in the query, as the lead path has always
+   * sent it). POST x-www-form-urlencoded when present: writes carry the token
+   * in the Authorization header only, never in a URL or the body, plus
+   * appsecret_proof when the app secret is set, so apps with "Require App
+   * Secret" accept them. If Meta calls the proof invalid (token and secret from
+   * different apps), the write is retried once without it.
+   */
   private async graph<T>(
     path: string,
     params: Record<string, string> = {},
     form?: Record<string, string>,
     token = this.adsToken(),
   ): Promise<T> {
+    if (form) return this.write<T>(path, form, token)
     const qs = new URLSearchParams({ ...params, access_token: token })
-    const init: RequestInit | undefined = form
-      ? {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ ...form, access_token: token }),
-        }
-      : undefined
-    const res = await fetch(`${GRAPH}${path}?${qs}`, init)
+    const res = await fetch(`${GRAPH}${path}?${qs}`)
     const body = (await res.json().catch(() => ({}))) as T & { error?: GraphError }
-    if (!res.ok || body.error) {
-      const err = body.error ?? {}
-      // Codes 10/200/294 (+ HTTP 403) are Meta's permission family. The usual
-      // culprit: a Page access token on an ads_management call. Say so plainly
-      // instead of parroting an opaque OAuth message.
-      const permissionProblem =
-        res.status === 403 || err.code === 10 || err.code === 200 || err.code === 294 ||
-        /permission|ads_management/i.test(err.message ?? '')
-      if (permissionProblem) {
-        throw new Error(
-          `Meta refused this call${err.message ? ` (${err.message})` : ''}. ` +
-          'Page access tokens usually cannot manage ads — use a System User token with the ' +
-          'ads_management permission (META_SYSTEM_USER_TOKEN) for campaign, ad set, budget, ' +
-          'and account operations.',
-        )
-      }
-      throw new Error(`Meta API: ${err.message ?? res.statusText}`)
+    if (!res.ok || body.error) throw graphFailure(res, body.error)
+    return body
+  }
+
+  private async write<T>(path: string, form: Record<string, string>, token: string): Promise<T> {
+    const proof = this.creds.appSecret ? createHmac('sha256', this.creds.appSecret).update(token).digest('hex') : null
+    const send = async (p: string | null) => {
+      const res = await fetch(`${GRAPH}${path}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(p ? { ...form, appsecret_proof: p } : form),
+      })
+      const body = (await res.json().catch(() => ({}))) as T & { error?: GraphError }
+      return { res, body }
     }
+    let { res, body } = await send(proof)
+    if (proof && body.error?.code === 100 && /invalid appsecret_proof/i.test(body.error.message ?? '')) {
+      ;({ res, body } = await send(null))
+    }
+    if (!res.ok || body.error) throw graphFailure(res, body.error)
     return body
   }
 
@@ -124,7 +164,9 @@ export class GraphMetaAdsProvider implements MetaAdsProvider {
   }
 
   async createCampaign(organizationId: string, input: MetaCampaignInput): Promise<MetaCampaign> {
-    const created = await this.graph<{ id: string }>(`/${this.act()}/campaigns`, {}, {
+    if (process.env.META_ADS_WRITES_ENABLED !== 'true') throw new Error('Changes are made in Meta Ads Manager.')
+    const account = this.act()
+    const created = await this.graph<{ id: string }>(`/${account}/campaigns`, {}, {
       name: input.name,
       objective: `OUTCOME_${input.objective}`,
       status: input.status,
@@ -134,6 +176,8 @@ export class GraphMetaAdsProvider implements MetaAdsProvider {
     const local = await db.campaign.create({
       data: {
         organizationId, name: input.name, channel: 'meta', externalId: created.id,
+        // Carries its approved account, so it shows (and stays writable) before the next sync.
+        adAccountId: account,
         status: input.status === 'ACTIVE' ? 'active' : 'paused',
         startedAt: new Date(), budget: input.dailyBudget, utmCampaign: input.objective.toLowerCase(),
       },
@@ -153,18 +197,21 @@ export class GraphMetaAdsProvider implements MetaAdsProvider {
 
   async setCampaignStatus(organizationId: string, campaignId: string, status: 'ACTIVE' | 'PAUSED') {
     const local = await this.localCampaign(organizationId, campaignId)
+    await guardWrite(organizationId, local.externalId)
     await this.graph(`/${local.externalId}`, {}, { status })
     await db.campaign.update({ where: { id: local.id }, data: { status: status === 'ACTIVE' ? 'active' : 'paused' } })
   }
 
   async updateDailyBudget(organizationId: string, campaignId: string, dailyBudget: number) {
     const local = await this.localCampaign(organizationId, campaignId)
+    await guardWrite(organizationId, local.externalId)
     await this.graph(`/${local.externalId}`, {}, { daily_budget: String(usdToCents(dailyBudget)) })
     await db.campaign.update({ where: { id: local.id }, data: { budget: dailyBudget } })
   }
 
   async setCampaignSpendCap(organizationId: string, campaignId: string, spendCapUsd: number) {
     const local = await this.localCampaign(organizationId, campaignId)
+    await guardWrite(organizationId, local.externalId)
     // spend_cap is LIFETIME cents with a $100 floor — a different knob from daily_budget.
     await this.graph(`/${local.externalId}`, {}, { spend_cap: String(spendCapToCents(spendCapUsd)) })
     await db.campaign.update({ where: { id: local.id }, data: { spendCap: spendCapUsd } })
@@ -235,36 +282,23 @@ export class GraphMetaAdsProvider implements MetaAdsProvider {
 
   async setAdSetStatus(organizationId: string, adSetId: string, status: 'ACTIVE' | 'PAUSED') {
     const local = await this.localAdSet(organizationId, adSetId)
+    await guardWrite(organizationId, local.externalId)
     await this.graph(`/${local.externalId}`, {}, { status })
     await db.adSet.update({ where: { id: local.id }, data: { status: status === 'ACTIVE' ? 'active' : 'paused' } })
   }
 
   async updateAdSetBudget(organizationId: string, adSetId: string, dailyBudget: number) {
     const local = await this.localAdSet(organizationId, adSetId)
+    await guardWrite(organizationId, local.externalId)
     await this.graph(`/${local.externalId}`, {}, { daily_budget: String(usdToCents(dailyBudget)) })
     await db.adSet.update({ where: { id: local.id }, data: { dailyBudget } })
   }
 
-  async createAdAccount(_organizationId: string, input: MetaAdAccountInput) {
-    const { businessId, systemUserToken } = this.creds
-    if (!businessId || !systemUserToken) {
-      throw new Error(
-        'Ad account creation needs META_BUSINESS_ID and META_SYSTEM_USER_TOKEN (a System User ' +
-        'token with business_management + ads_management). Set both, or stay in mock mode.',
-      )
-    }
-    if (!/^\d+$/.test(input.timezone)) {
-      throw new Error("Meta wants its numeric timezone_id here (see the Marketing API's timezone-ids table).")
-    }
-    const created = await this.graph<{ id: string }>(`/${businessId}/adaccount`, {}, {
-      name: input.name,
-      currency: input.currency,
-      timezone_id: input.timezone,
-      end_advertiser: businessId,
-      media_agency: 'NONE',
-      partner: 'NONE',
-    }, systemUserToken)
-    return { id: created.id, mode: 'live' as const }
+  async createAdAccount(organizationId: string, input: MetaAdAccountInput): Promise<{ id: string; mode: 'live' }> {
+    void organizationId
+    void input
+    // Creating ad accounts is never done from ProdigyFlo (docs/META_ADS_SCS.md §2.2 rule 10).
+    throw new Error('Creating ad accounts is turned off in ProdigyFlo.')
   }
 
   async accountInfo(organizationId: string): Promise<MetaAccountInfo> {

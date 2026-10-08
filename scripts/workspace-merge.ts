@@ -11,7 +11,10 @@ const ORG_TABLES = [
   'IntakeSource', 'IntakeSubmission', 'Invite', 'LeadSource', 'MessageTemplate', 'Notification',
   'NurtureTouch', 'PhoneNumber', 'Pipeline', 'PropertyRecordsJob', 'Region', 'Role', 'SavedFilter', 'ScheduledMessage',
   'Sequence', 'Survey', 'Team', 'TelephonyWallet', 'User', 'WalletEntry',
+  // Meta Ads reporting (docs/META_ADS_SCS.md): the merge refuses while the source holds any of these.
+  'MetaAccountSnapshot', 'MetaAd', 'MetaAdAccount', 'MetaBillingEvent', 'MetaInsightDaily', 'MetaInsightSummary', 'MetaLeadTouch', 'MetaSpendCycle',
 ].sort()
+const META_ADS_TABLES = ['MetaAccountSnapshot', 'MetaAd', 'MetaAdAccount', 'MetaBillingEvent', 'MetaInsightDaily', 'MetaInsightSummary', 'MetaLeadTouch', 'MetaSpendCycle']
 const q = (name: string) => '"' + name.replaceAll('"', '""') + '"'
 export type MergeOptions = { sourceId: string; targetId: string; commit?: boolean; runId?: string }
 export type MergeReport = { runId: string; committed: boolean; clients: number; documents: number; historicalUsers: number; archivedRows: number; tablesChecked: number }
@@ -36,6 +39,7 @@ export async function mergeWorkspace(pg: PoolClient, options: MergeOptions): Pro
     if ((await pg.query(`SELECT id FROM "Organization" WHERE "parentOrganizationId"=ANY($1::text[])`, [both])).rowCount) throw new Error('Child organizations need an explicit migration decision.')
     if ((await pg.query(`SELECT id FROM "PhoneNumber" WHERE "organizationId"=$1 AND status <> 'RELEASED'`, [sourceId])).rowCount) throw new Error('Legacy phone numbers require a provider retirement/repointing plan first.')
     if ((await pg.query(`SELECT id FROM "TelephonyWallet" WHERE "organizationId"=$1 AND ("balanceCents" <> 0 OR "autoReloadEnabled")`, [sourceId])).rowCount) throw new Error('Reconcile the legacy wallet before consolidation; balances are never silently combined.')
+    for (const table of META_ADS_TABLES) if ((await pg.query(`SELECT 1 FROM ${q(table)} WHERE "organizationId"=$1 LIMIT 1`, [sourceId])).rowCount) throw new Error('Meta Ads reporting data exists in the source workspace; the ad account binding needs an explicit decision first.')
     for (const field of ['email', 'emailAlias']) {
       const collision = await pg.query(`SELECT 1 FROM "User" a JOIN "User" b ON lower(a.${q(field)})=lower(b.${q(field)}) WHERE a."organizationId"=$1 AND b."organizationId"=$2 LIMIT 1`, both)
       if (collision.rowCount) throw new Error(`User ${field} collision requires a reviewed identity mapping.`)

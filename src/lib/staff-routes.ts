@@ -6,6 +6,7 @@ export function staffRouteAllowed(role: RoleKey, path: string): boolean {
     if (!['SUPER_ADMIN', 'CLOSER'].includes(role)) return false
     if (['/', '/board', '/call-center', '/clients', '/queue', '/documents', '/submissions', '/forbidden'].includes(path)) return true
     if (/^\/clients\/[^/]+(?:\/questionnaire)?$/.test(path)) return true
+    if (role === 'SUPER_ADMIN' && /^\/marketing\/meta(\/|$)/.test(path)) return true
     return role === 'SUPER_ADMIN' && ['/engine', '/settings/users'].includes(path)
   }
   if (role === 'SUPER_ADMIN') return !/^\/agency(\/|$)/.test(path) && (process.env.PRODIGYFLO_FINAL_DESK === 'true' || !/^\/engine(\/|$)/.test(path))

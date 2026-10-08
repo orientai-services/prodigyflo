@@ -380,6 +380,16 @@ model Organization {
   callCenterLeads        CallCenterLead[]
   callCenterSuppressions CallCenterSuppression[]
 
+  // Meta Ads reporting (one bound workspace; see docs/META_ADS_SCS.md).
+  metaAdAccounts       MetaAdAccount[]
+  metaAds              MetaAd[]
+  metaInsightDaily     MetaInsightDaily[]
+  metaInsightSummaries MetaInsightSummary[]
+  metaAccountSnapshots MetaAccountSnapshot[]
+  metaBillingEvents    MetaBillingEvent[]
+  metaSpendCycles      MetaSpendCycle[]
+  metaLeadTouches      MetaLeadTouch[]
+
   @@index([parentOrganizationId])
 }
 
@@ -1367,6 +1377,13 @@ model Campaign {
   impressions    Int       @default(0)
   clicks         Int       @default(0)
   utmCampaign    String?
+  /// Meta ad account this campaign belongs to (normalized act_ id). NULL = legacy
+  /// or unclassified, hidden from every Meta surface (see src/lib/meta/ads/where.ts).
+  adAccountId     String?
+  effectiveStatus String?
+  lifetimeBudget  Decimal?  @db.Decimal(12, 2)
+  objective       String?
+  metaCreatedAt   DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -1378,6 +1395,7 @@ model Campaign {
   adSets            AdSet[]
 
   @@index([organizationId])
+  @@index([organizationId, adAccountId])
 }
 
 /// One row per campaign per day — the spend/performance series behind the
@@ -2310,6 +2328,11 @@ model AdSet {
   status         String   @default("active")
   dailyBudget    Decimal? @db.Decimal(12, 2)
   spend          Decimal  @default(0) @db.Decimal(12, 2)
+  /// Meta ad account (normalized act_ id). NULL = legacy, hidden.
+  adAccountId      String?
+  effectiveStatus  String?
+  lifetimeBudget   Decimal? @db.Decimal(12, 2)
+  optimizationGoal String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -2318,6 +2341,7 @@ model AdSet {
 
   @@unique([organizationId, externalId])
   @@index([campaignId])
+  @@index([organizationId, adAccountId])
 }
 
 /// One execution of a code-defined DAG (e.g. 'insight_scan'). Rows are
@@ -2711,4 +2735,278 @@ model CallCenterSuppression {
 
   @@unique([organizationId, numberHash])
   @@index([organizationId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Meta Ads reporting: one approved ad account, bound to one workspace.
+// Contract: docs/META_ADS_SCS.md. Pages read these tables only; the cron
+// route /api/jobs/meta-sync is the only writer from Graph.
+// ─────────────────────────────────────────────────────────────
+
+/// The approved ad account's cached state. adAccountId is unique on its own, so
+/// one ad account can never be stored under two workspaces. Ads health lives
+/// here, never on Connector.status (that drives lead intake).
+model MetaAdAccount {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  /// Normalized `act_<digits>`, allowlisted.
+  adAccountId           String    @unique
+  name                  String?
+  currency              String    @default("USD")
+  timezoneName          String?
+  accountStatus         Int?
+  disableReason         Int?
+  balanceCents          BigInt?
+  amountSpentCents      BigInt?
+  spendCapCents         BigInt?
+  /// Meta's already-masked funding display string.
+  fundingDisplay        String?
+  fundingType           Int?
+  /// Payment detector state (src/lib/meta/ads/billing.ts).
+  pendingCharge         Json?
+  /// Optimistic lock for pendingCharge.
+  billingVersion        Int       @default(0)
+  lastReadingAt         DateTime?
+  cycleDays             Int       @default(15)
+  syncLeaseUntil        DateTime?
+  syncLeaseOwner        String?
+  lastManualRefreshAt   DateTime?
+  lastSnapshotAt        DateTime?
+  lastFullSyncAt        DateTime?
+  lastConnectionCheckAt DateTime?
+  backoffUntil          DateTime?
+  lastUsagePct          Int?
+  lastTruncated         Boolean   @default(false)
+  lastErrorKind         String?
+  /// Plain-English copy only; never Meta's raw message.
+  lastError             String?
+  lastErrorAt           DateTime?
+  tokenValid            Boolean?
+  tokenExpiresAt        DateTime?
+  tokenAppId            String?
+  tokenType             String?
+  tokenScopes           String[]  @default([])
+  /// True when the token can reach any other ad account. Never which ones.
+  tokenSeesOthers       Boolean   @default(false)
+  /// ads_read is granted on named accounts only, all of them allowlisted.
+  tokenTargetsOk        Boolean?
+  /// The bound workspace equals the workspace that receives Meta leads.
+  leadOrgMatches        Boolean?
+  outsideLeadCount      Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+/// One Meta ad. campaignId / adSetId are LOCAL Campaign.id / AdSet.id (no FK).
+model MetaAd {
+  id              String    @id @default(cuid())
+  organizationId  String
+  adAccountId     String
+  campaignId      String
+  adSetId         String?
+  externalId      String
+  name            String
+  status          String
+  effectiveStatus String?
+  /// Not seen in the last full sync. Never hard-deleted.
+  removed         Boolean   @default(false)
+  formId          String?
+  thumbnailUrl    String?
+  headline        String?
+  body            String?
+  cta             String?
+  linkUrl         String?
+  metaCreatedAt   DateTime?
+  syncedAt        DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, adAccountId])
+  @@index([campaignId])
+  @@index([adSetId])
+}
+
+/// Which account an object id belongs to, from GET /{id}?fields=account_id.
+/// Never stores a foreign account id: allowed means that id; anything else is null + outside.
+model MetaObjectAccount {
+  objectId    String   @id
+  adAccountId String?
+  outside     Boolean
+  /// allowed | other_account | no_access | not_found
+  reason      String
+  checkedAt   DateTime @default(now())
+}
+
+enum MetaInsightLevel {
+  ACCOUNT
+  CAMPAIGN
+  ADSET
+  AD
+}
+
+enum MetaInsightWindow {
+  TODAY
+  LAST_7D
+  LAST_30D
+  THIS_MONTH
+  MAXIMUM
+}
+
+/// Daily insight rows in the ad account's timezone; leads by conversion time.
+model MetaInsightDaily {
+  id               String           @id @default(cuid())
+  organizationId   String
+  adAccountId      String
+  level            MetaInsightLevel
+  objectId         String
+  date             DateTime         @db.Date
+  spend            Decimal          @default(0) @db.Decimal(12, 2)
+  impressions      Int              @default(0)
+  reach            Int              @default(0)
+  clicks           Int              @default(0)
+  linkClicks       Int              @default(0)
+  leads            Int              @default(0)
+  landingPageViews Int              @default(0)
+  updatedAt        DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, level, objectId, date])
+  @@index([organizationId, adAccountId, level, date])
+}
+
+/// Window totals straight from Meta (reach and frequency don't sum across days).
+model MetaInsightSummary {
+  id               String            @id @default(cuid())
+  organizationId   String
+  adAccountId      String
+  level            MetaInsightLevel
+  objectId         String
+  window           MetaInsightWindow
+  spend            Decimal           @default(0) @db.Decimal(12, 2)
+  impressions      Int               @default(0)
+  reach            Int               @default(0)
+  clicks           Int               @default(0)
+  linkClicks       Int               @default(0)
+  leads            Int               @default(0)
+  landingPageViews Int               @default(0)
+  frequency        Decimal?          @db.Decimal(8, 3)
+  dateStart        DateTime?         @db.Date
+  dateStop         DateTime?         @db.Date
+  /// MAXIMUM fell back to a shorter range or to campaign level.
+  partial          Boolean           @default(false)
+  updatedAt        DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, level, objectId, window])
+  @@index([organizationId, adAccountId, window])
+}
+
+model MetaAccountSnapshot {
+  id               String   @id @default(cuid())
+  organizationId   String
+  adAccountId      String
+  takenAt          DateTime @default(now())
+  balanceCents     BigInt?
+  amountSpentCents BigInt?
+  spendCapCents    BigInt?
+  accountStatus    Int?
+  fundingDisplay   String?
+  fundingType      Int?
+  /// amount_spent went backwards (stale replica): ignored by the detector.
+  stale            Boolean  @default(false)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, adAccountId, takenAt])
+}
+
+enum MetaBillingKind {
+  PAYMENT
+  STATUS_CHANGE
+  CARD_CHANGE
+}
+
+model MetaBillingEvent {
+  id             String          @id @default(cuid())
+  organizationId String
+  adAccountId    String
+  kind           MetaBillingKind
+  occurredAt     DateTime
+  /// The snapshot that started it; the idempotency key.
+  fromSnapshotId String
+  amountCents    BigInt?
+  approximate    Boolean         @default(true)
+  before         String?
+  after          String?
+  createdAt      DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([adAccountId, kind, fromSnapshotId])
+  @@index([organizationId, adAccountId, occurredAt])
+}
+
+model MetaSpendCycle {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  adAccountId           String
+  number                Int
+  lengthDays            Int
+  startedAt             DateTime
+  endedAt               DateTime?
+  startedById           String?
+  startDayExcludedSpend Decimal   @default(0) @db.Decimal(12, 2)
+  /// When startDayExcludedSpend was last worked out from Meta's hourly
+  /// breakdown. Null after the 48 h retry window means it never was, and the
+  /// cycle is marked approximate.
+  startDayExcludedAt    DateTime?
+  spendApproximate      Boolean   @default(false)
+  closedSpend           Decimal?  @db.Decimal(12, 2)
+  closedLeads           Int?
+  /// endedAt + 3 days; spend and leads are recomputed until then.
+  finalAfter            DateTime?
+  createdAt             DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([adAccountId, number])
+  @@index([organizationId, adAccountId, endedAt])
+}
+
+/// Derived index over stored leadAttribution JSON. Rebuildable; never read from Graph.
+/// Ids are null when the ad is outside the approved account.
+model MetaLeadTouch {
+  id               String    @id @default(cuid())
+  organizationId   String
+  leadgenId        String
+  adAccountId      String?
+  adId             String?
+  adSetId          String?
+  campaignId       String?
+  formId           String?
+  platform         String?
+  isOrganic        Boolean?
+  /// matched | outside | unmatched | pending
+  status           String
+  clientId         String?
+  callCenterLeadId String?
+  leadCreatedAt    DateTime?
+  checkedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, leadgenId])
+  @@index([organizationId, adId])
+  @@index([organizationId, status])
 }

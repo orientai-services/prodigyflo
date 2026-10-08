@@ -26,8 +26,8 @@
 import 'dotenv/config'
 import { createHash } from 'node:crypto'
 import {
-  SCS_ENGLISH_PAGE_ID, checkSubscription, checkToken, graphGet, leadgenWebhookBody,
-  resolvePageToken, signBody, subscribePage,
+  SCS_ENGLISH_PAGE_ID, allowedAdAccounts, checkSubscription, checkToken, cliAdAccount, describeGranularTargets,
+  graphGet, leadgenWebhookBody, resolvePageToken, signBody, subscribePage,
 } from './meta-lib.mjs'
 
 const argv = process.argv.slice(2)
@@ -95,7 +95,8 @@ switch (cmd) {
     console.log(`  data access: ${t.dataAccessExpiresAt ?? '?'}`)
     console.log(`  scopes:      ${t.scopes.join(', ') || '(none)'}`)
     console.log(`  ${mark(t.hasLeadsRetrieval)} leads_retrieval`)
-    for (const g of t.granular) console.log(`  granular ${g.scope}: ${g.targets.join(', ') || 'all'}`)
+    // Ad scopes: approved account ids only, plus a count of any others.
+    for (const g of t.granular) console.log(`  granular ${g.scope}: ${describeGranularTargets(g, allowedAdAccounts())}`)
     break
   }
   case 'check-subscription': {
@@ -164,8 +165,9 @@ switch (cmd) {
   }
   case 'campaigns': {
     if (!configured || !creds.adAccountId) { console.error('Needs credentials plus META_AD_ACCOUNT_ID.'); process.exit(1) }
-    const act = creds.adAccountId.startsWith('act_') ? creds.adAccountId : `act_${creds.adAccountId}`
-    const res = await graph(`/${act}/campaigns`, { fields: 'id,name,objective,status,daily_budget', limit: '50' })
+    const acct = cliAdAccount()
+    if (!acct.ok) { console.error(acct.error); process.exit(1) }
+    const res = await graph(`/${acct.act}/campaigns`, { fields: 'id,name,objective,status,daily_budget', limit: '50' })
     for (const c of res.data) {
       console.log(`${c.status.padEnd(8)} ${c.name}  (${c.objective ?? '-'}, $${c.daily_budget ? Number(c.daily_budget) / 100 : '?'}/day)  ${c.id}`)
     }
@@ -173,8 +175,9 @@ switch (cmd) {
   }
   case 'spend': {
     if (!configured || !creds.adAccountId) { console.error('Needs credentials plus META_AD_ACCOUNT_ID.'); process.exit(1) }
-    const act = creds.adAccountId.startsWith('act_') ? creds.adAccountId : `act_${creds.adAccountId}`
-    const res = await graph(`/${act}/insights`, { date_preset: 'last_7d', time_increment: '1', fields: 'spend,impressions,clicks' })
+    const acct = cliAdAccount()
+    if (!acct.ok) { console.error(acct.error); process.exit(1) }
+    const res = await graph(`/${acct.act}/insights`, { date_preset: 'last_7d', time_increment: '1', fields: 'spend,impressions,clicks' })
     for (const r of res.data) console.log(`${r.date_start}  $${r.spend ?? 0}  ${r.impressions ?? 0} imp  ${r.clicks ?? 0} clicks`)
     break
   }

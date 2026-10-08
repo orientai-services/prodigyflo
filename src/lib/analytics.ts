@@ -1,6 +1,7 @@
 import 'server-only'
 import type { Prisma, StageKey } from '@prisma/client'
 import { db } from '@/lib/db'
+import { allowedMetaCampaignWhere } from '@/lib/meta/ads/where'
 import { clientScope, type SessionUser } from '@/lib/rbac'
 import { DEFAULT_STAGES } from '@/lib/pipeline'
 import { rate } from '@/lib/format'
@@ -309,7 +310,7 @@ export async function getLeaderboard(
 export async function getCampaignPerformance(user: SessionUser, f: AnalyticsFilters = {}) {
   const [campaigns, rows] = await Promise.all([
     db.campaign.findMany({
-      where: { organizationId: user.organizationId },
+      where: allowedMetaCampaignWhere(user.organizationId),
       include: { leadSource: { select: { name: true, channel: true } } },
     }),
     loadRows(user, f),

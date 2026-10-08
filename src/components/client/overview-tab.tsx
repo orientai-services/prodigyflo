@@ -6,7 +6,8 @@ import { getAIProvider } from '@/lib/ai'
 import { listAssistViews } from '@/lib/ai/assists'
 import { OverviewForm } from '@/app/(app)/clients/[clientId]/overview-form'
 import { AIPanel } from '@/app/(app)/clients/[clientId]/ai-panel'
-import { attributionRows } from '@/lib/meta/attribution'
+import { attributionRowsFor } from '@/lib/meta/ads/attribution-names'
+import { visibleCampaignName } from '@/lib/meta/ads/where'
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -40,9 +41,14 @@ export async function OverviewTab({ clientId }: { clientId: string }) {
       team: { select: { name: true } },
       region: { select: { name: true } },
       leadSource: { select: { id: true, name: true } },
-      campaign: { select: { name: true } },
+      campaign: { select: { name: true, channel: true, adAccountId: true } },
     },
   })
+
+  // Meta names come only from synced rows of the approved ad account (P0-A);
+  // a legacy link to any other Meta campaign shows no name.
+  const metaRows = await attributionRowsFor(user.organizationId, client.leadAttribution)
+  const campaignName = visibleCampaignName(user.organizationId, client.campaign)
 
   const canEdit = can(user, 'clients:update')
   const canReassign = can(user, 'clients:reassign')
@@ -144,11 +150,11 @@ export async function OverviewTab({ clientId }: { clientId: string }) {
 
         <Section title="Source & attribution">
           <Row label="Lead source" value={client.leadSource?.name ?? '—'} />
-          <Row label="Campaign" value={client.campaign?.name ?? '—'} />
+          <Row label="Campaign" value={campaignName ?? '—'} />
           <Row label="UTM source" value={client.utmSource ?? '—'} />
           <Row label="UTM medium" value={client.utmMedium ?? '—'} />
           <Row label="UTM campaign" value={client.utmCampaign ?? '—'} />
-          {attributionRows(client.leadAttribution).map((r) => (
+          {metaRows.map((r) => (
             <Row key={r.label} label={`Meta · ${r.label}`} value={r.value} />
           ))}
           {client.outOfArea && <Row label="Service area" value="Out of area (outside NV)" />}
