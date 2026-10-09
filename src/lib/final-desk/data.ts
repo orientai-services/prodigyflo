@@ -7,7 +7,7 @@ import { loadCaseFile } from '@/lib/daily-desk-case'
 import { loadDeskBoard } from '@/lib/daily-desk-data'
 import { classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { asRecord, str } from '@/lib/packet/schema'
-import { permitStatusNote } from '@/lib/property-records/contract'
+import { addressNotFoundNote, permitStatusNote } from '@/lib/property-records/contract'
 import { DOCUMENT_MODULES, mergeQuestionnaire, prefillQuestionnaire, prefillFromDocuments, applyQuestionnaireDispositions, profileCells } from './mapping'
 import { QUESTIONNAIRE_NAME, QUESTIONNAIRE_VERSION, answerCount } from './questions'
 import type { FinalClient, FinalDeskPayload, DeskView } from './types'
@@ -59,6 +59,8 @@ async function loadFinalClients(user: SessionUser): Promise<FinalClient[]> {
   })
 }
 
+const PUBLIC_RECORD_TILES = new Set<string>(['ucc_lien', 'home_deed', 'county_permit'])
+
 export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?: string, month?: string, query: ClientQuery = {}): Promise<FinalDeskPayload> {
   if ((view === 'engine' || view === 'users') && user.role !== 'SUPER_ADMIN') throw Error('Forbidden')
   const clients = await loadFinalClients(user)
@@ -73,9 +75,12 @@ export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?
     if (!file || !questionnaire) throw Error('Not found')
     const cells = profileCells(file)
     const permitNote = permitStatusNote(records?.result)
+    const notFound = addressNotFoundNote(records?.result)
     const docs = DOCUMENT_MODULES.map(([key, label]) => {
       const tile = { ...file.docs.find(d => d.key === key)!, key, label }
-      return key === 'county_permit' && tile.state === 'missing' && permitNote ? { ...tile, records: permitNote } : tile
+      if (tile.state !== 'missing') return tile
+      if (notFound && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: notFound }
+      return key === 'county_permit' && permitNote ? { ...tile, records: permitNote } : tile
     })
     payload.file = { ...file, ...cells, availableFiles: file.docs.flatMap(d=>d.files), docs, docsPresent: docs.filter(d => d.state !== 'missing').length }
     payload.questionnaire = questionnaire
