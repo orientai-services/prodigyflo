@@ -61,6 +61,21 @@ export function addressNotFoundNote(result:unknown):string|null {
   const tried=parcel?.address_tried||[a.line1,a.city,a.state,a.postal_code].filter(v=>typeof v==='string'&&v).join(', ')
   return `Address not found at county — check spelling${tried?` (tried: ${tried})`:''}`
 }
+/** Staff-facing line for a records job that has not completed: retrying, or stopped for a human. */
+export function recordsJobStatusNote(job:{status:string;error?:string|null}|null|undefined):string|null {
+  if(!job) return null
+  if(job.status==='PENDING'||job.status==='RUNNING') return 'County records lookup in progress'
+  if(job.status==='FAILED') return 'County records temporarily unavailable — retrying automatically'
+  if(job.status==='PAUSED') return `Records lookup needs human check${job.error?` — ${job.error.replace(/^Needs human check after repeated failures: /,'')}`:''}`
+  return null
+}
+/** Deed outcome that failed verification (e.g. a stamped/blank assessor image): never shown as a deed. */
+export function deedCheckNote(result:unknown):string|null {
+  const outcomes=(result as {outcomes?:unknown})?.outcomes
+  if(!Array.isArray(outcomes)) return null
+  const deed=outcomes.find((o:unknown)=>(o as {kind?:unknown})?.kind==='deed') as {status?:string;detail?:string}|undefined
+  return deed?.status==='failed'&&/needs human check/i.test(deed.detail??'')?deed.detail!:null
+}
 /** Stable filing identity. The same instrument or attachment keeps one key when the PDF bytes change. */
 export function filingIdentity(file:{category:string;filename:string;record_key?:string|null}) {
   const key=file.record_key?.trim()

@@ -29,3 +29,19 @@ describe('address not found at county', () => {
     expect(addressNotFoundNote(null)).toBeNull()
   })
 })
+
+import { deedCheckNote, recordsJobStatusNote } from './contract'
+describe('records job and deed notes on profile tiles', () => {
+  it('says retrying for a transient failure and needs human check when stopped', () => {
+    expect(recordsJobStatusNote({ status: 'FAILED', error: 'County records temporarily unavailable (503)' })).toBe('County records temporarily unavailable — retrying automatically')
+    expect(recordsJobStatusNote({ status: 'PAUSED', error: 'Needs human check after repeated failures: County records temporarily unavailable (503)' })).toBe('Records lookup needs human check — County records temporarily unavailable (503)')
+    expect(recordsJobStatusNote({ status: 'PENDING' })).toBe('County records lookup in progress')
+    expect(recordsJobStatusNote({ status: 'COMPLETED' })).toBeNull()
+    expect(recordsJobStatusNote(null)).toBeNull()
+  })
+  it('surfaces a deed that failed verification instead of a fake deed', () => {
+    const detail = 'Needs human check: assessor image for 20200305:02858 failed verification (page 1 is blank or overlay-only (ink 0.20%)); no deed filed'
+    expect(deedCheckNote({ outcomes: [{ kind: 'deed', status: 'failed', detail }] })).toBe(detail)
+    expect(deedCheckNote({ outcomes: [{ kind: 'deed', status: 'assessor_copy', detail: '20200305:02858' }] })).toBeNull()
+  })
+})

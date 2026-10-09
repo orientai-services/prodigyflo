@@ -6,7 +6,7 @@ vi.mock('@/lib/intake/synthetic',()=>({isSyntheticClient:vi.fn()}))
 import type {Prisma} from '@prisma/client'
 import {db} from '@/lib/db'
 import {addressVersion,normalizeAddress,type PropertyAddress} from './contract'
-import {queuePropertyRecords,runPropertyRecordsJobs} from './jobs'
+import {MAX_ATTEMPTS,queuePropertyRecords,retryDelayMs,runPropertyRecordsJobs} from './jobs'
 const A={line1:'4416 Clear Brook Pl',city:'Las Vegas',state:'NV',postal_code:'89103'},B={...A,line1:'4417 Clear Brook Pl'}
 type Job={id:string;clientId:string;addressVersion:string;status:string;attempts:number;result:unknown;importedFiles:Record<string,unknown>}
 type Doc={id:string;clientId:string;status:string;updatedAt:Date}
@@ -77,6 +77,7 @@ function runner(attempts=0,result:unknown=null){
       if(bump&&typeof bump==='object'&&typeof bump.increment==='number') job.attempts+=bump.increment
       if(typeof data.status==='string') job.status=data.status
       if('error' in data) job.error=data.error as string|null
+      if(data.nextAttemptAt instanceof Date) (job as unknown as {nextAttemptAt?:Date}).nextAttemptAt=data.nextAttemptAt
       return {count:1}
     }},
     clientAddress:{findFirst:async()=>live},
@@ -106,7 +107,7 @@ describe('property records job failures',()=>{
     expect(f.job.attempts).toBe(1)
     expect(f.queries[0]).toContain("interval '10 minutes'")
     expect(f.queries[0]).toContain("status='RUNNING'")
-    expect(f.queries[0]).toContain('attempts<3')
+    expect(f.queries.join(' ')).toMatch(/attempts</)
     const row=finish(f.lines)
     expect(row).toMatchObject({job_id:'job-1',client_id:'client-1',doc_type:'none',outcome:'FAILED',reason:'Records service unreachable',attempts:1,started_at:'2026-10-03T12:00:00.000Z'})
     expect(row.finished_at).toEqual(expect.any(String))
@@ -127,14 +128,30 @@ describe('property records job failures',()=>{
     expect(f.job.error).toBe('Record file expired on service')
     expect(finish(f.lines)).toMatchObject({doc_type:'ucc',outcome:'FAILED',reason:'Record file expired on service',attempts:1})
   })
-  it('pauses on the third failure of a reclaimed running job',async()=>{
-    const f=runner(2)
+  it('pauses for a human on the fifth failure of a reclaimed running job',async()=>{
+    const f=runner(4)
     vi.stubGlobal('fetch',vi.fn(async()=>{const error=new Error('The operation was aborted due to timeout');error.name='TimeoutError';throw error}))
     await runPropertyRecordsJobs()
     expect(f.job.status).toBe('PAUSED')
-    expect(f.job.attempts).toBe(3)
-    expect(f.job.error).toBe('Records service unreachable')
+    expect(f.job.attempts).toBe(5)
+    expect(f.job.error).toBe('Needs human check after repeated failures: Records service unreachable')
     expect(f.queries[0]).toContain("interval '10 minutes'")
-    expect(finish(f.lines)).toMatchObject({outcome:'PAUSED',attempts:3,reason:'Records service unreachable'})
+    expect(finish(f.lines)).toMatchObject({outcome:'PAUSED',attempts:5,reason:'Records service unreachable'})
+  })
+  it('retries a county outage (503) with growing backoff instead of filing nothing',async()=>{
+    const f=runner(0)
+    vi.stubGlobal('fetch',vi.fn(async()=>({ok:false,status:503})))
+    const before=Date.now()
+    await runPropertyRecordsJobs()
+    expect(f.job.status).toBe('FAILED')
+    expect(f.job.error).toBe('County records temporarily unavailable (503)')
+    expect(f.job.attempts).toBe(1)
+    const next=(f.job as unknown as {nextAttemptAt?:Date}).nextAttemptAt
+    expect(next).toBeInstanceOf(Date)
+    expect(next!.getTime()-before).toBeGreaterThanOrEqual(2*60_000-1000)
+  })
+  it('backs off 2m, 10m, 30m, 2h',()=>{
+    expect([1,2,3,4,9].map(retryDelayMs)).toEqual([120_000,600_000,1_800_000,7_200_000,7_200_000])
+    expect(MAX_ATTEMPTS).toBe(5)
   })
 })

@@ -7,7 +7,7 @@ import { loadCaseFile } from '@/lib/daily-desk-case'
 import { loadDeskBoard } from '@/lib/daily-desk-data'
 import { classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { asRecord, str } from '@/lib/packet/schema'
-import { addressNotFoundNote, permitStatusNote } from '@/lib/property-records/contract'
+import { addressNotFoundNote, deedCheckNote, permitStatusNote, recordsJobStatusNote } from '@/lib/property-records/contract'
 import { DOCUMENT_MODULES, mergeQuestionnaire, prefillQuestionnaire, prefillFromDocuments, applyQuestionnaireDispositions, profileCells } from './mapping'
 import { QUESTIONNAIRE_NAME, QUESTIONNAIRE_VERSION, answerCount } from './questions'
 import type { FinalClient, FinalDeskPayload, DeskView } from './types'
@@ -70,16 +70,21 @@ export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?
   if (['queue', 'engine', 'documents', 'submissions'].includes(view)) payload.clients = clients
   if (view === 'clients') Object.assign(payload, await loadFilteredClients(user, query))
   if ((view === 'profile' || view === 'questionnaire') && clientId) {
-    const [file, questionnaire, records] = await Promise.all([loadCaseFile(user, clientId), loadFinalQuestionnaire(user, clientId),
-      db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: 'COMPLETED' }, orderBy: { updatedAt: 'desc' }, select: { result: true } })])
+    const [file, questionnaire, records, latestJob] = await Promise.all([loadCaseFile(user, clientId), loadFinalQuestionnaire(user, clientId),
+      db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: 'COMPLETED' }, orderBy: { updatedAt: 'desc' }, select: { result: true } }),
+      db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: { not: 'SUPERSEDED' } }, orderBy: { updatedAt: 'desc' }, select: { status: true, error: true } })])
     if (!file || !questionnaire) throw Error('Not found')
     const cells = profileCells(file)
     const permitNote = permitStatusNote(records?.result)
     const notFound = addressNotFoundNote(records?.result)
+    const jobNote = recordsJobStatusNote(latestJob)
+    const deedNote = deedCheckNote(records?.result)
     const docs = DOCUMENT_MODULES.map(([key, label]) => {
       const tile = { ...file.docs.find(d => d.key === key)!, key, label }
       if (tile.state !== 'missing') return tile
+      if (jobNote && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: jobNote }
       if (notFound && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: notFound }
+      if (key === 'home_deed' && deedNote) return { ...tile, records: deedNote }
       return key === 'county_permit' && permitNote ? { ...tile, records: permitNote } : tile
     })
     payload.file = { ...file, ...cells, availableFiles: file.docs.flatMap(d=>d.files), docs, docsPresent: docs.filter(d => d.state !== 'missing').length }
