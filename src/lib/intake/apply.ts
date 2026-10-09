@@ -313,6 +313,22 @@ export async function applyToCrm(
       })
     }
 
+    // SCS property cases never merge on contact similarity (above), so flag a
+    // likely repeat person for staff instead. Additive only: a note + audit.
+    if (opts.strictScs) {
+      const { flagPossibleDuplicate } = await import('@/lib/intake/possible-duplicate')
+      const dup = await flagPossibleDuplicate(store, client)
+      if (dup) {
+        await writeAudit(source.organizationId, source, opts.actor ?? null, {
+          action: 'intake.possible_duplicate',
+          entityType: 'Client',
+          entityId: client.id,
+          summary: `Possible duplicate of ${dup.clientId} (matched on ${dup.matchedOn}); not merged`,
+          after: { possibleDuplicateOf: dup.clientId, matchedOn: dup.matchedOn },
+        }, store)
+      }
+    }
+
     if (mapped.note) {
       await store.note.create({
         data: { clientId: client.id, body: `From intake "${source.name}": ${mapped.note}`, isInternal: true },
