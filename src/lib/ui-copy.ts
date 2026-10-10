@@ -53,6 +53,15 @@ export const UI_COPY = {
   week: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   today: 'Today',
   month: 'Month',
+  weekView: 'Week',
+  calendarView: 'Calendar view',
+  prevMonth: 'Previous month',
+  nextMonth: 'Next month',
+  prevWeek: 'Previous week',
+  nextWeek: 'Next week',
+  prevDay: 'Previous day',
+  nextDay: 'Next day',
+  weekBanner: 'This week, Sunday through Saturday. Arrows move one week. Click a day for the hour view.',
 } as const
 
 export type UiCopy = typeof UI_COPY

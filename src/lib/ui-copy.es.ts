@@ -55,6 +55,15 @@ export const UI_COPY_ES = {
   week: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
   today: 'Hoy',
   month: 'Mes',
+  weekView: 'Semana',
+  calendarView: 'Vista del calendario',
+  prevMonth: 'Mes anterior',
+  nextMonth: 'Mes siguiente',
+  prevWeek: 'Semana anterior',
+  nextWeek: 'Semana siguiente',
+  prevDay: 'Día anterior',
+  nextDay: 'Día siguiente',
+  weekBanner: 'Esta semana, de domingo a sábado. Las flechas mueven una semana. Haz clic en un día para ver las horas.',
 }
 
 export function uiCopyFor(locale: 'en' | 'es', english: typeof UI_COPY = UI_COPY) {

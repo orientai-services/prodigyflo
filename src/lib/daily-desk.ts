@@ -82,6 +82,40 @@ export function shiftMonth(key: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** Move a civil date by whole days. Noon UTC keeps the calendar day off the host timezone. */
+export function shiftIso(iso: string, deltaDays: number): string {
+  const date = new Date(`${iso}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + deltaDays)
+  return date.toISOString().slice(0, 10)
+}
+
+/** Sunday that begins the week containing `iso`. */
+export function weekStartIso(iso: string): string {
+  return shiftIso(iso, -new Date(`${iso}T12:00:00Z`).getUTCDay())
+}
+
+export function weekDayIsos(iso: string): string[] {
+  const start = weekStartIso(iso)
+  return Array.from({ length: 7 }, (_, index) => shiftIso(start, index))
+}
+
+/** "Oct 4 – Oct 10, 2026". A week that crosses a year names both years. */
+export function weekTitle(iso: string, locale = 'en-US'): string {
+  const days = weekDayIsos(iso)
+  const start = new Date(`${days[0]}T12:00:00Z`)
+  const end = new Date(`${days[6]}T12:00:00Z`)
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear()
+  const left = start.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: sameYear ? undefined : 'numeric', timeZone: 'UTC' })
+  const right = end.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+  return `${left} – ${right}`
+}
+
+/** True when every day of this Sunday week is already in the loaded month grid. */
+export function weekCovered(iso: string, loadedIsos: readonly string[]): boolean {
+  const loaded = new Set(loadedIsos)
+  return weekDayIsos(iso).every((day) => loaded.has(day))
+}
+
 export function monthTitle(year: number, monthIndex: number): string {
   return new Date(year, monthIndex, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
