@@ -14,6 +14,7 @@ import {
   voiceAnswerTwiml,
   voicemailTwiml,
   type BrowserLeg,
+  greetingFor,
 } from './twiml'
 import { activeLegs, startInboundCall, withAccountLock } from './voice-calls'
 import { voiceBrowserEnabled } from './voice-config'
@@ -105,7 +106,10 @@ export function voicemailAnswerTwiml(
   const base = callbackUrls(callSid)
   const transcribeCallbackUrl = opts.transcribe && callSid ? base.transcription : null
   if (opts.offerCallback && callSid) {
-    return callbackOfferTwiml({ gatherActionUrl: base.callback, voicemailCallbackUrl: base.voicemail, transcribeCallbackUrl })
+    const lead = opts.skipGreeting
+      ? ''
+      : greetingFor({ greeting: number.voicemailGreeting, recordCalls: number.recordCalls, skipGreeting: false })
+    return callbackOfferTwiml({ gatherActionUrl: base.callback, voicemailCallbackUrl: base.voicemail, transcribeCallbackUrl, lead })
   }
   return voicemailTwiml({
     voicemailCallbackUrl: base.voicemail,
@@ -203,7 +207,8 @@ export async function answerInboundCall(ctx: WebhookContext, now = new Date()): 
   const settings = await telephonySettingsFor(ctx.number.organizationId)
   if (!withinBusinessHours(settings.businessHours, settings.timezone, now)) {
     return {
-      twiml: twimlFor({ kind: 'voicemail' }, sctx, { skipGreeting: false, limited: false, transcribe: settings.transcribeVoicemail }),
+      // After hours: still offer the callback, so the request waits in Missed for the morning.
+      twiml: twimlFor({ kind: 'voicemail' }, sctx, { skipGreeting: false, limited: false, transcribe: settings.transcribeVoicemail, offerCallback: true }),
       stage: 'voicemail',
       rowWritten: false,
     }
@@ -239,7 +244,8 @@ export async function answerInboundCall(ctx: WebhookContext, now = new Date()): 
   }
 
   return {
-    twiml: twimlFor(stage, sctx, { skipGreeting: false, limited, transcribe: settings.transcribeVoicemail }),
+    // A voicemail-only line (or nobody to ring) offers the callback up front.
+    twiml: twimlFor(stage, sctx, { skipGreeting: false, limited, transcribe: settings.transcribeVoicemail, offerCallback: stage.kind === 'voicemail' }),
     stage: stageName(stage),
     rowWritten,
   }

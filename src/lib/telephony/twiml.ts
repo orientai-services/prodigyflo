@@ -91,7 +91,7 @@ export type VoiceRouteConfig = {
   transcribeCallbackUrl?: string | null
 }
 
-function greetingFor(config: Pick<VoiceRouteConfig, 'greeting' | 'recordCalls' | 'skipGreeting'>): string {
+export function greetingFor(config: Pick<VoiceRouteConfig, 'greeting' | 'recordCalls' | 'skipGreeting'>): string {
   if (config.skipGreeting) return ''
   const greeting = config.greeting?.trim() || DEFAULT_GREETING
   const notice = config.recordCalls ? ` ${RECORDING_NOTICE}` : ''
@@ -225,13 +225,16 @@ export function voicemailTwiml(config: {
  * document — the caller who stays on the line gets exactly today's voicemail
  * without another round trip to us. Only a pressed key posts to the action
  * route, which answers 1 with a confirmation and anything else with
- * voicemail. No greeting and no recording notice here: both were already
- * said when the call was first answered, as before.
+ * voicemail. After a ring chain there is no greeting or recording notice here:
+ * both were already said when the call was first answered. When the offer IS
+ * the first answer, the caller passes them in as `lead`.
  */
 export function callbackOfferTwiml(config: {
   gatherActionUrl: string
   voicemailCallbackUrl: string
   transcribeCallbackUrl?: string | null
+  /** Greeting + recording notice when the offer is the call's first answer (voicemail-only line, after hours). */
+  lead?: string
 }): string {
   const gather = `<Gather ${attrs([
     ['input', 'dtmf'],
@@ -240,7 +243,7 @@ export function callbackOfferTwiml(config: {
     ['action', config.gatherActionUrl],
     ['method', 'POST'],
   ])}>${say(CALLBACK_PROMPT)}</Gather>`
-  return document(gather + voicemailBody(config))
+  return document((config.lead ?? '') + gather + voicemailBody(config))
 }
 
 /** The caller pressed 1: confirm and hang up. */

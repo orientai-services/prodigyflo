@@ -142,7 +142,7 @@ afterAll(async () => {
 })
 
 describe('press 1 for a callback', () => {
-  it('is offered after the ring stage fails, never on a VOICEMAIL_ONLY first answer', async () => {
+  it('is offered after the ring stage fails, and up front on a VOICEMAIL_ONLY line after the greeting', async () => {
     const from = testNumber(run, 10)
     const cs = callSid()
     const first = await ring(cs, FORWARD_LINE, from)
@@ -154,8 +154,10 @@ describe('press 1 for a callback', () => {
     expect(after.indexOf('<Record')).toBeGreaterThan(after.indexOf('</Gather>'))
 
     const vm = await ring(callSid(), VM_LINE, testNumber(run, 11))
-    expect(vm).not.toContain('<Gather')
-    expect(vm).toContain('<Record')
+    expect(vm).toContain('<Gather input="dtmf" numDigits="1"')
+    // Greeting (and any recording notice) first, then the offer, then voicemail.
+    expect(vm.indexOf('<Say')).toBeLessThan(vm.indexOf('<Gather'))
+    expect(vm.indexOf('<Record')).toBeGreaterThan(vm.indexOf('</Gather>'))
   })
 
   it('1 → callback requested, confirmed, hung up; sorted first on Missed; the trail says so', async () => {
