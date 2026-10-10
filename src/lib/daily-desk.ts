@@ -116,6 +116,26 @@ export function weekCovered(iso: string, loadedIsos: readonly string[]): boolean
   return weekDayIsos(iso).every((day) => loaded.has(day))
 }
 
+/**
+ * Today from the month or week header.
+ * Another month or week comes back to this one. Already being there opens the day.
+ */
+export function todayAction(
+  kind: 'month' | 'week',
+  displayedMonth: string | undefined,
+  cursor: string,
+  todayIso: string,
+  loadedIsos: readonly string[],
+): 'day' | 'move-month' | 'move-week' {
+  if (kind === 'week') {
+    const sameWeek = !cursor || weekStartIso(cursor) === weekStartIso(todayIso)
+    if (sameWeek && weekCovered(todayIso, loadedIsos)) return 'day'
+    return 'move-week'
+  }
+  if (displayedMonth === parseMonth(todayIso.slice(0, 7)).key) return 'day'
+  return 'move-month'
+}
+
 export function monthTitle(year: number, monthIndex: number): string {
   return new Date(year, monthIndex, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
