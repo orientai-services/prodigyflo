@@ -76,7 +76,7 @@ export default async function AttorneyClientPage({
         </div>
       </PageHeader>
 
-      <div className="grid gap-4 p-4 sm:p-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:p-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card>
             <CardHeader>

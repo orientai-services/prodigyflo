@@ -16,7 +16,7 @@ type Mode = 'password' | 'magic'
 function SubmitButton({ idle, busy }: { idle: string; busy: string }) {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" className="w-full" disabled={pending}>
+    <Button type="submit" className="w-full max-md:h-11 max-md:text-base" disabled={pending}>
       {pending && <Loader2 className="size-4 animate-spin" />}
       {pending ? busy : idle}
     </Button>
@@ -47,6 +47,7 @@ function PasswordForm({ next }: { next?: string }) {
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input
+          className="max-md:h-11"
           id="email"
           name="email"
           type="email"
@@ -73,6 +74,7 @@ function PasswordForm({ next }: { next?: string }) {
           </Link>
         </div>
         <Input
+          className="max-md:h-11"
           id="password"
           name="password"
           type="password"
@@ -131,7 +133,7 @@ function MagicLinkForm() {
 
       <div className="space-y-2">
         <Label htmlFor="magic-email">Email</Label>
-        <Input id="magic-email" name="email" type="email" autoComplete="email" required />
+        <Input className="max-md:h-11" id="magic-email" name="email" type="email" autoComplete="email" required />
         <p className="text-muted-foreground text-xs">
           We&rsquo;ll email you a one-time link that signs you in — no password needed.
         </p>
@@ -165,7 +167,7 @@ export function LoginForm({ next, signupEnabled = false }: { next?: string; sign
             aria-selected={mode === value}
             onClick={() => setMode(value)}
             className={cn(
-              'rounded-md px-3 py-1.5 font-medium transition-colors motion-safe:duration-200',
+              'rounded-md px-3 py-1.5 font-medium transition-colors motion-safe:duration-200 max-md:py-2.5',
               mode === value
                 ? 'bg-background text-foreground shadow-xs'
                 : 'hover:text-foreground',

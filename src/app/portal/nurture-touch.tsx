@@ -98,7 +98,13 @@ export function NurtureTouchRow({
           {url && note && <p className="text-muted-foreground mt-1 text-xs whitespace-pre-wrap">{note}</p>}
         </div>
         {url && (
-          <Button size="sm" variant={confirmed ? 'outline' : 'default'} onClick={openLink} disabled={pending}>
+          <Button
+            size="sm"
+            variant={confirmed ? 'outline' : 'default'}
+            className="max-sm:h-11 max-sm:w-full max-sm:text-base"
+            onClick={openLink}
+            disabled={pending}
+          >
             {pending ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : kind === 'VIDEO' ? (
@@ -110,7 +116,14 @@ export function NurtureTouchRow({
           </Button>
         )}
         {hasNoteOnly && (
-          <Button size="sm" variant="outline" onClick={toggleNote} disabled={pending} aria-expanded={expanded}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="max-sm:h-11 max-sm:w-full max-sm:text-base"
+            onClick={toggleNote}
+            disabled={pending}
+            aria-expanded={expanded}
+          >
             {pending ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
@@ -121,7 +134,7 @@ export function NurtureTouchRow({
         )}
       </div>
       {hasNoteOnly && expanded && (
-        <p className="bg-surface-sunk text-foreground ml-12 rounded-xl px-3.5 py-2.5 text-sm whitespace-pre-wrap">{note}</p>
+        <p className="bg-surface-sunk text-foreground ml-12 rounded-xl max-sm:ml-0 px-3.5 py-2.5 text-sm whitespace-pre-wrap">{note}</p>
       )}
     </li>
   )

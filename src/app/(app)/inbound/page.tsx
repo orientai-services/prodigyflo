@@ -23,6 +23,7 @@ import {
 } from './pills'
 import { InboundFilters } from './inbound-filters'
 import { DocumentSearch } from './document-search'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Inbound' }
 
@@ -184,7 +185,7 @@ async function StreamView({
         </div>
       ) : (
         <>
-          <div className="scroll-x mt-4 rounded-lg border">
+          <div className={cn('scroll-x mt-4 rounded-lg border', STICKY_FIRST_COL)}>
             <table className="w-full min-w-[64rem] text-sm">
               <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                 <tr>
@@ -325,7 +326,7 @@ async function DocumentsView({
           />
         </div>
       ) : (
-        <div className="scroll-x mt-4 rounded-lg border">
+        <div className={cn('scroll-x mt-4 rounded-lg border', STICKY_FIRST_COL)}>
           <table className="w-full min-w-[52rem] text-sm">
             <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
               <tr>

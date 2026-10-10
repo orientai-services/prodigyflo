@@ -12,6 +12,7 @@ import { currency, fullName, number, relativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { BriefChip, ProbabilityBadge, SalesNav } from '../ui'
 import { ReviewStatusChip } from '../qualifier/status-chip'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Hot leads' }
 
@@ -137,7 +138,7 @@ export default async function HotLeadsPage({ searchParams }: PageProps<'/sales/h
               }
             />
           ) : (
-            <div className="scroll-x">
+            <div className={cn('scroll-x', STICKY_FIRST_COL)}>
               <table className="w-full min-w-[58rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr>

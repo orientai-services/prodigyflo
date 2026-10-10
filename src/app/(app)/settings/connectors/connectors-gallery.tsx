@@ -221,7 +221,7 @@ export function ConnectorsGallery({ cards, canManage }: { cards: ConnectorCardVM
         grouped.map(({ cat, items }) => (
           <section key={cat}>
             <h2 className="text-muted-foreground mb-3 text-xs font-semibold tracking-[0.06em] uppercase">{cat}</h2>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {items.map((card) => (
                 <ConnectorCard key={card.defId} card={card} canManage={canManage} />
               ))}

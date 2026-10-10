@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { currency, humanize, number, percent } from '@/lib/format'
 import { MarketingTabs } from '../marketing-tabs'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Lead sources' }
 
@@ -72,7 +73,7 @@ export default async function LeadSourcesPage({
                   key={r.key}
                   href={`/marketing/sources?range=${r.key}`}
                   className={cn(
-                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors max-md:inline-flex max-md:min-h-10 max-md:items-center',
                     range.key === r.key
                       ? 'bg-surface-raised shadow-e1'
                       : 'text-muted-foreground hover:text-foreground',
@@ -126,7 +127,7 @@ export default async function LeadSourcesPage({
           />
         ) : (
           <>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <BarCompare
                 title="Lead volume by source"
                 description="Every lead in range attributed to a source"
@@ -166,7 +167,7 @@ export default async function LeadSourcesPage({
                   The full funnel per source: leads in, share that reached qualified, share that closed
                 </p>
               </div>
-              <div className="scroll-x rounded-lg border">
+              <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
                 <table className="w-full min-w-[52rem] text-sm tabular-nums">
                   <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                     <tr>
@@ -246,7 +247,7 @@ export default async function LeadSourcesPage({
                   />
                 </div>
               ) : (
-                <div className="scroll-x rounded-lg border">
+                <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
                   <table className="w-full min-w-[56rem] text-sm tabular-nums">
                     <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                       <tr>

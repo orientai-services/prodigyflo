@@ -10,6 +10,8 @@ import { fullName, number, relativeTime, shortDate } from '@/lib/format'
 import { BriefChip, ProbabilityBadge, SalesNav } from '../ui'
 import { ReviewActions } from './review-actions'
 import { ReviewStatusChip } from './status-chip'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Qualifier queue' }
 
@@ -84,7 +86,7 @@ export default async function QualifierPage() {
               description={`Every lead at ${config.hotLeadThreshold}%+ carries a fresh human decision. New hot leads and rescored approvals land back here automatically.`}
             />
           ) : (
-            <div className="scroll-x">
+            <div className={cn('scroll-x', STICKY_FIRST_COL)}>
               <table className="w-full min-w-[62rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr>

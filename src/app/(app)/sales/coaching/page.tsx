@@ -155,7 +155,7 @@ export default async function CoachingPage() {
                   </div>
                   <p className="mt-2 text-sm whitespace-pre-wrap">{note.body}</p>
                   {(note.strengths || note.improvements) && (
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {note.strengths && (
                         <div className="bg-success/5 border-success/20 rounded-lg border px-3 py-2">
                           <p className="text-success text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">

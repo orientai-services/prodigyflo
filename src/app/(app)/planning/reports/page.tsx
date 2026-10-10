@@ -46,7 +46,7 @@ export default async function ProgressPage() {
         title="Planning & progress"
         description="The project's status pages, generated from the codebase and live database — nothing on them is typed in by hand."
       />
-      <div className="grid gap-4 p-4 sm:p-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:p-6 lg:grid-cols-2">
         {REPORTS.map((r) => {
           const built = stamps[r.slug]
           return (

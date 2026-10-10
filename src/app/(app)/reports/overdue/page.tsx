@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CollapsibleSection } from '@/components/ui/collapsible-section'
 import { currency, duration, fullName, humanize, number, relativeTime, shortDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Overdue follow-ups' }
 
@@ -70,7 +72,7 @@ export default async function OverdueReportPage() {
               className="rounded-lg border py-10"
             />
           ) : (
-            <div className="scroll-x rounded-lg border">
+            <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
               <table className="w-full min-w-[48rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr>
@@ -131,7 +133,7 @@ export default async function OverdueReportPage() {
               className="rounded-lg border py-10"
             />
           ) : (
-            <div className="scroll-x rounded-lg border">
+            <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
               <table className="w-full min-w-[48rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr>

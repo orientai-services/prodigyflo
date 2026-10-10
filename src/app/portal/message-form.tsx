@@ -67,7 +67,12 @@ export function MessageForm({
         }}
       />
       <div className="flex justify-end">
-        <Button type="submit" size="sm" disabled={pending || body.trim().length === 0}>
+        <Button
+          type="submit"
+          size="sm"
+          className="max-sm:h-11 max-sm:w-full max-sm:text-base"
+          disabled={pending || body.trim().length === 0}
+        >
           {pending ? <Loader2 className="size-3.5 animate-spin" /> : <SendHorizontal className="size-3.5" />}
           {pending ? sendingLabel : sendLabel}
         </Button>

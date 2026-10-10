@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { CollapsibleSection } from '@/components/ui/collapsible-section'
 import { StageBadge } from '@/components/stage-badge'
 import { duration, number } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Conversion funnel' }
 
@@ -32,7 +34,7 @@ export default async function ConversionReportPage() {
         }
       />
 
-      <div className="grid gap-4 p-4 sm:p-6 lg:grid-cols-[3fr_2fr]">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:p-6 lg:grid-cols-[3fr_2fr]">
         <FunnelChart
           steps={funnel}
           description={`Every client created to date · n=${number(funnel[0]?.count ?? 0)}`}
@@ -46,7 +48,7 @@ export default async function ConversionReportPage() {
           description="Average time to leave each stage, and how many clients are sitting there right now"
           summary={`${number(activeAging.length)} stages`}
         >
-          <div className="scroll-x">
+          <div className={cn('scroll-x', STICKY_FIRST_COL)}>
             <table className="w-full min-w-[24rem] text-sm tabular-nums">
               <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                 <tr>

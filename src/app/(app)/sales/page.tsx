@@ -134,7 +134,7 @@ export default async function SalesOverviewPage() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
           {/* Hot leads */}
           <div className="bg-card shadow-e1 rounded-xl border">
             <div className="flex items-center justify-between border-b px-4 py-3">

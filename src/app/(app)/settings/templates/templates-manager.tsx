@@ -22,6 +22,8 @@ import {
 import { EmptyState } from '@/components/empty-state'
 import { KNOWN_VARIABLES } from '@/lib/messaging/render'
 import { deleteTemplateAction, saveTemplateAction } from './actions'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 type TemplateRow = {
   id: string
@@ -219,7 +221,7 @@ export function TemplatesManager({
           }
         />
       ) : (
-        <div className="scroll-x rounded-lg border">
+        <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
           <table className="w-full min-w-[46rem] text-sm tabular-nums">
             <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
               <tr className="border-b">

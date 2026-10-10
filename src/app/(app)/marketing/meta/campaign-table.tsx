@@ -16,6 +16,7 @@ import {
   setAdSetStatusAction, setCampaignStatusAction, updateBudgetAction,
   type MetaActionState,
 } from './actions'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export type AdSetRowView = {
   id: string
@@ -86,7 +87,7 @@ function BudgetPopover({
           <div className="flex items-center gap-2">
             <Input
               name="dailyBudget" type="number" min="1" step="1" defaultValue={dailyBudget || 1}
-              className="h-8 text-right text-sm" aria-label="Daily budget" autoFocus
+              className="h-8 text-right text-sm max-md:text-base" aria-label="Daily budget" autoFocus
             />
             <Button type="submit" size="sm" disabled={pending}>{pending ? '…' : 'Set'}</Button>
           </div>
@@ -115,7 +116,7 @@ export function CampaignTable({
   }
 
   return (
-    <div className="scroll-x rounded-lg border">
+    <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
       <table className="w-full min-w-[64rem] text-sm tabular-nums">
         <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
           <tr>

@@ -189,7 +189,7 @@ export function RoutingDialog({
               onChange={(e) => setGreeting(e.target.value)}
               rows={2}
               placeholder="Thanks for calling. Please hold while we connect you."
-              className="text-sm"
+              className="text-sm max-md:text-base"
             />
             <p className="text-muted-foreground text-xs">
               Read aloud to the caller before anything else. Leave it blank for the standard greeting.

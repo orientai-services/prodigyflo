@@ -175,7 +175,7 @@ export function NewSourceDialog({ owners, leadSources }: { owners: Option[]; lea
                     id="intake-kind"
                     value={kind}
                     onChange={(e) => setKind(e.target.value as IntakeSourceKind)}
-                    className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none"
+                    className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none max-md:text-base"
                   >
                     <option value="WEB_FORM">Web form (webhook)</option>
                     <option value="GOOGLE_SHEET">Google Sheet</option>
@@ -214,7 +214,7 @@ export function NewSourceDialog({ owners, leadSources }: { owners: Option[]; lea
                     id="intake-owner"
                     value={ownerId}
                     onChange={(e) => setOwnerId(e.target.value)}
-                    className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none"
+                    className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none max-md:text-base"
                   >
                     <option value="">Unassigned</option>
                     {owners.map((o) => (
@@ -230,7 +230,7 @@ export function NewSourceDialog({ owners, leadSources }: { owners: Option[]; lea
                     id="intake-leadsource"
                     value={leadSourceId}
                     onChange={(e) => setLeadSourceId(e.target.value)}
-                    className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none"
+                    className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none max-md:text-base"
                   >
                     <option value="">None</option>
                     {leadSources.map((o) => (

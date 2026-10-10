@@ -67,6 +67,8 @@ export function PortalUpload({
       <Button
         size="sm"
         variant={emphasized ? 'default' : 'outline'}
+        // Phones: a full-width, thumb-sized button on its own row under the document name.
+        className="max-sm:h-11 max-sm:w-full max-sm:text-base"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
       >

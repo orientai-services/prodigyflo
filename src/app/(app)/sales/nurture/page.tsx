@@ -10,6 +10,8 @@ import { NurtureStatusChip } from '@/components/client/nurture-panel'
 import { dateTime, fullName, number, relativeTime } from '@/lib/format'
 import { ProbabilityBadge, SalesNav } from '../ui'
 import { ConfirmTouchButton, LogNurtureDialog } from './nurture-controls'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Pre-call nurture' }
 
@@ -79,7 +81,7 @@ export default async function NurturePage() {
               description={`Nothing in the ${SALES_LEVEL_LABEL[level]} needs a pre-call touch right now. New bookings and leads crossing ${hotLeadThreshold}% show up here automatically.`}
             />
           ) : (
-            <div className="scroll-x">
+            <div className={cn('scroll-x', STICKY_FIRST_COL)}>
               <table className="w-full min-w-[56rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr>

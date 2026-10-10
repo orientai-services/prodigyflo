@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/empty-state'
 import { currency, fullName, humanize, number, percent, relativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { BriefChip, ProbabilityBadge, SalesNav } from '../ui'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Daily huddle' }
 
@@ -208,7 +209,7 @@ function MorningBoard({ data }: { data: MorningHuddle }) {
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         {/* Today's appointments */}
         <div className="bg-card shadow-e1 rounded-xl border">
           <div className="flex items-center justify-between border-b px-4 py-3">
@@ -398,7 +399,7 @@ function WrapBoard({ data }: { data: EodWrap }) {
               description="Active closers on your roster will appear here with their daily numbers."
             />
           ) : (
-            <div className="scroll-x">
+            <div className={cn('scroll-x', STICKY_FIRST_COL)}>
               <table className="w-full min-w-[28rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr>

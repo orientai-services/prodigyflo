@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { CheckStateChip, SalesNav } from '../ui'
 import { OpsSettings } from './ops-settings'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Close-rate operations' }
 
@@ -36,7 +37,7 @@ export default async function CloseRateOpsPage() {
 
       <div className="space-y-4 p-4 sm:p-6">
         {/* Phase progression */}
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           {OPS_PHASES.map((phase) => {
             const isCurrent = phase.phase === config.phase
             const isPast = phase.phase < config.phase
@@ -101,7 +102,7 @@ export default async function CloseRateOpsPage() {
               &ldquo;measuring&rdquo; means not enough data to judge yet
             </p>
           </div>
-          <div className="scroll-x">
+          <div className={cn('scroll-x', STICKY_FIRST_COL)}>
             <table className="w-full min-w-[36rem] text-sm tabular-nums">
               <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                 <tr>

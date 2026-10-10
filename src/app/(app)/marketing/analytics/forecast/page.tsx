@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { currency, number, percent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { RevopsTabs } from '../revops-tabs'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Revenue forecast' }
 
@@ -30,7 +31,7 @@ export default async function ForecastPage() {
       </PageHeader>
 
       <div className="space-y-6 p-4 sm:p-6">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatTile
             label="Weighted forecast"
             value={currency(report.weightedTotal)}
@@ -79,7 +80,7 @@ export default async function ForecastPage() {
 
             <section>
               <h2 className="mb-3 text-sm font-semibold">By stage</h2>
-              <div className="scroll-x rounded-lg border">
+              <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
                 <table className="w-full min-w-[56rem] text-sm tabular-nums">
                   <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                     <tr>

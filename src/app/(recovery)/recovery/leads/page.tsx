@@ -11,6 +11,7 @@ import { currency, relativeTime, fullName } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { RecCard, BucketPill } from '../../_components/ui'
 import { RecoverButton } from './recover-button'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Recover' }
 
@@ -97,7 +98,7 @@ export default async function RecyclerPage({ searchParams }: PageProps<'/recover
             defaultValue={search ?? ''}
             placeholder="Search name, email, phone…"
             aria-label="Search recoverable leads"
-            className="h-9 w-64 max-w-full rounded-full border border-[var(--rec-border)] bg-[var(--rec-surface)] pr-3 pl-9 text-sm text-[var(--rec-text)] outline-none placeholder:text-[var(--rec-muted)] focus:border-[var(--rec-primary-border)] focus:ring-2 focus:ring-[var(--rec-primary-soft)]"
+            className="h-9 w-64 max-w-full rounded-full border border-[var(--rec-border)] bg-[var(--rec-surface)] pr-3 pl-9 text-sm text-[var(--rec-text)] outline-none placeholder:text-[var(--rec-muted)] focus:border-[var(--rec-primary-border)] focus:ring-2 focus:ring-[var(--rec-primary-soft)] max-md:text-base"
           />
         </form>
       </div>
@@ -110,7 +111,7 @@ export default async function RecyclerPage({ searchParams }: PageProps<'/recover
               : 'No leads to recover yet — nice problem to have.'}
           </p>
         ) : (
-          <div className="scroll-x">
+          <div className={cn('scroll-x', STICKY_FIRST_COL)}>
             <table className="w-full min-w-[60rem] text-sm">
               <thead>
                 <tr className="border-b border-[var(--rec-border)] text-left text-[0.6875rem] font-semibold tracking-[0.06em] text-[var(--rec-muted)] uppercase">

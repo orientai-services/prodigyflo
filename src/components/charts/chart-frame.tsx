@@ -61,7 +61,7 @@ export function ChartFrame({
           {description && <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 max-sm:w-full max-sm:flex-wrap max-sm:justify-between">
           {showLegend && (
             <ul className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {series!.map((s) => (
@@ -83,7 +83,7 @@ export function ChartFrame({
                   aria-pressed={view === mode}
                   aria-label={`${mode} view`}
                   className={cn(
-                    'rounded px-1.5 py-1 transition-colors',
+                    'rounded px-1.5 py-1 transition-colors max-md:inline-flex max-md:size-10 max-md:items-center max-md:justify-center',
                     view === mode ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >

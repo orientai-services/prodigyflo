@@ -172,7 +172,7 @@ export function CredentialsCard({ vm }: { vm: CredentialsCardVM }) {
                     placeholder={
                       field.configured ? 'Enter a new value to replace' : (field.placeholder ?? undefined)
                     }
-                    className="h-8 flex-1 font-mono text-xs"
+                    className="h-8 flex-1 font-mono text-xs max-md:text-base"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') submitField(field)
                     }}

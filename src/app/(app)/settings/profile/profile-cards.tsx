@@ -48,7 +48,7 @@ export function IdentityCard({
       <CardContent>
         <form action={action} className="space-y-4">
           <CardHead icon={UserRound} title="Identity" hint="Your name as clients and teammates see it." />
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="p-name">Full name</Label>
               <Input id="p-name" name="name" defaultValue={initial.name} required />
@@ -111,7 +111,7 @@ export function ForwardingCard({
             {statusBadge}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="p-alias">Address</Label>
               <div className="flex items-center">
@@ -212,7 +212,7 @@ export function SignatureCard({
             hint="Added to every email you send. Pick the voice that fits how you work."
           />
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {(['formal', 'friendly'] as const).map((s) => (
               <label
                 key={s}
