@@ -42,6 +42,8 @@ const PUBLIC_PREFIXES = [
   // already public assets under /brand. See src/app/manifest/[slug]/route.ts.
   '/manifest/',
   '/brand/',
+  // PDF.js worker + decoder assets for Quick look (copied from pdfjs-dist; no client data).
+  '/pdfjs/',
 ]
 
 export function proxy(request: NextRequest) {
