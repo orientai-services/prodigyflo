@@ -13,12 +13,11 @@ export default async function BoardPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if (finalDeskEnabled()) return <FinalDeskPage view="board" />
-  const user = await requireUser()
-  if (!canReadDesk(user)) redirect('/forbidden')
-
   const params = await searchParams
   const month = typeof params.month === 'string' ? params.month : undefined
+  if (finalDeskEnabled()) return <FinalDeskPage view="board" month={month} />
+  const user = await requireUser()
+  if (!canReadDesk(user)) redirect('/forbidden')
   const board = await loadDeskBoard(user, month)
   const prev = shiftMonth(board.month, -1)
   const next = shiftMonth(board.month, 1)

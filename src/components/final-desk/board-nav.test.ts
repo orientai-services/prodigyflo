@@ -7,10 +7,12 @@ describe('master calendar board navigation', () => {
 
   it('moves by month and by week, and keeps Today on the view you are in', () => {
     expect(src).toContain("useState<'month' | 'week' | 'day'>")
-    expect(src).toContain('shiftMonth(board.month, -1)')
-    expect(src).toContain('shiftMonth(board.month, 1)')
-    expect(src).toContain('shiftIso(focus, -7)')
-    expect(src).toContain('shiftIso(focus, 7)')
+    expect(src).toContain('shiftMonth(monthRef.current || board.month, -1)')
+    expect(src).toContain('shiftMonth(monthRef.current || board.month, 1)')
+    expect(src).toContain('shiftIso(cursorRef.current || focus, -7)')
+    expect(src).toContain('shiftIso(cursorRef.current || focus, 7)')
+    expect(src).toContain('boardForMonth')
+    expect(src).toContain('next.board.month !== monthRef.current')
     expect(src).toContain('jumpToday(kind)')
     expect(src).toContain('weekCovered')
     expect(src).toContain('weekTitle(focus, dateLocale)')
