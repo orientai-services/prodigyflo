@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest'
-import {staffRouteAllowed} from '@/lib/staff-routes'
+import {landingAfterLogin,staffRouteAllowed} from '@/lib/staff-routes'
 afterEach(()=>vi.unstubAllEnvs())
 it('keeps final interface within its visible surfaces and two roles',()=>{
  vi.stubEnv('PRODIGYFLO_FINAL_DESK','true')
@@ -21,4 +21,19 @@ it('turning off the flag restores the legacy admin route boundary',()=>{
  vi.stubEnv('PRODIGYFLO_FINAL_DESK','false')
  expect(staffRouteAllowed('SUPER_ADMIN','/settings/phone-numbers')).toBe(true)
  expect(staffRouteAllowed('SUPER_ADMIN','/engine')).toBe(false)
+})
+it('lets the installed app start page through so it can redirect to /board',()=>{
+ vi.stubEnv('PRODIGYFLO_FINAL_DESK','true')
+ expect(staffRouteAllowed('SUPER_ADMIN','/dashboard')).toBe(true)
+ expect(staffRouteAllowed('CLOSER','/dashboard')).toBe(true)
+})
+it('drops a ?next= the role cannot open and lands on home instead',()=>{
+ vi.stubEnv('PRODIGYFLO_FINAL_DESK','true')
+ expect(landingAfterLogin('SUPER_ADMIN','/dashboard','/board')).toBe('/dashboard')
+ expect(landingAfterLogin('SUPER_ADMIN','/call-center?lead=meta:o:1','/board')).toBe('/call-center?lead=meta:o:1')
+ expect(landingAfterLogin('SUPER_ADMIN','/settings/phone-numbers','/board')).toBe('/board')
+ expect(landingAfterLogin('CLOSER','/settings/users','/board')).toBe('/board')
+ expect(landingAfterLogin('SUPER_ADMIN','/forbidden','/board')).toBe('/board')
+ expect(landingAfterLogin('SUPER_ADMIN','//evil.example','/board')).toBe('/board')
+ expect(landingAfterLogin('SUPER_ADMIN',null,'/board')).toBe('/board')
 })

@@ -293,7 +293,8 @@
   .final-desk.call-center .detail.open {
     position: fixed; inset: 0; z-index: 40; height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
     border: 0; border-radius: 0; box-shadow: none; background: var(--paper);
-    padding: 0 16px calc(var(--voice-dock-h, 0px) + 32px);
+    /* 72px at the bottom keeps the last row clear of the folded phone pill. */
+    padding: 0 16px calc(var(--voice-dock-h, 0px) + 72px);
   }
   .final-desk.call-center.power-on .detail.open { padding-bottom: calc(var(--voice-dock-h, 0px) + 150px); }
   .final-desk.call-center .detail-bar {
@@ -334,6 +335,8 @@
     flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 16px 12px;
     border-radius: 16px 16px 0 0; border-width: 1px 0 0; box-shadow: 0 -6px 18px rgba(18, 32, 44, .12);
   }
+  /* The folded phone pill sits in the bottom-right corner; keep the last button out from under it. */
+  .final-desk.call-center .power-bar { padding-right: 72px; }
   .final-desk.call-center .power-acts { flex-wrap: nowrap; }
   .final-desk.call-center .power-acts .btn { flex: 1; min-height: 44px; }
 

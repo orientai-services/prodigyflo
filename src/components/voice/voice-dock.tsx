@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, BellOff, Grid3x3, Mic, MicOff, PhoneOff, Settings2, X } from 'lucide-react'
+import { Bell, BellOff, Grid3x3, Mic, MicOff, Phone, PhoneOff, Settings2, X } from 'lucide-react'
 import { dockVisible } from '@/lib/telephony/ui/dock'
 import { clockLabel } from '@/lib/telephony/ui/result'
 import { AudioSettings } from './audio-settings'
@@ -43,11 +43,12 @@ const PHONE_QUERY = '(max-width: 639.98px)'
  * (`dockVisible`). On a phone the page gets bottom padding equal to the bar's
  * height so nothing hides under it, and `--voice-dock-h` carries that height
  * for pages that pin their own bars above it.
- * Idle it is a small pill that says whether this tab rings; during a call it
- * shows who, the talk timer, the quality light (one tip when it isn't
- * green), mute, keypad and hang up. Errors stay until
- * dismissed, in plain words, because a rep who looked away must still learn
- * why the call dropped.
+ * Idle it folds to a small round pill in the corner (status dot + phone icon)
+ * that reserves no page space; tapping it opens the sheet with the state line,
+ * ringtone and phone settings. During a call it shows who, the talk timer,
+ * the quality light (one tip when it isn't green), mute, keypad and hang up.
+ * Errors keep the sheet open until dismissed, in plain words, because a rep
+ * who looked away must still learn why the call dropped.
  */
 export function VoiceDock() {
   const voice = useVoice()
@@ -85,10 +86,16 @@ export function VoiceDock() {
       }),
   )
 
-  // Reserve the bar's height at the bottom of the page on a phone.
+  // The sheet shows for a call, for an error, or when the rep opened settings;
+  // otherwise the pill.
+  const status = voice?.status ?? 'idle'
+  const expanded = status !== 'idle' || open || Boolean(voice?.error)
+
+  // Reserve the sheet's height at the bottom of the page on a phone. The pill
+  // reserves nothing.
   useEffect(() => {
     const bar = barRef.current
-    if (!visible || !bar) return
+    if (!visible || !expanded || !bar) return
     const root = document.documentElement
     const phone = window.matchMedia(PHONE_QUERY)
     const apply = () => {
@@ -106,10 +113,10 @@ export function VoiceDock() {
       root.style.removeProperty('--voice-dock-h')
       document.body.style.paddingBottom = ''
     }
-  }, [visible])
+  }, [visible, expanded])
 
   if (!voice || !visible) return null
-  const { setup, status, leader, registered } = voice
+  const { setup, leader, registered } = voice
   const busy = status !== 'idle'
   const showKeypad = keypad && status === 'in-call'
   const quality = status === 'in-call' ? voice.callQuality : null
@@ -126,6 +133,24 @@ export function VoiceDock() {
       : registered
         ? 'Phone ready'
         : 'Starting the phone…'
+
+  if (!expanded) {
+    const dot = leader && registered ? 'bg-sky-500' : 'bg-muted-foreground/40'
+    return (
+      <button
+        type="button"
+        className="bg-popover text-muted-foreground hover:text-foreground fixed right-3 bottom-[calc(env(safe-area-inset-bottom)+12px)] z-50 inline-flex h-11 items-center gap-1.5 rounded-full border px-3 shadow-md sm:right-4 sm:bottom-4 sm:h-9 sm:px-2.5"
+        onClick={() => setOpen(true)}
+        aria-expanded={false}
+        aria-label={`${stateLine} Open phone settings.`}
+        title={stateLine}
+      >
+        <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
+        <Phone className="size-4" aria-hidden="true" />
+        {voice.ringtoneMuted && <BellOff className="size-3.5" aria-hidden="true" />}
+      </button>
+    )
+  }
 
   return (
     <div
@@ -207,9 +232,9 @@ export function VoiceDock() {
               className="hover:bg-muted inline-flex size-11 items-center justify-center rounded-lg sm:size-8 sm:rounded-md"
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
-              aria-label="Phone settings"
+              aria-label={open ? 'Close phone settings' : 'Phone settings'}
             >
-              <Settings2 className="size-5 sm:size-4" />
+              {open ? <X className="size-5 sm:size-4" /> : <Settings2 className="size-5 sm:size-4" />}
             </button>
           </>
         )}
