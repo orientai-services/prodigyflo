@@ -136,6 +136,53 @@ describe('ingestScsPacket document import queue', () => {
     expect(create.mock.invocationCallOrder[0]).toBeLessThan(mocks.records.mock.invocationCallOrder[0])
   })
 
+  it('keeps a corrected street when a later packet repeats the intake typo', async () => {
+    const update = vi.fn()
+    const retire = vi.fn()
+    const store = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      survey: { findFirst: vi.fn().mockResolvedValue(null) },
+      clientAddress: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'addr', line1: '9796 Almenia St', city: 'Las Vegas', state: 'NV', postalCode: '89178' }),
+        create: vi.fn(),
+        update,
+      },
+      documentExtraction: { updateMany: retire },
+      externalDocumentImport: { updateMany: vi.fn() },
+    } as unknown as Prisma.TransactionClient
+    await ingestScsPacket({ organizationId: 'org_1', clientId: 'client_1', intakeSubmissionId: 'submission_1', rawPayload: {
+      lead_id: 'lead_1',
+      data: { schema_version: 'schema_42.v1', stage1_answers: { property_street: '9796 Alemnia St', city: 'Las Vegas', state: 'NV', zip: '89178' } },
+    } }, store)
+    expect(update).not.toHaveBeenCalled()
+    expect(retire).not.toHaveBeenCalled()
+    expect(mocks.records).toHaveBeenCalledWith(expect.objectContaining({
+      address: { line1: '9796 Almenia St', city: 'Las Vegas', state: 'NV', postal_code: '89178' },
+    }), store)
+  })
+
+  it('retires the contract reading when a later packet names a different house', async () => {
+    const update = vi.fn()
+    const retire = vi.fn()
+    const store = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      survey: { findFirst: vi.fn().mockResolvedValue(null) },
+      clientAddress: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'addr', line1: '9796 Almenia St', city: 'Las Vegas', state: 'NV', postalCode: '89178' }),
+        create: vi.fn(),
+        update,
+      },
+      documentExtraction: { updateMany: retire },
+      externalDocumentImport: { updateMany: vi.fn() },
+    } as unknown as Prisma.TransactionClient
+    await ingestScsPacket({ organizationId: 'org_1', clientId: 'client_1', intakeSubmissionId: 'submission_1', rawPayload: {
+      lead_id: 'lead_1',
+      data: { schema_version: 'schema_42.v1', stage1_answers: { property_street: '9797 Almenia St', city: 'Las Vegas', state: 'NV', zip: '89178' } },
+    } }, store)
+    expect(update).toHaveBeenCalledWith({ data: expect.objectContaining({ line1: '9797 Almenia St', postalCode: '89178' }), where: { id: 'addr' } })
+    expect(retire).toHaveBeenCalledWith({ where: { provider: 'records', document: { clientId: 'client_1' } }, data: { sourceActive: false } })
+  })
+
   it('does not queue a lookup until Contact has the full property address', async () => {
     const store = {
       $queryRaw: vi.fn().mockResolvedValue([]),

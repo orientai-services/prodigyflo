@@ -8,6 +8,7 @@ import {asRecord,str} from '@/lib/packet/schema'
 import { scsRequirementId } from './scs-document-requirements'
 
 import {analysisDocument as document,validateAnalysis,compareAnalysisRevision,hash,evidenceHash} from './analysis-contract'
+import {sameContractClient, type ContractClient} from './property-identity'
 
 export async function queueAnalysisPacket(opts:{organizationId:string;clientId:string;sourceLeadId:string;analysis:unknown;rawPayload:unknown},store:Prisma.TransactionClient=db) {
   if(opts.analysis==null) return // older schema42 packets remain compatible
@@ -43,6 +44,20 @@ export type DocumentSlotHint={sourceDocumentType?:string|null;sourceFileName?:st
  * lease) → solar_contract. `loan_or_til` (TILA / lender) → finance_agreement.
  * Deal type "loan" is how the system is paid, not a lender PDF.
  */
+function liveClient(client:{firstName:string;lastName:string;addresses:{line1:string;city:string;state:string;postalCode:string}[]}):ContractClient {
+  const address=client.addresses[0]
+  return {firstName:client.firstName,lastName:client.lastName,line1:address?.line1??'',city:address?.city??'',state:address?.state??'',postalCode:address?.postalCode??''}
+}
+
+/** Exact fingerprint, or the same person at the same house with a corrected street spelling. */
+export function contractEvidenceMatchesClient(source:{identity_fingerprint?:unknown;source_identity?:unknown},live:ContractClient) {
+  const exact={first_name:live.firstName.trim().toLowerCase(),last_name:live.lastName.trim().toLowerCase(),address_line1:live.line1.trim().toLowerCase(),city:live.city.trim().toLowerCase(),state:live.state.trim().toLowerCase(),zip:live.postalCode.trim().toLowerCase()}
+  if(hash(exact)===source.identity_fingerprint) return true
+  const recorded=asRecord(source.source_identity)
+  if(!str(recorded.first_name) && !str(recorded.address_line1)) return false
+  return sameContractClient({firstName:str(recorded.first_name),lastName:str(recorded.last_name),line1:str(recorded.address_line1),city:str(recorded.city),state:str(recorded.state),postalCode:str(recorded.zip)},live)
+}
+
 export function typeFor(doc:z.infer<typeof document>,hint:DocumentSlotHint={}) {
   const product=String(doc.fields.agreement_type?.value??'').toLowerCase()
   const kinds=doc.classification.map(k=>String(k).toLowerCase())
@@ -71,9 +86,7 @@ export async function materializeScsAnalysis(limit=20,scope:Prisma.ExternalDocum
     const identity=createHash('sha256').update(JSON.stringify(row.sourceAnalysis)).digest('hex')
     const source=asRecord(row.sourceAnalysis)
     const client=await db.client.findUniqueOrThrow({where:{id:row.clientId},include:{addresses:{where:{isPrimary:true},take:1}}})
-    const address=client.addresses[0]
-    const liveIdentity={first_name:client.firstName.trim().toLowerCase(),last_name:client.lastName.trim().toLowerCase(),address_line1:(address?.line1??'').trim().toLowerCase(),city:(address?.city??'').trim().toLowerCase(),state:(address?.state??'').trim().toLowerCase(),zip:(address?.postalCode??'').trim().toLowerCase()}
-    if(hash(liveIdentity)!==source.identity_fingerprint) throw Error('Contact/property changed before evidence materialization')
+    if(!contractEvidenceMatchesClient(source,liveClient(client))) throw Error('Contact/property changed before evidence materialization')
     const hint={sourceDocumentType:row.sourceDocumentType,sourceFileName:row.sourceFileName}
     const type=typeFor(doc,hint), spec=specForType(type)
     const fields=analysisFields(doc,hint)
@@ -85,8 +98,7 @@ export async function materializeScsAnalysis(limit=20,scope:Prisma.ExternalDocum
       const current=await store.externalDocumentImport.findUniqueOrThrow({where:{id:row.id}})
       if(current.analysisIdentity!==row.analysisIdentity || !current.analysisPending) return false
       const live=await store.client.findUniqueOrThrow({where:{id:row.clientId},include:{addresses:{where:{isPrimary:true},take:1}}})
-      const a=live.addresses[0]
-      if(hash({first_name:live.firstName.trim().toLowerCase(),last_name:live.lastName.trim().toLowerCase(),address_line1:(a?.line1??'').trim().toLowerCase(),city:(a?.city??'').trim().toLowerCase(),state:(a?.state??'').trim().toLowerCase(),zip:(a?.postalCode??'').trim().toLowerCase()})!==source.identity_fingerprint) throw Error('Contact/property changed during evidence materialization')
+      if(!contractEvidenceMatchesClient(source,liveClient(live))) throw Error('Contact/property changed during evidence materialization')
       await store.documentExtraction.updateMany({where:{documentId:row.clientDocumentId!,provider:'records',sourceIdentity:{not:identity}},data:{sourceActive:false}})
       const warnings=['Imported from the same private Records analysis; no second extraction.']
       const model=Object.values(doc.fields).find(f=>f.model)?.model??null

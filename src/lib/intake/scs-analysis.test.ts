@@ -1,6 +1,7 @@
 import {describe,it,expect,vi} from 'vitest'
 vi.mock('@/lib/db',()=>({db:{}}))
-import {analysisFields,typeFor} from './scs-analysis'
+import {hash} from './analysis-contract'
+import {analysisFields,contractEvidenceMatchesClient,typeFor} from './scs-analysis'
 const fact={value:'2.9',confidence:'high' as const,page:1,quote:'2.9%',document_id:'doc',source:'contract.pdf',run_id:'run',provider:'records' as const,model:'model',staff_review_required:true}
 const doc={documentId:'doc',sha256:'a'.repeat(64),fields:{escalator_rate:fact},classification:['ppa'],readableAgreement:true,clientMatch:'matched' as const,coverage:{complete:true as const,totalPages:9,processedPages:9},runs:['run']}
 const review=(accepted:string,action='accepted')=>({action,accepted,source_evidence:fact})
@@ -90,4 +91,42 @@ describe('PF evidence field mapping',()=>{
     expect.objectContaining({key:'amount_due',value:'166.53'}),
   ]))
  })
+ it('lands a Sunlight loan on the finance tile keys',()=>{
+  const loan={...doc,classification:['loan'],fields:{
+    agreement_type:{...fact,value:'loan'},
+    installer:{...fact,value:"Caballero's Electric LLC"},
+    lender_servicer:{...fact,value:'Sunlight Financial'},
+    term_years:{...fact,value:'25'},
+    payment_term_months:{...fact,value:'300'},
+    remaining_balance:{...fact,value:'55158.18'},
+    monthly_solar_payment:{...fact,value:'374.94'},
+  }}
+  const hint={sourceDocumentType:'loan_or_til',sourceFileName:'Documents_for_your_Docusign_Signature.pdf'}
+  expect(typeFor(loan,hint)).toBe('finance_agreement')
+  const fields=analysisFields(loan,hint)
+  expect(fields).toEqual(expect.arrayContaining([
+    expect.objectContaining({key:'installer_name',value:"Caballero's Electric LLC"}),
+    expect.objectContaining({key:'lender_name',value:'Sunlight Financial'}),
+    expect.objectContaining({key:'term_years',value:'25'}),
+    expect.objectContaining({key:'term_months',value:'300'}),
+    expect.objectContaining({key:'remaining_balance',value:'55158.18'}),
+    expect.objectContaining({key:'monthly_payment',value:'374.94'}),
+  ]))
+ })
+})
+
+describe('contract evidence after a street-spelling correction',()=>{
+  const recorded={first_name:'daryl',last_name:'schelin',address_line1:'9796 alemnia st',city:'las vegas',state:'nv',zip:'89178'}
+  const source={identity_fingerprint:hash(recorded),source_identity:recorded}
+  const corrected={firstName:'Daryl',lastName:'Schelin',line1:'9796 Almenia St',city:'Las Vegas',state:'NV',postalCode:'89178'}
+  it('still applies the reading to the same house',()=>{
+    expect(contractEvidenceMatchesClient(source,corrected)).toBe(true)
+    expect(contractEvidenceMatchesClient(source,{...corrected,line1:'9796 Alemnia St'})).toBe(true)
+  })
+  it('refuses a different person or a different house',()=>{
+    expect(contractEvidenceMatchesClient(source,{...corrected,lastName:'Other'})).toBe(false)
+    expect(contractEvidenceMatchesClient(source,{...corrected,line1:'9797 Almenia St'})).toBe(false)
+    expect(contractEvidenceMatchesClient(source,{...corrected,postalCode:'89117'})).toBe(false)
+    expect(contractEvidenceMatchesClient({identity_fingerprint:'nope'},corrected)).toBe(false)
+  })
 })
