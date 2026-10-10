@@ -7,7 +7,11 @@ import {
   PREVIEW_BANNER,
   applyLeadAction,
   applyOutcome,
+  attemptAlreadyCounted,
   autoTextDetail,
+  deriveFollowUp,
+  followUpOf,
+  isExhausted,
   callNeedsConfirm,
   canCall,
   canSendIntake,
@@ -168,36 +172,102 @@ describe('call center extras', () => {
     expect(applyOutcome(byName(leads, 'Lila Chen'), 'not_interested', day).trail.at(-1)?.label).toBe('Not interested')
   })
 
-  it('retries at 1, then 3, then 7 days and stops after 4 tries', () => {
+  // The fixed 1/3/7-day retry was replaced by the six-step cadence (cadence.ts).
+  it('follows the no-answer cadence in the lead zone and stops after 7 tries', () => {
     let lead = byName(seedLeads(), 'Mara Ellison')
+    // Tue Sep 29 2026, 10:00 PDT.
     let at = '2026-09-29T17:00:00.000Z'
     lead = applyOutcome(lead, 'no_answer', at)
     expect(lead.status).toBe('retry')
     expect(lead.tries).toBe(1)
-    expect(lead.nextAttemptAt).toBe('2026-09-30T17:00:00.000Z')
-    expect(triesLine(lead)).toBe('Tries 1 of 4')
-    expect(nextTryLine(lead)).toBe('Next try Sep 30, 10:00 AM')
+    expect(lead.nextAttemptAt).toBe('2026-09-29T17:05:00.000Z')
+    expect(lead.followUp).toBe('cadence')
+    expect(triesLine(lead)).toBe('Tries 1 of 7')
+    expect(nextTryLine(lead)).toBe('Next try Sep 29, 10:05 AM')
     expect(lead.trail.some((event) => event.detail === autoTextDetail('en'))).toBe(true)
     expect(visibleLeads([lead], 'retry', 'all', '').map((row) => row.id)).toEqual([lead.id])
 
-    at = lead.nextAttemptAt ?? at
-    lead = applyOutcome(lead, 'busy', at)
-    expect(lead.tries).toBe(2)
-    expect(lead.nextAttemptAt).toBe('2026-10-03T17:00:00.000Z')
-    expect(lead.trail.filter((event) => event.detail === autoTextDetail('en'))).toHaveLength(1)
-
-    at = lead.nextAttemptAt ?? at
-    lead = applyOutcome(lead, 'voicemail', at)
-    expect(lead.tries).toBe(3)
-    expect(lead.nextAttemptAt).toBe('2026-10-10T17:00:00.000Z')
+    const expected = [
+      ['busy', '2026-09-30T17:00:00.000Z'], // tomorrow 10:00
+      ['voicemail', '2026-10-03T00:00:00.000Z'], // Fri Oct 2 17:00 (day after tomorrow from Wed)
+      ['no_answer', '2026-10-05T00:00:00.000Z'], // +2 days, Sun 17:00
+      ['busy', '2026-10-08T00:00:00.000Z'], // +3 days
+      ['voicemail', '2026-10-11T00:00:00.000Z'], // +3 days
+    ] as const
+    for (const [outcome, next] of expected) {
+      at = lead.nextAttemptAt ?? at
+      lead = applyOutcome(lead, outcome, at)
+      expect(lead.nextAttemptAt).toBe(next)
+    }
+    expect(lead.tries).toBe(6)
+    expect(lead.trail.filter((event) => event.detail === autoTextDetail('en'))).toHaveLength(2)
 
     at = lead.nextAttemptAt ?? at
     lead = applyOutcome(lead, 'no_answer', at)
-    expect(lead.tries).toBe(4)
+    expect(lead.tries).toBe(7)
     expect(lead.nextAttemptAt).toBeNull()
+    expect(lead.status).toBe('waiting')
     expect(nextTryLine(lead)).toBe('No further tries')
-    expect(lead.trail.filter((event) => event.detail === autoTextDetail('en'))).toHaveLength(2)
+    expect(isExhausted(lead)).toBe(true)
+    expect(lead.trail.filter((event) => event.detail === autoTextDetail('en'))).toHaveLength(3)
     expect(applyOutcome(lead, 'voicemail', '2026-11-01T17:00:00.000Z')).toBe(lead)
+    // Closing it still works.
+    expect(applyOutcome(lead, 'not_interested', '2026-11-01T17:00:00.000Z').trail.at(-1)?.label).toBe('Not interested')
+  })
+
+  it('does not count a call twice when the carrier already counted it', () => {
+    const lead = byName(seedLeads(), 'Mara Ellison')
+    const carrier: CallLead = {
+      ...lead,
+      contacted: true,
+      tries: 1,
+      status: 'retry',
+      nextAttemptAt: '2026-09-29T17:05:00.000Z',
+      trail: [
+        ...lead.trail,
+        { kind: 'call', at: '2026-09-29T17:00:00.000Z', label: 'Call', detail: 'No answer', followUp: 'cadence' },
+      ],
+    }
+    expect(attemptAlreadyCounted(carrier)).toBe(true)
+    const after = applyOutcome(carrier, 'no_answer', '2026-09-29T17:01:00.000Z')
+    expect(after.tries).toBe(1)
+    expect(after.nextAttemptAt).toBe('2026-09-29T17:05:00.000Z')
+    expect(after.trail.at(-2)).toMatchObject({ kind: 'outcome', label: 'No answer', detail: 'Next try Sep 29, 10:05 AM' })
+    expect(after.trail.at(-2)?.followUp).toBeUndefined()
+    // The rep's result is now the newest: a second result counts again.
+    expect(attemptAlreadyCounted(after)).toBe(false)
+    expect(applyOutcome(after, 'busy', '2026-09-29T17:02:00.000Z').tries).toBe(2)
+  })
+
+  it('stores an agreed callback time and tells it apart from a cadence retry', () => {
+    const lead = byName(seedLeads(), 'Owen Briggs') // America/Phoenix
+    const at = '2026-10-09T17:00:00.000Z'
+    const cb = applyOutcome(lead, 'callback', at, 'You', { callbackAt: '2026-10-10T21:30:00.000Z' })
+    expect(cb.nextAttemptAt).toBe('2026-10-10T21:30:00.000Z')
+    expect(cb.followUp).toBe('callback')
+    expect(followUpOf(cb)).toBe('callback')
+    expect(cb.tries).toBe(0)
+    expect(cb.contacted).toBe(true)
+    expect(cb.trail.at(-1)).toMatchObject({ kind: 'outcome', label: 'Callback', detail: 'Call back Sat, Oct 10, 2:30 pm their time', followUp: 'callback' })
+    expect(nextTryLine(cb)).toBe('Call back Oct 10, 2:30 PM')
+    // Past or too far out: not saved.
+    expect(applyOutcome(lead, 'callback', at, 'You', { callbackAt: '2026-10-09T16:00:00.000Z' })).toBe(lead)
+    expect(applyOutcome(lead, 'callback', at, 'You', { callbackAt: '2027-01-01T17:00:00.000Z' })).toBe(lead)
+    // A later booked result clears it.
+    const booked = applyOutcome(cb, 'appointment', '2026-10-10T21:35:00.000Z')
+    expect(booked.nextAttemptAt).toBeNull()
+    expect(followUpOf(booked)).toBeNull()
+  })
+
+  it('reads the follow-up kind from the trail, with a fallback for old rows', () => {
+    expect(deriveFollowUp([], 0, null)).toBeNull()
+    expect(deriveFollowUp([], 2, '2026-10-10T17:00:00.000Z')).toBe('cadence')
+    expect(deriveFollowUp([], 0, '2026-10-10T17:00:00.000Z')).toBe('callback')
+    const marked = [
+      { kind: 'outcome' as const, at: '2026-10-09T17:00:00.000Z', label: 'Callback', detail: '', followUp: 'callback' as const },
+      { kind: 'note' as const, at: '2026-10-09T17:01:00.000Z', label: 'Note', detail: 'hi' },
+    ]
+    expect(deriveFollowUp(marked, 3, '2026-10-10T17:00:00.000Z')).toBe('callback')
   })
 
   it('locks a lead to one rep and skips leads that someone else holds', () => {

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { CallCenter, type CallCenterPhone } from '@/components/call-center/call-center'
+import { leadIdParam } from '@/lib/call-center/lead-link'
 import { loadCallCenterDesk } from '@/lib/call-center/load-leads'
 import { can, requireUser } from '@/lib/rbac'
 import { getTwilioStatus, getVoiceSetup, listMissedCalls } from '@/lib/telephony/actions'
@@ -9,6 +10,7 @@ import { loadPhoneSetup } from '@/lib/telephony/ui/phone-setup-data'
 export const metadata: Metadata = { title: 'Call Center' }
 export const dynamic = 'force-dynamic'
 
+/** `?missed=` is a VoiceCall cuid. */
 function one(value: string | string[] | undefined): string | null {
   const v = Array.isArray(value) ? value[0] : value
   return v && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : null
@@ -38,12 +40,16 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
     voiceNote: voice.ready ? null : voice.reason,
     missed: Array.isArray(missed) ? missed : [],
     openMissedId: one(params.missed),
-    openLeadId: one(params.lead),
+    // Lead ids may be Meta ids ('meta:<org>:<leadgen>').
+    openLeadId: leadIdParam(params.lead),
     canOverrideHours: can(user, 'telephony:manage'),
     setup: setup
       ? { vm: setup, status: status && 'account' in status ? (status as TwilioStatusVM) : null }
       : null,
   }
 
-  return <CallCenter initialLeads={desk.leads} viewerId={desk.viewerId} phone={phone} />
+  // The Today ranking depends on the clock; the client starts from this one.
+  const renderedAt = new Date().toISOString()
+
+  return <CallCenter initialLeads={desk.leads} viewerId={desk.viewerId} phone={phone} renderedAt={renderedAt} />
 }

@@ -2,16 +2,10 @@
 
 import Link from 'next/link'
 import { Phone, PhoneOff } from 'lucide-react'
+// Meta lead ids carry colons ('lead:meta:<org>:<leadgen>'), so the target is
+// parsed whole by the desk's own rule rather than split on the first ':'.
+import { targetHref } from '@/lib/call-center/lead-link'
 import { useVoice } from './voice-provider'
-
-/** 'client:<id>' → the client's page; 'lead:<id>' → that lead on the Call Center desk. */
-function targetHref(target: string): string | null {
-  const [kind, id] = target.split(':', 2)
-  if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) return null
-  if (kind === 'client') return `/clients/${id}`
-  if (kind === 'lead') return `/call-center?lead=${id}`
-  return null
-}
 
 /**
  * The ringing banner. It shows only what the server put on the leg

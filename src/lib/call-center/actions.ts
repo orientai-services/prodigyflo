@@ -28,9 +28,10 @@ export async function skipCallCenterLead(leadId: string): Promise<DeskResult> {
   return skipCallCenterLeadFor(user.organizationId, user, leadId)
 }
 
-export async function saveCallCenterOutcome(leadId: string, outcome: DeskOutcome): Promise<DeskResult> {
+/** `callbackAt` (ISO) only with 'callback'; the server checks it is ahead and within 60 days. */
+export async function saveCallCenterOutcome(leadId: string, outcome: DeskOutcome, callbackAt?: string | null): Promise<DeskResult> {
   const user = await actor()
-  return recordCallCenterOutcomeFor(user.organizationId, user, leadId, outcome)
+  return recordCallCenterOutcomeFor(user.organizationId, user, leadId, outcome, new Date(), { callbackAt: callbackAt ?? null })
 }
 
 export async function saveCallCenterNote(leadId: string, text: string): Promise<DeskResult> {
