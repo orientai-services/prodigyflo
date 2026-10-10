@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { db } from '@/lib/db'
 import { encryptSecret } from '@/lib/crypto'
-import { telephonyCredentials } from '@/lib/telephony'
+import { telephonyCredentials, telephonyCredentialsDetailed } from '@/lib/telephony'
 
 /**
  * Where an account's carrier credentials come from.
@@ -22,7 +22,12 @@ const envBackup = {
 }
 
 /** Stores twilio-sms credentials in the vault for one org. */
-async function storeCredentials(organizationId: string, accountSid: string, authToken: string) {
+async function storeCredentials(
+  organizationId: string,
+  accountSid: string | null,
+  authToken: string | null,
+  key?: string,
+) {
   const connector = await db.connector.upsert({
     where: { organizationId_kind: { organizationId, kind: 'TWILIO_SMS' } },
     update: { isEnabled: true },
@@ -30,7 +35,8 @@ async function storeCredentials(organizationId: string, accountSid: string, auth
     select: { id: true },
   })
   for (const [fieldKey, value] of Object.entries({ accountSid, authToken })) {
-    const enc = encryptSecret(value)
+    if (value === null) continue
+    const enc = encryptSecret(value, key)
     await db.connectorCredential.upsert({
       where: { connectorId_fieldKey: { connectorId: connector.id, fieldKey } },
       update: { ...enc },
@@ -101,6 +107,39 @@ describe('carrier credential resolution', () => {
     expect(await telephonyCredentials(standaloneId)).toEqual({
       accountSid: 'ACenv',
       authToken: 'env-token',
+    })
+  })
+})
+
+describe('one source, or none (audit 5j)', () => {
+  afterEach(async () => {
+    await db.connectorCredential.deleteMany({ where: { organizationId: { in: [childId, standaloneId, agencyId] } } })
+  })
+
+  it('a vault row that cannot be decrypted refuses instead of falling back to env', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACenv'
+    process.env.TWILIO_AUTH_TOKEN = 'env-token'
+    await storeCredentials(standaloneId, 'ACsolo', 'solo-token', 'a-different-vault-key')
+    expect(await telephonyCredentialsDetailed(standaloneId)).toEqual({ creds: null, reason: 'unreadable' })
+    expect(await telephonyCredentials(standaloneId)).toBeNull()
+  })
+
+  it('a vault row with only a SID refuses — it never pairs a vault SID with the env token', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACenv'
+    process.env.TWILIO_AUTH_TOKEN = 'env-token'
+    await storeCredentials(standaloneId, 'ACsolo', null)
+    expect(await telephonyCredentialsDetailed(standaloneId)).toEqual({ creds: null, reason: 'unreadable' })
+  })
+
+  it('says where the credentials came from', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACenv'
+    process.env.TWILIO_AUTH_TOKEN = 'env-token'
+    expect(await telephonyCredentialsDetailed(standaloneId)).toEqual({ creds: { accountSid: 'ACenv', authToken: 'env-token' }, source: 'platform' })
+    await storeCredentials(agencyId, 'ACagency', 'agency-token')
+    expect(await telephonyCredentialsDetailed(childId)).toEqual({
+      creds: { accountSid: 'ACagency', authToken: 'agency-token' },
+      source: 'vault',
+      vaultOrgId: agencyId,
     })
   })
 })

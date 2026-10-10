@@ -18,6 +18,9 @@ import { dateTime, relativeTime } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/empty-state'
+import { db } from '@/lib/db'
+import { smsStatusLabel } from '@/lib/telephony/carrier-errors'
+import { RecordingPlayer } from '@/components/voice/recording-player'
 
 const KIND_ICON: Record<TimelineKind, React.ComponentType<{ className?: string }>> = {
   stage: ArrowRightLeft,
@@ -39,6 +42,30 @@ export async function TimelineTab({ clientId, limit = 25 }: { clientId: string; 
 
   const { events, hasMore } = await buildTimeline(user, clientId, { limit })
 
+  // Phone details for the communication rows on this page: the honest SMS
+  // label, and the recording (played through the app's proxy by VoiceCall id).
+  const commIds = events.filter((e) => e.kind === 'communication').map((e) => e.id.replace(/^comm-/, ''))
+  const [comms, voiceCalls] = commIds.length
+    ? await Promise.all([
+        db.communication.findMany({
+          where: { id: { in: commIds }, clientId },
+          select: { id: true, channel: true, status: true, message: { select: { failureCode: true } } },
+        }),
+        db.voiceCall.findMany({
+          where: { communicationId: { in: commIds } },
+          select: {
+            id: true,
+            communicationId: true,
+            recordingSid: true,
+            recordingDurationSeconds: true,
+            disclosureServedAt: true,
+          },
+        }),
+      ])
+    : [[], []]
+  const commById = new Map(comms.map((c) => [c.id, c]))
+  const voiceByComm = new Map(voiceCalls.map((v) => [v.communicationId, v]))
+
   if (events.length === 0) {
     return (
       <EmptyState
@@ -54,6 +81,11 @@ export async function TimelineTab({ clientId, limit = 25 }: { clientId: string; 
       <ol className="relative space-y-0">
         {events.map((event, i) => {
           const Icon = KIND_ICON[event.kind]
+          const commId = event.kind === 'communication' ? event.id.replace(/^comm-/, '') : null
+          const comm = commId ? commById.get(commId) : undefined
+          const voiceCall = commId ? voiceByComm.get(commId) : undefined
+          const badge =
+            comm?.channel === 'SMS' ? smsStatusLabel(comm.status, comm.message?.failureCode) : event.badge
           return (
             <li key={event.id} className="relative flex gap-3 pb-5">
               {i < events.length - 1 && (
@@ -65,13 +97,23 @@ export async function TimelineTab({ clientId, limit = 25 }: { clientId: string; 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <p className="text-sm font-medium">{event.title}</p>
-                  {event.badge && <Badge variant="outline">{event.badge}</Badge>}
+                  {badge && <Badge variant="outline">{badge}</Badge>}
                   {event.isInternal && <Badge variant="ghost">Internal</Badge>}
                 </div>
                 {event.description && (
                   <p className="text-muted-foreground mt-0.5 line-clamp-3 text-xs whitespace-pre-wrap">
                     {event.description}
                   </p>
+                )}
+                {voiceCall?.recordingSid && (
+                  <RecordingPlayer
+                    src={`/api/voice/recordings/${voiceCall.id}`}
+                    seconds={voiceCall.recordingDurationSeconds}
+                    className="mt-1.5 max-w-md"
+                  />
+                )}
+                {voiceCall?.disclosureServedAt && (
+                  <p className="text-muted-foreground mt-0.5 text-xs">Notice sent to the call</p>
                 )}
                 <p className="text-muted-foreground mt-0.5 text-xs">
                   {event.actor ? `${event.actor} · ` : ''}

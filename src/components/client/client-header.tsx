@@ -7,6 +7,8 @@ import { SlaIndicator } from '@/components/sla-indicator'
 import { Badge } from '@/components/ui/badge'
 import { currency, fullName, humanize, relativeTime } from '@/lib/format'
 import { StageAdvance, type StageOption } from '@/app/(app)/clients/[clientId]/stage-advance'
+import { CallButton } from '@/components/voice/call-button'
+import { toE164 } from '@/lib/telephony/provider'
 
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   ACTIVE: 'secondary',
@@ -89,9 +91,20 @@ export async function ClientHeader({ clientId }: { clientId: string }) {
           </div>
         </div>
 
-        {can(user, 'clients:advance_stage') && (
-          <StageAdvance clientId={details.id} currentStageName={details.currentStage.name} options={options} />
-        )}
+        <div className="flex flex-wrap items-start gap-2">
+          {/* Checked by the server before every dial (consent, do-not-call, their local hours). */}
+          {can(user, 'communications:send') && (
+            <CallButton
+              target={{ kind: 'client', id: details.id }}
+              tel={toE164(details.phone)}
+              who={fullName(details)}
+              canOverrideHours={can(user, 'telephony:manage')}
+            />
+          )}
+          {can(user, 'clients:advance_stage') && (
+            <StageAdvance clientId={details.id} currentStageName={details.currentStage.name} options={options} />
+          )}
+        </div>
       </div>
     </div>
   )

@@ -1,6 +1,9 @@
 import type { PhoneNumberKind } from '@prisma/client'
 import type {
   AvailableNumber,
+  NumberWebhooks,
+  OwnedNumber,
+  OwnedNumbersResult,
   PurchaseInput,
   PurchaseResult,
   ReleaseResult,
@@ -85,6 +88,22 @@ export function mockSearch(input: SearchNumbersInput): AvailableNumber[] {
   return out
 }
 
+/**
+ * The numbers the mock carrier "owns", for the import and drift flows. Purely
+ * in-memory and fictional (555-01xx): purchase() adds to it, release() removes,
+ * and tests seed it with setMockOwnedNumbers().
+ */
+const owned = new Map<string, OwnedNumber>()
+
+export function setMockOwnedNumbers(numbers: OwnedNumber[]): void {
+  owned.clear()
+  for (const n of numbers) owned.set(n.sid, { ...n, capabilities: { ...n.capabilities } })
+}
+
+export function getMockOwnedNumbers(): OwnedNumber[] {
+  return [...owned.values()].map((n) => ({ ...n, capabilities: { ...n.capabilities } }))
+}
+
 export class MockTelephonyProvider implements TelephonyProvider {
   readonly name = 'mock'
   readonly isMock = true
@@ -93,18 +112,48 @@ export class MockTelephonyProvider implements TelephonyProvider {
     return mockSearch(input)
   }
 
+  async listOwnedNumbers(): Promise<OwnedNumbersResult> {
+    return { ok: true, numbers: getMockOwnedNumbers() }
+  }
+
+  async updateWebhooks(providerSid: string, webhooks: NumberWebhooks): Promise<ReleaseResult> {
+    const row = owned.get(providerSid)
+    if (!row) return { ok: false, error: 'The mock carrier has no number with that SID.' }
+    owned.set(providerSid, {
+      ...row,
+      voiceUrl: webhooks.voiceUrl,
+      statusCallback: webhooks.voiceStatusUrl,
+      smsUrl: webhooks.smsUrl,
+      voiceFallbackUrl: webhooks.voiceFallbackUrl ?? null,
+    })
+    return { ok: true }
+  }
+
   async purchase(input: PurchaseInput): Promise<PurchaseResult> {
     const areaCode = /^\+1(\d{3})/.exec(input.e164)?.[1] ?? null
     const kind: PhoneNumberKind =
       areaCode && TOLL_FREE_PREFIXES.includes(areaCode) ? 'TOLL_FREE' : 'LOCAL'
     const place = areaCode ? describe(areaCode) : { region: null, locality: null }
+    // Shaped like a Twilio PN SID so nothing downstream has to special-case it.
+    const providerSid = `PNMOCK${input.e164.replace(/\D/g, '')}`
+    const capabilities = { sms: true, mms: kind === 'LOCAL', voice: true }
+    owned.set(providerSid, {
+      sid: providerSid,
+      e164: input.e164,
+      friendlyName: input.friendlyName,
+      capabilities,
+      voiceUrl: input.webhooks.voiceUrl,
+      smsUrl: input.webhooks.smsUrl,
+      statusCallback: input.webhooks.voiceStatusUrl,
+      voiceFallbackUrl: input.webhooks.voiceFallbackUrl ?? null,
+      dateCreated: null,
+    })
     return {
       ok: true,
       number: {
         e164: input.e164,
-        // Shaped like a Twilio PN SID so nothing downstream has to special-case it.
-        providerSid: `PNMOCK${input.e164.replace(/\D/g, '')}`,
-        capabilities: { sms: true, mms: kind === 'LOCAL', voice: true },
+        providerSid,
+        capabilities,
         areaCode,
         region: place.region,
         locality: place.locality,
@@ -112,7 +161,8 @@ export class MockTelephonyProvider implements TelephonyProvider {
     }
   }
 
-  async release(): Promise<ReleaseResult> {
+  async release(providerSid?: string): Promise<ReleaseResult> {
+    if (providerSid) owned.delete(providerSid)
     return { ok: true }
   }
 }

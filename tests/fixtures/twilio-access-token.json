@@ -1,0 +1,36 @@
+{
+  "note": "Decoded from a token minted offline by twilio-node AccessToken + VoiceGrant (scripts/dev/make-access-token-fixture.mjs). Fake key and secret.",
+  "twilioVersion": "5.13.1",
+  "input": {
+    "accountSid": "AC00000000000000000000000000000000",
+    "apiKeySid": "SK00000000000000000000000000000000",
+    "apiKeySecret": "fixture-secret-not-real-0123456789",
+    "appSid": "AP00000000000000000000000000000000",
+    "identity": "pf_orgfixture_userfixture",
+    "ttl": 3600,
+    "nowSeconds": 1791460800
+  },
+  "header": {
+    "alg": "HS256",
+    "typ": "JWT",
+    "cty": "twilio-fpa;v=1"
+  },
+  "payload": {
+    "jti": "SK00000000000000000000000000000000-1791460800",
+    "grants": {
+      "identity": "pf_orgfixture_userfixture",
+      "voice": {
+        "incoming": {
+          "allow": true
+        },
+        "outgoing": {
+          "application_sid": "AP00000000000000000000000000000000"
+        }
+      }
+    },
+    "iat": 1791460800,
+    "exp": 1791464400,
+    "iss": "SK00000000000000000000000000000000",
+    "sub": "AC00000000000000000000000000000000"
+  }
+}

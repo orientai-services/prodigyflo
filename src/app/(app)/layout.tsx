@@ -6,6 +6,11 @@ import { getSessionUser, requireUser } from '@/lib/rbac'
 import { brandFor } from '@/components/brand/org-brand'
 import { navigationFor, subroutesFor } from '@/lib/navigation'
 import { AppShell } from '@/components/layout/app-shell'
+import { getVoiceSetup } from '@/lib/telephony/actions'
+import type { VoiceSetup } from '@/lib/telephony/voice-contract'
+import { VoiceProvider } from '@/components/voice/voice-provider'
+import { VoiceDock } from '@/components/voice/voice-dock'
+import { IncomingCall } from '@/components/voice/incoming-call'
 
 /**
  * Installed-app identity follows the ACTIVE account.
@@ -38,9 +43,28 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
+/**
+ * Browser calling wraps every staff page when, and only when, the server says
+ * it is ready. With VOICE_BROWSER_ENABLED off (or anything missing) the page
+ * renders exactly as before: no provider, no dock, no SDK download. A failed
+ * readiness check is treated as "not ready", never as an error page.
+ */
+async function withVoice(children: React.ReactNode): Promise<React.ReactNode> {
+  const voice = await getVoiceSetup().catch((): VoiceSetup => ({ ready: false, reason: '' }))
+  if (!voice.ready) return children
+  return (
+    <VoiceProvider setup={voice}>
+      {children}
+      <VoiceDock />
+      <IncomingCall />
+    </VoiceProvider>
+  )
+}
+
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const user = await requireUser()
-  if (finalDeskEnabled()) return <>{children}</>
+  const body = await withVoice(children)
+  if (finalDeskEnabled()) return <>{body}</>
 
   const unreadCount = await db.notification.count({
     where: { ...await notificationScope(user), readAt: null },
@@ -62,7 +86,7 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
         avatarUrl: user.avatarUrl,
       }}
     >
-      {children}
+      {body}
     </AppShell>
   )
 }

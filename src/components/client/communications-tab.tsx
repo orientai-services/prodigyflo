@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/empty-state'
 import { getConsentDecision } from '@/lib/messaging/consent'
 import { isMockMode } from '@/lib/messaging'
+import { ZONE_WAIT_NOTE } from '@/lib/automation/engine'
 import { baseVarsForClient, pickTemplate } from '@/lib/messaging/render'
 import {
   Composer,
@@ -31,6 +32,9 @@ import {
   type ScheduledItem,
   type SequenceOption,
 } from '@/lib/automation/ui'
+import { smsStatusLabel } from '@/lib/telephony/carrier-errors'
+import { textingRegistrationApproved } from '@/lib/telephony/ui/phone-setup-data'
+import { RecordingPlayer } from '@/components/voice/recording-player'
 
 const CHANNEL_ICON: Partial<Record<CommunicationChannel, typeof Mail>> = {
   EMAIL: Mail,
@@ -219,9 +223,30 @@ export async function CommunicationsTab({ clientId }: { clientId: string }) {
       sequenceName: e.sequence.name,
       status: e.status,
       stepLabel: label,
-      stoppedReason: e.status === 'ACTIVE' ? null : e.stoppedReason,
+      // An active enrollment shows a reason only while it is parked for a time zone.
+      stoppedReason: e.status === 'ACTIVE' ? (e.stoppedReason === ZONE_WAIT_NOTE ? e.stoppedReason : null) : e.stoppedReason,
     }
   })
+
+  // Carrier recordings live on VoiceCall and play only through the app's own
+  // proxy; the Twilio media URL is never read here.
+  const callCommIds = communications.filter((c) => c.channel === 'CALL').map((c) => c.id)
+  const [voiceCalls, smsRegistered] = await Promise.all([
+    callCommIds.length
+      ? db.voiceCall.findMany({
+          where: { communicationId: { in: callCommIds } },
+          select: {
+            id: true,
+            communicationId: true,
+            recordingSid: true,
+            recordingDurationSeconds: true,
+            disclosureServedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    textingRegistrationApproved(user.organizationId),
+  ])
+  const voiceByComm = new Map(voiceCalls.map((v) => [v.communicationId, v]))
 
   const mockEmail = isMockMode('EMAIL')
   const mockSms = isMockMode('SMS')
@@ -289,9 +314,10 @@ export async function CommunicationsTab({ clientId }: { clientId: string }) {
                 const conversational = c.channel === 'EMAIL' || c.channel === 'SMS' || c.channel === 'IMESSAGE' || c.channel === 'PORTAL_MESSAGE' || c.channel === 'MESSENGER'
 
                 if (!conversational) {
+                  const voiceCall = c.channel === 'CALL' ? voiceByComm.get(c.id) : undefined
                   // Calls, notes, and in-person touches sit centred between the bubbles.
                   return (
-                    <div key={c.id} className="flex justify-center">
+                    <div key={c.id} className="flex flex-col items-center gap-1.5">
                       <div className="bg-surface-sunk/60 text-muted-foreground flex max-w-[85%] flex-wrap items-center gap-x-2 gap-y-1 rounded-full border px-3 py-1.5 text-xs">
                         <Icon className="size-3.5" />
                         <span className="font-medium">{channelLabel(c.channel)}</span>
@@ -307,8 +333,16 @@ export async function CommunicationsTab({ clientId }: { clientId: string }) {
                           </Badge>
                         )}
                         {c.body && <span className="max-w-96 truncate">{c.body}</span>}
+                        {voiceCall?.disclosureServedAt && <span>Notice sent to the call</span>}
                         <span title={dateTime(c.occurredAt)}>{relativeTime(c.occurredAt)}</span>
                       </div>
+                      {voiceCall?.recordingSid && (
+                        <RecordingPlayer
+                          src={`/api/voice/recordings/${voiceCall.id}`}
+                          seconds={voiceCall.recordingDurationSeconds}
+                          className="w-full max-w-md"
+                        />
+                      )}
                     </div>
                   )
                 }
@@ -325,7 +359,7 @@ export async function CommunicationsTab({ clientId }: { clientId: string }) {
                       >
                         {c.subject && <p className="mb-0.5 text-sm font-semibold">{c.subject}</p>}
                         {c.body && <p className="text-sm whitespace-pre-wrap">{c.body}</p>}
-                        {c.status === 'FAILED' && c.message?.failureCode && (
+                        {c.channel !== 'SMS' && c.status === 'FAILED' && c.message?.failureCode && (
                           <p className="text-destructive mt-1 text-xs">Failure: {c.message.failureCode}</p>
                         )}
                         {c.message?.optOutDetected && (
@@ -342,9 +376,9 @@ export async function CommunicationsTab({ clientId }: { clientId: string }) {
                           {channelLabel(c.channel)}
                         </span>
                         <span
-                          className={`rounded-full px-1.5 py-px text-[10px] font-medium tracking-wide uppercase ${STATUS_STYLE[c.status]}`}
+                          className={`rounded-full px-1.5 py-px text-[10px] font-medium ${c.channel === 'SMS' ? '' : 'tracking-wide uppercase'} ${STATUS_STYLE[c.status]}`}
                         >
-                          {c.status.toLowerCase()}
+                          {c.channel === 'SMS' ? smsStatusLabel(c.status, c.message?.failureCode) : c.status.toLowerCase()}
                         </span>
                         {c.templateKey && (
                           <Badge variant="outline" className="text-[10px]">
@@ -392,6 +426,7 @@ export async function CommunicationsTab({ clientId }: { clientId: string }) {
         consent={consent}
         vars={vars}
         canSend={canSend}
+        smsMayBeBlocked={!mockSms && !smsRegistered}
       />
     </div>
   )

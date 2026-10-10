@@ -9,6 +9,8 @@ import { getConsentDecision, type MessagingChannel } from './consent'
 import { renderSignature } from './signature'
 import { baseVarsForClient, renderTemplate, type TemplateVars } from './render'
 import { getEmailProvider, getSmsProvider, isMockMode } from './index'
+import { decideOutbound, outboundPurpose } from '@/lib/telephony/compliance'
+import { toE164 } from '@/lib/telephony/provider'
 
 /**
  * The single entry point for outbound email/SMS. Order is deliberate:
@@ -28,11 +30,17 @@ export type SendInput = {
   /** Extra variable sources for reminder sends. Both are scope-checked to the client. */
   context?: { appointmentId?: string; documentId?: string }
   followUpTask?: { dueAt: Date; title?: string }
+  /** Sent by a sequence or a scheduled job: always a marketing text for the calling rules. */
+  automated?: boolean
 }
 
 export type SendOutcome =
   | { ok: true; communicationId: string; status: 'SENT' | 'FAILED'; error?: string; mock: boolean }
-  | { ok: false; code: string; error: string }
+  /**
+   * retryAt (ISO): OUTSIDE_HOURS only — when the window opens again, so automation defers instead of failing.
+   * held: SUPPRESSED by a possible opt-out an admin hasn't reviewed yet — automation waits instead of failing.
+   */
+  | { ok: false; code: string; error: string; retryAt?: string; held?: boolean }
 
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@')
@@ -162,6 +170,59 @@ ${signature}`
         input.channel === 'EMAIL'
           ? 'The client has no email address on file.'
           : 'The client has no phone number on file.',
+    }
+  }
+
+  // Texts also run the one outbound decision: do-not-contact list, STOP,
+  // calling hours in the client's own time zone (with a 30-minute reply
+  // window). Consent stays above, in getConsentDecision.
+  if (input.channel === 'SMS') {
+    const where = await db.client.findUniqueOrThrow({
+      where: { id: client.id },
+      select: {
+        timeZone: true,
+        currentStage: { select: { name: true, category: true } },
+        addresses: { where: { isPrimary: true }, select: { state: true }, take: 1 },
+      },
+    })
+    const purpose = input.automated
+      ? 'marketing'
+      : outboundPurpose(
+          {
+            deletedAt: client.deletedAt,
+            status: client.status,
+            stageCategory: where.currentStage.category,
+            stageName: where.currentStage.name,
+            stageEnteredAt: client.stageEnteredAt,
+          },
+          new Date(),
+        ).purpose
+    const state = (client.leadAttribution as { state?: unknown } | null)?.state
+    const check = await decideOutbound(
+      {
+        organizationId: client.organizationId,
+        channel: 'SMS',
+        purpose,
+        phone: client.phone || null,
+        clientId: client.id,
+        automated: Boolean(input.automated),
+        zoneHints: {
+          leadZone: where.timeZone,
+          states: [typeof state === 'string' ? state : null, where.addresses[0]?.state ?? null],
+          e164: client.phone ? toE164(client.phone) : null,
+          outOfArea: client.outOfArea,
+        },
+      },
+      { actor: user },
+    )
+    if (!check.allowed) {
+      return {
+        ok: false,
+        code: check.code,
+        error: check.reason,
+        ...(check.retryAt ? { retryAt: check.retryAt.toISOString() } : {}),
+        ...(check.held ? { held: true } : {}),
+      }
     }
   }
 

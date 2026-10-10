@@ -57,6 +57,80 @@ export function publicWebhookUrl(request: Request, appOrigin: string): string {
   return `${origin}${url.pathname}${url.search}`
 }
 
+/**
+ * Every URL Twilio may have signed for this request, canonical host first.
+ *
+ * On Vercel the app can see a different host from the one Twilio called (the
+ * apex 308s app paths to www, previews have their own hosts), so the check
+ * tries APP_URL's origin first and then the forwarded host — but ONLY when that
+ * host is APP_URL's own or is on the explicit allowlist. An arbitrary
+ * x-forwarded-host is never trusted: anyone can send that header.
+ */
+export function candidateWebhookUrls(
+  request: Request,
+  appOrigin: string,
+  extraHosts: readonly string[] = [],
+): string[] {
+  const url = new URL(request.url)
+  const tail = `${url.pathname}${url.search}`
+  const origin = appOrigin.replace(/\/+$/, '')
+  const out = [`${origin}${tail}`]
+
+  let appHost = ''
+  try {
+    appHost = new URL(origin).host.toLowerCase()
+  } catch {
+    // An unparseable APP_URL leaves only the canonical candidate above.
+  }
+  const allowed = new Set([appHost, ...extraHosts.map((h) => h.trim().toLowerCase()).filter(Boolean)])
+  const forwarded = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim().toLowerCase()
+  if (forwarded && allowed.has(forwarded)) {
+    const candidate = `https://${forwarded}${tail}`
+    if (!out.includes(candidate)) out.push(candidate)
+  }
+  return out
+}
+
+/** True when the signature matches ANY candidate URL. Each compare is constant-time. */
+export function validateTwilioSignatureAny(input: {
+  authToken: string | undefined | null
+  urls: readonly string[]
+  params: Record<string, string>
+  header: string | null | undefined
+}): boolean {
+  let ok = false
+  // Check every candidate rather than stopping at the first hit, so the time
+  // taken does not reveal which URL matched.
+  for (const url of input.urls) {
+    if (validateTwilioSignature({ authToken: input.authToken, url, params: input.params, header: input.header })) {
+      ok = true
+    }
+  }
+  return ok
+}
+
+/** Comma list from TELEPHONY_WEBHOOK_HOSTS: extra hosts accepted for signatures. */
+export function webhookHostAllowlist(env: Record<string, string | undefined> = process.env): string[] {
+  return (env.TELEPHONY_WEBHOOK_HOSTS ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+/**
+ * Whether the unsigned-webhook development bypass is honoured. All three must
+ * hold: not a production build, not Vercel production, and the mock carrier.
+ * In production the flag is ignored — a public endpoint that trusts anyone
+ * because one variable was set by mistake is how these get abused.
+ */
+export function allowUnsignedWebhooks(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.TELEPHONY_ALLOW_UNSIGNED_WEBHOOKS !== 'true') return false
+  if (env.NODE_ENV === 'production') return false
+  if (env.VERCEL_ENV === 'production') return false
+  const provider = (env.TELEPHONY_PROVIDER ?? 'mock').trim().toLowerCase() || 'mock'
+  return provider === 'mock'
+}
+
 /** Flattens a posted form body into the plain map the signature is computed over. */
 export function formToParams(form: FormData): Record<string, string> {
   const out: Record<string, string> = {}

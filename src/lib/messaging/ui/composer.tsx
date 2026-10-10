@@ -27,6 +27,16 @@ export type ConsentInfo = { allowed: boolean; reason?: string }
 
 type Channel = 'EMAIL' | 'SMS'
 
+/** Server refusals that name a phone rule; shown in the composer as returned, not only in a toast. */
+const PHONE_RULE_CODES = new Set(['OUTSIDE_HOURS', 'SUPPRESSED', 'OPTED_OUT', 'UNKNOWN_TIMEZONE', 'CHECK_FAILED'])
+
+/** "SENT" for a text means the carrier accepted it, not that it arrived. */
+function sentToast(channel: Channel, mock: boolean, prefix = ''): string {
+  const what = channel === 'EMAIL' ? `${prefix}email sent` : `${prefix}text accepted by carrier`
+  const line = what.charAt(0).toUpperCase() + what.slice(1)
+  return `${line}${mock ? ' (mock)' : ''}`
+}
+
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-md border px-2 text-sm outline-none focus-visible:ring-3 disabled:opacity-50'
 
@@ -49,12 +59,15 @@ export function Composer({
   consent,
   vars,
   canSend,
+  smsMayBeBlocked = false,
 }: {
   clientId: string
   templates: ComposerTemplate[]
   consent: Record<Channel, ConsentInfo>
   vars: TemplateVars
   canSend: boolean
+  /** The account's texting registration (A2P) isn't known to be approved. Warns; never pre-blocks. */
+  smsMayBeBlocked?: boolean
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -66,6 +79,7 @@ export function Composer({
   const [dueAt, setDueAt] = useState(defaultDue)
   const [sendLater, setSendLater] = useState(false)
   const [sendAt, setSendAt] = useState(defaultSendAt)
+  const [ruleBlock, setRuleBlock] = useState<string | null>(null)
 
   const channelTemplates = templates.filter((t) => t.channel === channel)
   const template = channelTemplates.find((t) => t.id === templateId) ?? null
@@ -91,6 +105,7 @@ export function Composer({
   }
 
   const send = () => {
+    setRuleBlock(null)
     startTransition(async () => {
       if (sendLater) {
         if (new Date(sendAt).getTime() < Date.now() + 60_000) {
@@ -121,13 +136,14 @@ export function Composer({
       })
       if (result.ok) {
         if (result.status === 'SENT') {
-          toast.success(`${channel === 'EMAIL' ? 'Email' : 'SMS'} sent${result.mock ? ' (mock)' : ''}`)
+          toast.success(sentToast(channel, result.mock))
         } else {
           toast.error(`Send failed: ${result.error ?? 'provider error'}`)
         }
         reset()
         router.refresh()
       } else {
+        if (PHONE_RULE_CODES.has(result.code)) setRuleBlock(result.error)
         toast.error(result.error)
       }
     })
@@ -176,6 +192,20 @@ export function Composer({
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>{consent[channel].reason ?? 'Consent is missing for this channel.'}</span>
         </div>
+      )}
+
+      {ruleBlock && channel === 'SMS' && (
+        <div className="text-destructive bg-destructive/10 flex items-start gap-2 rounded-md p-2.5 text-xs" role="alert">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{ruleBlock}</span>
+        </div>
+      )}
+
+      {smsMayBeBlocked && channel === 'SMS' && !blocked && (
+        <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          Texts may be blocked until texting registration is approved.
+        </p>
       )}
 
       {!template && (
@@ -300,7 +330,7 @@ export function ReminderSendButtons({
     const result = await sendMessageAction({ clientId, channel, templateId, context: item.context })
     setPendingKey(null)
     if (result.ok && result.status === 'SENT') {
-      toast.success(`Reminder ${channel === 'EMAIL' ? 'email' : 'SMS'} sent${result.mock ? ' (mock)' : ''}`)
+      toast.success(sentToast(channel, result.mock, 'reminder '))
       router.refresh()
     } else {
       toast.error(result.ok ? `Send failed: ${result.error ?? 'provider error'}` : result.error)

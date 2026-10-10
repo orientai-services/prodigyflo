@@ -379,6 +379,7 @@ model Organization {
   walletEntries        WalletEntry[]
   callCenterLeads        CallCenterLead[]
   callCenterSuppressions CallCenterSuppression[]
+  voiceCalls             VoiceCall[]
 
   @@index([parentOrganizationId])
 }
@@ -705,6 +706,9 @@ model Client {
   /// True when the lead's form says it is outside Nevada. The lead is kept;
   /// the flag only feeds later texting rules.
   outOfArea    Boolean @default(false)
+  /// IANA zone staff set for calling hours ("they told us they're in X"), for
+  /// clients whose address or number doesn't say (e.g. a number abroad).
+  timeZone     String?
 
   estimatedValue       Decimal?  @db.Decimal(12, 2)
   probability          Int?
@@ -1249,6 +1253,7 @@ model Communication {
   @@index([clientId])
   @@index([userId])
   @@index([occurredAt])
+  @@index([externalRef])
 }
 
 model Call {
@@ -1280,6 +1285,10 @@ model Message {
   failureCode     String?
   optOutDetected  Boolean   @default(false)
   attachments     Json      @default("[]")
+  /// Twilio's last reported message status ('sent', 'queued', ...) while the
+  /// Communication stays SENT. Only delivered / failed move the status.
+  providerStatus   String?
+  providerStatusAt DateTime?
 
   communication Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
 }
@@ -2039,6 +2048,8 @@ model SequenceEnrollment {
   currentStep   Int              @default(0)
   nextRunAt     DateTime?
   stoppedReason String?
+  /// Failed calling-rules checks on the current step (null = none). Reset when a step goes out.
+  attempts      Int?
   enrolledById  String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -2493,6 +2504,17 @@ model PhoneNumber {
   nextRenewalAt    DateTime?
   releasedAt       DateTime?
 
+  /// Twilio account SID the number lives on (the platform subaccount or an
+  /// org's own vault account). Null for mock numbers and older rows.
+  providerAccountSid String?
+  /// Set when the number was imported from the carrier rather than bought here.
+  importedAt         DateTime?
+  webhookCheckedAt   DateTime?
+  /// { voiceUrl, smsUrl, statusCallback, voiceFallbackUrl } as found at Twilio when they differ from ours.
+  webhookDrift       Json?
+  /// null = ring browsers unless routing is VOICEMAIL_ONLY. See ringsBrowsers().
+  ringBrowsers       Boolean?
+
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -2676,6 +2698,19 @@ model CallCenterLead {
   leadAttribution Json?
   /// True when the form says the lead is outside Nevada. Kept, only flagged.
   outOfArea      Boolean                @default(false)
+  /// HMAC of the E.164 with PHONE_HASH_KEY.
+  phoneHash          String?
+  consentAt          DateTime?
+  /// 'lead_form' | 'inbound_inquiry' | 'manual'
+  consentSource      String?
+  consentTextVersion String?
+  /// Meta form id the consent text belongs to (copied from leadAttribution.formId at ingest).
+  consentFormId      String?
+  consentNote        String?
+  /// Set by a STOP from this number. Revoked consent counts as no consent.
+  consentRevokedAt   DateTime?
+  /// IANA zone set by staff ("they told us they're in X"). Audited.
+  timeZone           String?
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 
@@ -2685,6 +2720,7 @@ model CallCenterLead {
   @@index([organizationId, status])
   @@index([organizationId, nextAttemptAt])
   @@index([clientId])
+  @@index([organizationId, phoneHash])
 }
 
 model CallCenterEvent {
@@ -2694,8 +2730,14 @@ model CallCenterEvent {
   body      String              @default("")
   createdAt DateTime            @default(now())
 
+  /// The carrier call this trail line is about (telephony writes only). With
+  /// `type` it is unique, so two callbacks finishing the same call at once
+  /// can't both write the line.
+  voiceCallId String?
+
   lead CallCenterLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
+  @@unique([voiceCallId, type])
   @@index([leadId, createdAt])
 }
 
@@ -2706,9 +2748,137 @@ model CallCenterSuppression {
   numberHash     String
   reason         String
   createdAt      DateTime @default(now())
+  last4             String?   @db.VarChar(4)
+  smsBlockedAt      DateTime?
+  /// 'sms_stop' | 'sms_stop_review' | 'manual' | 'call_center' | 'import'
+  smsBlockedSource  String?
+  callBlockedAt     DateTime?
+  /// 'manual' | 'call_center' | 'import' | 'sms_stop' (only if the owner turns that on)
+  callBlockedSource String?
+  note              String?
+  createdById       String?
+  removedAt         DateTime?
+  removedById       String?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, numberHash])
   @@index([organizationId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Telephony live: the call ledger, browser presence, account state.
+// See docs/TELEPHONY_LIVE.md §5.
+// ─────────────────────────────────────────────────────────────
+
+enum VoiceCallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+/// One row per ROOT carrier call (inbound PSTN parent, or the browser leg of an
+/// outbound call). Child legs update it. Every write is idempotent on callSid.
+model VoiceCall {
+  id                       String             @id @default(cuid())
+  organizationId           String
+  callSid                  String             @unique
+  childCallSid             String?
+  accountSid               String
+  direction                VoiceCallDirection
+  /// 'servicing' | 'marketing' (outbound only)
+  purpose                  String?
+  /// 'greeting' | 'browser' | 'forward' | 'team' | 'bridged' | 'voicemail' | 'done'
+  /// Lets the voice-limited count see which inbound calls hold an outbound leg.
+  stage                    String?
+  /// Our line: the dialled number (inbound) or the caller ID (outbound).
+  phoneNumberId            String?
+  lineE164                 String?
+  remoteHash               String?
+  remoteLast4              String?            @db.VarChar(4)
+  /// encryptSecret blob of the other party's E.164 (so an unknown caller can be called back).
+  remoteSecret             Json?
+  clientId                 String?
+  communicationId          String?            @unique
+  callCenterLeadId         String?
+  /// Rep who placed or answered it.
+  userId                   String?
+  /// 'browser:<userId>' | 'forward' | 'team:<userId>' | 'voicemail'
+  answeredBy               String?
+  /// initiated | ringing | in-progress | completed | busy | no-answer | failed | canceled | unknown
+  status                   String             @default("initiated")
+  outcome                  CallOutcome?
+  startedAt                DateTime           @default(now())
+  answeredAt               DateTime?
+  endedAt                  DateTime?
+  durationSeconds          Int?
+  talkSeconds              Int?
+  /// Twilio RecordingSid only (^RE[0-9a-f]{32}$). The media URL is never stored.
+  recordingSid             String?
+  recordingDurationSeconds Int?
+  /// 'call' | 'voicemail'
+  recordingKind            String?
+  /// Recording was on for this call, so the sweep can recover a lost callback.
+  recordingExpected        Boolean?
+  /// When Twilio fetched the whisper notice. "Sent to the call", not "heard".
+  disclosureServedAt       DateTime?
+  /// Nonce of the hours override used for this call. Unique, so a token can't be reused.
+  overrideNonce            String?            @unique
+  needsAction              Boolean            @default(false)
+  handledAt                DateTime?
+  handledById              String?
+  handledNote              String?
+  errorCode                String?
+  /// Compliance basis for outbound ("Consent on file (form 1234, Oct 2)") or the override note.
+  basis                    String?
+  /// Inbound only: Twilio's caller-ID attestation (StirVerstat), e.g.
+  /// 'TN-Validation-Passed-A'. Kept so an 'inbound_inquiry' consent can be audited.
+  stirVerstat              String?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, needsAction, startedAt])
+  @@index([organizationId, startedAt])
+  @@index([remoteHash])
+  @@index([clientId])
+  @@index([callCenterLeadId])
+  @@index([accountSid, status, startedAt])
+}
+
+/// Which signed-in users can take a browser call right now, per organization.
+/// Heartbeat-based (no sockets on Vercel).
+model VoicePresence {
+  userId         String
+  organizationId String
+  /// pf_<organizationId>_<userId>
+  identity       String
+  /// 'ready' | 'offline'
+  state          String
+  lastSeenAt     DateTime
+
+  @@id([userId, organizationId])
+  @@index([organizationId, lastSeenAt])
+}
+
+/// What we last learned about a Twilio account. One row per account SID (not secret).
+model TelephonyAccountState {
+  accountSid         String    @id
+  /// 'auto' | 'on' | 'off'
+  voiceLimitedMode   String    @default("auto")
+  voiceLimitedSeenAt DateTime?
+  profileStatus      String?
+  /// 'twilio' | 'manual'
+  profileSource      String?
+  balance            String?
+  balanceCurrency    String?
+  /// 'on' | 'off' | 'unknown' — Twilio "Enforce HTTP Basic Auth on media URLs"
+  mediaAuthState     String?
+  /// 'probe' | 'manual'
+  mediaAuthSource    String?
+  mediaAuthCheckedAt DateTime?
+  lastCheckedAt      DateTime?
+  lastError          String?
+  updatedById        String?
+  updatedAt          DateTime  @updatedAt
 }

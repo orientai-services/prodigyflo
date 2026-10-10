@@ -36,14 +36,75 @@ export type InboundSignal = {
   optOutDetected: boolean
 } | null
 
-// Standard TCPA opt-out keywords. Matched against the whole (trimmed) message
-// so "please stop calling my office" does not count as an opt-out.
-const STOP_WORDS = new Set(['stop', 'stopall', 'stop all', 'unsubscribe', 'cancel', 'end', 'quit', 'revoke'])
+// Standard TCPA opt-out keywords, plus the Spanish ones our leads actually
+// send. Matched against the whole (trimmed) message, so these are automatic.
+// A keyword INSIDE a longer message is handled by isRevocationText below: it
+// holds texts for an admin to confirm rather than being ignored.
+const STOP_WORDS = new Set([
+  'stop', 'stopall', 'stop all', 'unsubscribe', 'cancel', 'end', 'quit', 'revoke',
+  'optout', 'opt out', 'opt-out',
+  'parar', 'alto', 'baja', 'cancelar',
+])
+
+// START / UNSTOP re-enable texting at the carrier. They clear only a block that
+// a STOP created; they never restore consent (staff must record it again).
+const START_WORDS = new Set(['start', 'unstop'])
+
+// The FCC's 2024 revocation order treats a reply that reasonably conveys
+// "stop" as revocation even inside a sentence. Inside a sentence only clear
+// PHRASES count, matched as whole words: our clients are cancelling solar
+// contracts, so "cancel", "cancelar", "end", "alto" (high), "baja" (lower) and
+// "quit" turn up in ordinary replies and are not, on their own, a request to
+// stop texting. Accents are ignored ("envíen" = "envien").
+const REVOCATION_PHRASES = [
+  'stop texting', 'stop text', 'stop the texts', 'stop messaging', 'stop the messages', 'stop sending',
+  'stop contacting', 'stop calling', 'please stop', 'stop please',
+  'no more texts', 'no more text', 'no more messages',
+  "don't text", 'dont text', 'do not text', "don't message", 'dont message', 'do not message',
+  "don't contact", 'dont contact', 'do not contact',
+  'unsubscribe', 'opt out', 'opt-out', 'optout', 'revoke consent', 'revoke my consent',
+  'remove me from your list', 'remove me from this list', 'remove my number', 'take me off your list', 'take me off this list',
+  'dejen de escribir', 'dejen de escribirme', 'deja de escribir', 'deja de escribirme',
+  'dejen de mandar', 'deja de mandar', 'dejen de enviar', 'deja de enviar', 'dejen de llamar', 'dejen de llamarme', 'deja de llamarme',
+  'no me escriban', 'no me escribas', 'no me manden mensajes', 'no me mandes mensajes', 'no me envien mensajes',
+  'no mas mensajes', 'no quiero mas mensajes', 'no quiero recibir mensajes',
+  'borren mi numero', 'quitenme de la lista', 'saquenme de la lista',
+]
+
+/** A message that OPENS with a stop word and punctuation: "STOP! wrong number", "Stop, not interested". */
+const LEADING_STOP = /^\s*(stop|unsubscribe|parar)\s*[.!,;:¡-]/i
+
+function normalizeKeyword(body: string): string {
+  return body.trim().toLowerCase().replace(/[.!¡]+/g, '').replace(/\s+/g, ' ').trim()
+}
+
+function normalizeSentence(body: string): string {
+  const plain = body.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '').replace(/[’‘`]/g, "'")
+  return ` ${plain.replace(/[^\p{L}\p{N}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim()} `
+}
 
 export function isStopMessage(body: string | null | undefined): boolean {
   if (!body) return false
-  const normalized = body.trim().toLowerCase().replace(/[.!]+$/, '').trim()
-  return STOP_WORDS.has(normalized)
+  return STOP_WORDS.has(normalizeKeyword(body))
+}
+
+export function isStartMessage(body: string | null | undefined): boolean {
+  if (!body) return false
+  return START_WORDS.has(normalizeKeyword(body))
+}
+
+/**
+ * A clear revocation inside a longer message ("please stop texting me").
+ * Whole-message keywords are NOT this — they are automatic (isStopMessage).
+ * A match holds texts for an admin to confirm or lift. Kept to clear phrases:
+ * a hold on an ordinary reply ("I want to cancel my solar contract") would
+ * silence the very client asking for help.
+ */
+export function isRevocationText(body: string | null | undefined): boolean {
+  if (!body || isStopMessage(body)) return false
+  if (LEADING_STOP.test(body)) return true
+  const text = normalizeSentence(body)
+  return REVOCATION_PHRASES.some((p) => text.includes(` ${p} `))
 }
 
 const CHANNEL_LABEL: Record<MessagingChannel, string> = { EMAIL: 'email', SMS: 'SMS' }

@@ -44,7 +44,24 @@ export type NumberWebhooks = {
   voiceUrl: string
   voiceStatusUrl: string
   smsUrl: string
+  /** A Twilio-hosted TwiML Bin played when this app can't answer. */
+  voiceFallbackUrl?: string
 }
+
+/** A number already on the carrier account (for import and drift checks). */
+export type OwnedNumber = {
+  sid: string
+  e164: string
+  friendlyName: string
+  capabilities: NumberCapabilities
+  voiceUrl: string | null
+  smsUrl: string | null
+  statusCallback: string | null
+  voiceFallbackUrl: string | null
+  dateCreated: string | null
+}
+
+export type OwnedNumbersResult = { ok: true; numbers: OwnedNumber[] } | { ok: false; error: string }
 
 export type PurchaseInput = {
   e164: string
@@ -79,6 +96,10 @@ export interface TelephonyProvider {
   searchNumbers(input: SearchNumbersInput, org: TelephonyCredentials): Promise<AvailableNumber[]>
   purchase(input: PurchaseInput, org: TelephonyCredentials): Promise<PurchaseResult>
   release(providerSid: string, org: TelephonyCredentials): Promise<ReleaseResult>
+  /** Every number on the account, all pages. */
+  listOwnedNumbers(org: TelephonyCredentials): Promise<OwnedNumbersResult>
+  /** Point an existing number at this app's webhooks. */
+  updateWebhooks(providerSid: string, webhooks: NumberWebhooks, org: TelephonyCredentials): Promise<ReleaseResult>
 }
 
 /**
