@@ -112,14 +112,14 @@ export function DeskQueueView({ queue }: { queue: DeskQueue }) {
               <tbody>
                 {bucket.rows.map((row) => (
                   <tr key={`${bucket.key}-${row.clientId}`}>
-                    <td>
+                    <td className="m-main">
                       <Link href={`/clients/${row.clientId}`} className="font-medium">
                         {row.name}
                       </Link>
                     </td>
-                    <td>{row.why}</td>
-                    <td>{row.ownerName ?? 'Unassigned'}</td>
-                    <td>
+                    <td data-label="Why">{row.why}</td>
+                    <td data-label="Owner">{row.ownerName ?? 'Unassigned'}</td>
+                    <td className="m-actions">
                       <div className="desk-actions-row" style={{ justifyContent: 'flex-end' }}>
                         {bucket.key === 'unassigned' && queue.canAssign && (
                           <button type="button" className="desk-btn-secondary" onClick={() => setAssignRow(row)}>

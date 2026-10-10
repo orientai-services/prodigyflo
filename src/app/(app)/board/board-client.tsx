@@ -1,12 +1,13 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   pointerWithin,
   useDraggable,
   useDroppable,
@@ -76,6 +77,7 @@ export function BoardFilters({
       <NativeSelect
         size="sm"
         aria-label="Filter by owner"
+        className="max-md:h-11"
         value={params.get('owner') ?? ''}
         onChange={(e) => set('owner', e.target.value)}
       >
@@ -90,6 +92,7 @@ export function BoardFilters({
         <NativeSelect
           size="sm"
           aria-label="Filter by team"
+          className="max-md:h-11"
           value={params.get('team') ?? ''}
           onChange={(e) => set('team', e.target.value)}
         >
@@ -160,7 +163,7 @@ function DraggableCard({ card, canMove }: { card: BoardCard; canMove: boolean })
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={cn(canMove && 'cursor-grab touch-none active:cursor-grabbing', isDragging && 'opacity-40')}
+      className={cn(canMove && 'cursor-grab touch-manipulation active:cursor-grabbing', isDragging && 'opacity-40')}
     >
       <CardBody card={card} />
     </div>
@@ -194,9 +197,13 @@ function Column({
   return (
     <section
       ref={setNodeRef}
+      id={`lane-${lane.key}`}
+      data-lane={lane.key}
       aria-label={`${lane.name} — ${cards.length} client${cards.length === 1 ? '' : 's'}`}
       className={cn(
         'bg-surface-sunk/60 flex max-h-[calc(100dvh-15rem)] w-68 shrink-0 flex-col rounded-xl border transition-all',
+        // Phones: one stage per screen with the next one peeking, snapping as you swipe.
+        'max-md:max-h-[calc(100dvh-13rem)] max-md:w-[calc(100vw-4rem)] max-md:snap-start',
         isOver && isAllowed && 'border-primary ring-primary/30 ring-2',
         dimmed && 'opacity-45',
       )}
@@ -245,8 +252,40 @@ export function Board({
     setCards(initialCards)
   }
 
-  // A small drag threshold keeps the card's link clickable.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  // A small drag threshold keeps the card's link clickable. Touch needs a long
+  // press, so a swipe still scrolls the board and the column.
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
+  const scroller = useRef<HTMLDivElement>(null)
+  const chips = useRef<HTMLElement>(null)
+  const [visibleLane, setVisibleLane] = useState(lanes[0]?.key ?? '')
+  const countByLane = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const c of cards) counts.set(c.stageKey, (counts.get(c.stageKey) ?? 0) + 1)
+    return counts
+  }, [cards])
+  const jumpTo = (key: string) => {
+    const el = scroller.current?.querySelector<HTMLElement>(`[data-lane="${key}"]`)
+    if (!el || !scroller.current) return
+    setVisibleLane(key)
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    scroller.current.scrollTo({ left: el.offsetLeft - scroller.current.offsetLeft - 16, behavior: reduce ? 'auto' : 'smooth' })
+  }
+  const onScroll = () => {
+    const box = scroller.current
+    if (!box) return
+    const lanesEls = [...box.querySelectorAll<HTMLElement>('[data-lane]')]
+    const left = box.getBoundingClientRect().left
+    const current = lanesEls.find((el) => el.getBoundingClientRect().right - left > 48)
+    const key = current?.dataset.lane
+    if (!key || key === visibleLane) return
+    setVisibleLane(key)
+    // Keep the matching chip in view so the picker always shows where you are.
+    const chip = chips.current?.querySelector<HTMLElement>(`[data-chip="${key}"]`)
+    if (chip && chips.current) chips.current.scrollLeft = chip.offsetLeft - chips.current.offsetLeft - 16
+  }
 
   const laneByKey = useMemo(() => new Map(lanes.map((l) => [l.key, l])), [lanes])
   const activeCard = activeId ? (cards.find((c) => c.id === activeId) ?? null) : null
@@ -295,7 +334,35 @@ export function Board({
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="flex items-start gap-3 overflow-x-auto p-4 sm:p-6">
+      {/* Phones: a stage picker. One scrolling row of chips; tap jumps to that column. */}
+      <nav
+        ref={chips}
+        aria-label="Stages"
+        className="no-scrollbar -mb-2 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pt-3 md:hidden"
+      >
+        {lanes.map((lane) => (
+          <button
+            key={lane.key}
+            type="button"
+            data-chip={lane.key}
+            onClick={() => jumpTo(lane.key)}
+            aria-current={visibleLane === lane.key ? 'true' : undefined}
+            className={cn(
+              'focus-visible:ring-ring flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium whitespace-nowrap focus-visible:ring-2 focus-visible:outline-none',
+              visibleLane === lane.key ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground',
+            )}
+          >
+            <span className={cn('size-1.5 shrink-0 rounded-full', lane.dotClass)} aria-hidden />
+            {lane.name}
+            <span className="tabular-nums opacity-70">{countByLane.get(lane.key) ?? 0}</span>
+          </button>
+        ))}
+      </nav>
+      <div
+        ref={scroller}
+        onScroll={onScroll}
+        className="flex items-start gap-3 overflow-x-auto p-4 max-md:snap-x max-md:snap-mandatory max-md:scroll-px-4 sm:p-6"
+      >
         {lanes.map((lane) => (
           <Column
             key={lane.key}

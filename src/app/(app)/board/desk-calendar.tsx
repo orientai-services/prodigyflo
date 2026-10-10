@@ -428,6 +428,8 @@ function DayCell({
       className={cn('desk-day', !inMonth && 'mute', isToday && 'today', isOver && canDrop && 'drop')}
     >
       <span className="num">{day}</span>
+      {/* Weekday under the date number; only shown in the phone agenda (globals.css). */}
+      <small className="desk-dow" aria-hidden="true">{WEEKDAYS[new Date(`${iso}T12:00:00Z`).getUTCDay()]}</small>
       {children}
     </div>
   )

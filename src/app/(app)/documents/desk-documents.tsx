@@ -90,19 +90,19 @@ export function DocumentLabView({
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id}>
-                    <td>
+                    <td className="m-main">
                       <Link href={`/documents/${row.id}`}>{row.label}</Link>
                       <div className="desk-muted" style={{ marginBottom: 0 }}>
                         {row.sub}
                       </div>
                     </td>
-                    <td>
+                    <td data-label="Client">
                       <Link href={`/clients/${row.clientId}`}>{row.clientName}</Link>
                     </td>
-                    <td>
+                    <td data-label="Status">
                       <DocumentStatusBadge status={row.status} />
                     </td>
-                    <td>
+                    <td data-label="Fields">
                       {row.fieldCount === 0 ? (
                         '—'
                       ) : (
@@ -112,7 +112,7 @@ export function DocumentLabView({
                         </>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Extraction">
                       {row.provider ? (
                         <ProviderBadge provider={row.provider} model={row.model} />
                       ) : (
@@ -124,15 +124,15 @@ export function DocumentLabView({
                         </div>
                       ) : null}
                     </td>
-                    <td>
+                    <td data-label="SLA">
                       {row.slaSince && row.slaHours != null ? (
                         <SlaIndicator since={row.slaSince} slaHours={row.slaHours} />
                       ) : (
                         <span className="desk-muted">—</span>
                       )}
                     </td>
-                    <td>{row.activity}</td>
-                    <td>
+                    <td data-label="Activity">{row.activity}</td>
+                    <td className="m-actions">
                       <div className="desk-actions-row" style={{ justifyContent: 'flex-end' }}>
                         <button
                           type="button"

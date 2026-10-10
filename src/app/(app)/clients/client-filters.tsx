@@ -28,7 +28,7 @@ function Select({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={placeholder}
-      className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-md border px-2 text-sm outline-none focus-visible:ring-3"
+      className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-md border px-2 text-sm outline-none focus-visible:ring-3 max-md:h-11 max-md:shrink-0"
     >
       <option value="">{placeholder}</option>
       {options.map((o) => (
@@ -78,17 +78,19 @@ export function ClientFilters({
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">
-      <div className="relative">
+      <div className="relative max-md:w-full">
         <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Name, email, or phone"
           aria-label="Search clients"
-          className="h-8 w-56 pl-8"
+          className="h-8 w-56 pl-8 max-md:h-11 max-md:w-full"
         />
       </div>
 
+      {/* Phones: the filters scroll sideways in one row under a full-width search. On desktop this wrapper is display:contents, so nothing moves. */}
+      <div className="no-scrollbar contents max-md:-mx-4 max-md:flex max-md:w-[calc(100%+2rem)] max-md:items-center max-md:gap-2 max-md:overflow-x-auto max-md:px-4">
       <Select
         name="stage"
         placeholder="Any stage"
@@ -144,6 +146,7 @@ export function ClientFilters({
         ]}
         onChange={(v) => set('sort', v)}
       />
+      </div>
 
       {active.length > 0 && (
         <Button
