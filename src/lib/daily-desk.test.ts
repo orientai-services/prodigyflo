@@ -11,8 +11,12 @@ import {
   monthGrid,
   monthTitle,
   parseMonth,
+  shiftIso,
   shiftMonth,
   timeLabel,
+  weekCovered,
+  weekDayIsos,
+  weekTitle,
   zonedDate,
 } from '@/lib/daily-desk'
 
@@ -47,6 +51,33 @@ describe('shiftMonth', () => {
   it('walks across year boundaries', () => {
     expect(shiftMonth('2026-01', -1)).toBe('2025-12')
     expect(shiftMonth('2026-12', 1)).toBe('2027-01')
+  })
+})
+
+describe('week navigation', () => {
+  it('moves a civil date across a month and a year', () => {
+    expect(shiftIso('2026-10-09', -7)).toBe('2026-10-02')
+    expect(shiftIso('2026-10-09', 7)).toBe('2026-10-16')
+    expect(shiftIso('2026-01-01', -1)).toBe('2025-12-31')
+  })
+
+  it('uses Sunday through Saturday and titles the current week', () => {
+    expect(weekDayIsos('2026-10-09')).toEqual([
+      '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10',
+    ])
+    expect(weekTitle('2026-10-09')).toBe('Oct 4 – Oct 10, 2026')
+    expect(weekTitle('2026-01-01')).toBe('Dec 28, 2025 – Jan 3, 2026')
+  })
+
+  it('treats a week as loaded when the month grid already contains it', () => {
+    const october = monthGrid(2026, 9).map((cell) => cell.iso)
+    const september = monthGrid(2026, 8).map((cell) => cell.iso)
+    expect(weekCovered('2026-10-09', october)).toBe(true)
+    expect(weekCovered('2026-09-27', october)).toBe(true)
+    expect(weekCovered('2026-09-20', october)).toBe(false)
+    expect(weekCovered('2026-11-01', october)).toBe(false)
+    expect(weekCovered('2026-09-20', september)).toBe(true)
+    expect(weekCovered('2026-11-01', monthGrid(2026, 10).map((cell) => cell.iso))).toBe(true)
   })
 })
 
