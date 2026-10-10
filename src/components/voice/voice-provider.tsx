@@ -80,6 +80,24 @@ export type IncomingVM = {
   target: string
 }
 
+/**
+ * The call that just ended, for the desk's wrap-up and power mode. `seq`
+ * changes on every end so a consumer can react once per call.
+ */
+export type EndedCall = {
+  seq: number
+  /** 'lead:<id>' | 'client:<id>' | 'missed:<id>' | '' */
+  target: string
+  direction: 'outbound' | 'inbound'
+  who: string | null
+  /** The other side picked up (the SDK reported accept). */
+  answered: boolean
+  talkSeconds: number
+  endedAt: number
+  /** Plain-words reason when the call ended on an error. */
+  error: string | null
+}
+
 export type VoiceContextValue = {
   setup: ReadyVoiceSetup
   /** This tab is the one that rings. */
@@ -91,6 +109,10 @@ export type VoiceContextValue = {
   muted: boolean
   error: string | null
   incoming: IncomingVM | null
+  /** The last call that ended in this tab, or null. */
+  lastCall: EndedCall | null
+  /** 'lead:<id>' | 'client:<id>' | 'missed:<id>' of the call in progress, or null. */
+  activeTarget: string | null
   lineId: string | null
   setLineId: (id: string) => void
   call: (target: DialTarget, lineId?: string | null, override?: string, who?: string) => Promise<boolean>
@@ -173,6 +195,8 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
   const [muted, setMuted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [incoming, setIncoming] = useState<IncomingVM | null>(null)
+  const [lastCall, setLastCall] = useState<EndedCall | null>(null)
+  const [activeTarget, setActiveTarget] = useState<string | null>(null)
   const [lineId, setLineId] = useState<string | null>(
     () => setup.lines.find((l) => l.isDefault)?.id ?? setup.lines[0]?.id ?? null,
   )
@@ -182,6 +206,9 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
   const activeRef = useRef<SdkCall | null>(null)
   const incomingRef = useRef<SdkCall | null>(null)
   const micHeldRef = useRef(false)
+  /** What the active call is about, kept beside activeRef for the ended-call record. */
+  const metaRef = useRef<{ target: string; direction: 'outbound' | 'inbound'; who: string | null; answeredAt: number | null; error: string | null } | null>(null)
+  const seqRef = useRef(0)
   const unmountedRef = useRef(false)
 
   // ── Microphone: taken at call start, released at call end ────────────────
@@ -215,6 +242,23 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
     (call: SdkCall) => {
       if (activeRef.current !== call) return
       activeRef.current = null
+      const meta = metaRef.current
+      metaRef.current = null
+      if (meta) {
+        const endedAt = Date.now()
+        seqRef.current += 1
+        setLastCall({
+          seq: seqRef.current,
+          target: meta.target,
+          direction: meta.direction,
+          who: meta.who,
+          answered: meta.answeredAt !== null,
+          talkSeconds: meta.answeredAt ? Math.max(0, Math.round((endedAt - meta.answeredAt) / 1000)) : 0,
+          endedAt,
+          error: meta.error,
+        })
+      }
+      setActiveTarget(null)
       setStatus('idle')
       setWho(null)
       setAnsweredAt(null)
@@ -231,8 +275,10 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       })
       call.on('accept', () => {
         if (activeRef.current !== call) return
+        const at = Date.now()
+        if (metaRef.current) metaRef.current.answeredAt = at
         setStatus('in-call')
-        setAnsweredAt(Date.now())
+        setAnsweredAt(at)
       })
       call.on('mute', (isMuted) => {
         if (activeRef.current === call) setMuted(Boolean(isMuted))
@@ -241,7 +287,9 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       call.on('cancel', () => endCall(call))
       call.on('reject', () => endCall(call))
       call.on('error', (err) => {
-        setError(plainVoiceError(err))
+        const message = plainVoiceError(err)
+        if (activeRef.current === call && metaRef.current) metaRef.current.error = message
+        setError(message)
         endCall(call)
       })
     },
@@ -448,6 +496,8 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       try {
         const placed = await device.connect({ params })
         activeRef.current = placed
+        metaRef.current = { target: params.target, direction: 'outbound', who: label ?? null, answeredAt: null, error: null }
+        setActiveTarget(params.target)
         watchCall(placed)
         return true
       } catch (err) {
@@ -474,9 +524,12 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
     setWho(incoming?.caller ?? null)
     setIncoming(null)
     activeRef.current = ringing
+    const at = Date.now()
+    metaRef.current = { target: incoming?.target ?? '', direction: 'inbound', who: incoming?.caller ?? null, answeredAt: at, error: null }
+    setActiveTarget(incoming?.target || null)
     watchCall(ringing)
     setStatus('in-call')
-    setAnsweredAt(Date.now())
+    setAnsweredAt(at)
     try {
       ringing.accept()
     } catch (err) {
@@ -531,6 +584,8 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       muted,
       error,
       incoming,
+      lastCall,
+      activeTarget,
       lineId,
       setLineId,
       call,
@@ -541,7 +596,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       decline,
       clearError,
     }),
-    [setup, leader, registered, status, who, answeredAt, muted, error, incoming, lineId, call, hangup, toggleMute, sendDigits, accept, decline, clearError],
+    [setup, leader, registered, status, who, answeredAt, muted, error, incoming, lastCall, activeTarget, lineId, call, hangup, toggleMute, sendDigits, accept, decline, clearError],
   )
 
   return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>
