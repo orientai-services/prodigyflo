@@ -72,7 +72,10 @@ export async function testEdge(token: string, edge: Edge, signal?: AbortSignal):
     signal?.addEventListener('abort', abort)
     try {
       // Opus first, as on real calls, so the numbers match what a call gets.
-      const started = sdk.Device.runPreflight(token, { edge, codecPreferences: ['opus', 'pcmu'] })
+      // fakeMicInput: this measures the network only (the full test checks the
+      // real mic on its own), so a busy, missing or not-yet-allowed microphone
+      // can't make the connection look broken.
+      const started = sdk.Device.runPreflight(token, { edge, codecPreferences: ['opus', 'pcmu'], fakeMicInput: true })
       test = started
       started.on('completed', (report) => finish(edgeResultFromReport(edge, report)))
       started.on('failed', (err) => finish(failed(edge, preflightError(edge, err))))
