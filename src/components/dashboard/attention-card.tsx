@@ -101,7 +101,7 @@ export async function AttentionCard({
       <footer className="border-t px-4 py-2.5">
         <Link
           href="/attention"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium transition-colors"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium transition-colors max-md:min-h-11"
         >
           {remaining > 0 ? `View all — ${number(remaining)} more` : 'View all attention'}
           <ArrowRight className="size-3.5" />

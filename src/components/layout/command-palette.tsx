@@ -92,9 +92,9 @@ export function CommandPalette({
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title="Search" description="Find clients, people, and pages">
-      <CommandInput placeholder="Search clients, people, pages…" value={query} onValueChange={setQuery} />
-      <CommandList>
+    <CommandDialog open={open} onOpenChange={onOpenChange} title="Search" description="Find clients, people, and pages" className="max-sm:top-[max(0.75rem,env(safe-area-inset-top))]">
+      <CommandInput placeholder="Search clients, people, pages…" value={query} onValueChange={setQuery} className="max-md:text-base" />
+      <CommandList className="max-sm:max-h-[min(60dvh,28rem)] max-md:[&_[data-slot=command-item]]:min-h-11">
         {loading && (
           <div className="text-muted-foreground flex items-center gap-2 px-3 py-4 text-sm">
             <Loader2 className="size-3.5 animate-spin" /> Searching…

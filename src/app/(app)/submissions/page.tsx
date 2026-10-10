@@ -96,18 +96,18 @@ export default async function SubmissionsPage({ searchParams }: PageProps<'/subm
               <tbody>
                 {submissions.map((s) => (
                   <tr key={s.id}>
-                    <td>
+                    <td className="m-main">
                       <Link href={`/submissions/${s.id}`}>{fullName(s.client)}</Link>
                     </td>
-                    <td>{s.destination}</td>
-                    <td>
+                    <td data-label="Destination">{s.destination}</td>
+                    <td data-label="Status">
                       <SubmissionStatusBadge status={s.status} />
                     </td>
-                    <td>{s.attemptNumber}</td>
-                    <td>{s.externalRef ?? '—'}</td>
-                    <td>{s.approvedBy?.name ?? '—'}</td>
-                    <td>{shortDate(s.submittedAt)}</td>
-                    <td>{relativeTime(s.updatedAt)}</td>
+                    <td data-label="Attempt">{s.attemptNumber}</td>
+                    <td data-label="External ref">{s.externalRef ?? '—'}</td>
+                    <td data-label="Approved by">{s.approvedBy?.name ?? '—'}</td>
+                    <td data-label="Submitted">{shortDate(s.submittedAt)}</td>
+                    <td data-label="Updated">{relativeTime(s.updatedAt)}</td>
                   </tr>
                 ))}
               </tbody>

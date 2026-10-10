@@ -52,17 +52,17 @@ export function NotificationBell({ unreadCount }: { unreadCount: number }) {
     <Popover onOpenChange={load}>
       <PopoverTrigger
         render={
-          <Button variant="ghost" size="icon-sm" aria-label={`Notifications${count ? `, ${count} unread` : ''}`} className="relative">
-            <Bell className="size-4" />
+          <Button variant="ghost" size="icon-sm" aria-label={`Notifications${count ? `, ${count} unread` : ''}`} className="relative max-lg:size-11">
+            <Bell className="size-4 max-lg:size-5" />
             {count > 0 && (
-              <span className="bg-brand text-primary-foreground absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full text-[0.6rem] font-medium">
+              <span className="bg-brand text-primary-foreground absolute -top-0.5 -right-0.5 flex size-4 max-lg:top-1.5 max-lg:right-1.5 items-center justify-center rounded-full text-[0.6rem] font-medium">
                 {count > 9 ? '9+' : count}
               </span>
             )}
           </Button>
         }
       />
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent align="end" className="w-80 max-w-[calc(100vw-1rem)] p-0">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-medium">Notifications</span>
           {count > 0 && (

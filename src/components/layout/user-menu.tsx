@@ -74,15 +74,15 @@ export function UserMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="icon-sm" aria-label="Account menu">
-            <Avatar className="size-7">
+          <Button variant="ghost" size="icon-sm" className="max-lg:size-11" aria-label="Account menu">
+            <Avatar className="size-7 max-lg:size-8">
               {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
               <AvatarFallback className="text-[0.65rem]">{initials(user.name)}</AvatarFallback>
             </Avatar>
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuContent align="end" className="w-60 max-w-[calc(100vw-1rem)]">
         {/* Base UI GroupLabels must live inside a Group — bare ones crash the menu. */}
         <DropdownMenuGroup>
           <DropdownMenuLabel>

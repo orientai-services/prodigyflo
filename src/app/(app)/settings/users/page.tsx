@@ -54,7 +54,7 @@ export default async function UsersPage() {
           <section>
             <h2 className="mb-3 text-sm font-semibold">Pending invites</h2>
             <div className="scroll-x rounded-lg border">
-              <table className="w-full min-w-[44rem] text-sm tabular-nums">
+              <table className="m-cards w-full min-w-[44rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr>
                     <th className="px-3 py-2 text-left">Email</th>
@@ -67,12 +67,12 @@ export default async function UsersPage() {
                 <tbody>
                   {invites.map((inv) => (
                     <tr key={inv.id} className="border-b last:border-0">
-                      <td className="px-3 py-2.5 font-medium">
+                      <td className="m-main px-3 py-2.5 font-medium">
                         {inv.email ?? <span className="text-muted-foreground font-normal">🔗 anyone with the link</span>}
                       </td>
-                      <td className="px-3 py-2.5">{inv.role.name}</td>
-                      <td className="text-muted-foreground px-3 py-2.5">{inv.invitedBy?.name ?? '—'}</td>
-                      <td className="px-3 py-2.5">
+                      <td data-label="Role" className="px-3 py-2.5">{inv.role.name}</td>
+                      <td data-label="Invited by" className="text-muted-foreground px-3 py-2.5">{inv.invitedBy?.name ?? '—'}</td>
+                      <td data-label="Expires" className="px-3 py-2.5">
                         {inv.expiresAt < now ? (
                           <Badge variant="destructive">expired</Badge>
                         ) : (
@@ -80,7 +80,7 @@ export default async function UsersPage() {
                         )}
                       </td>
                       {canManage && (
-                        <td className="px-3 py-2.5 text-right">
+                        <td className="m-actions px-3 py-2.5 text-right">
                           <InviteRowActions inviteId={inv.id} />
                         </td>
                       )}
@@ -97,7 +97,7 @@ export default async function UsersPage() {
             Staff <span className="text-muted-foreground font-normal">· {users.length}</span>
           </h2>
           <div className="scroll-x rounded-lg border">
-            <table className="w-full min-w-[52rem] text-sm tabular-nums">
+            <table className="m-cards w-full min-w-[52rem] text-sm tabular-nums">
               <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                 <tr>
                   <th className="px-3 py-2 text-left">Name</th>
@@ -114,21 +114,21 @@ export default async function UsersPage() {
                   const manageable = canManage && canManageUser(user, { id: u.id, roleKey: u.role.key, isOwner: u.isOwner })
                   return (
                     <tr key={u.id} className="border-b last:border-0">
-                      <td className="px-3 py-2.5 font-medium">
+                      <td className="m-main px-3 py-2.5 font-medium">
                         {u.name}
                         {u.id === user.id && <span className="text-muted-foreground ml-1.5 text-xs">(you)</span>}
                       </td>
-                      <td className="text-muted-foreground px-3 py-2.5">{u.email}</td>
-                      <td className="px-3 py-2.5">{ROLE_LABELS[u.role.key]}</td>
-                      <td className="text-muted-foreground px-3 py-2.5">{u.team?.name ?? '—'}</td>
-                      <td className="text-muted-foreground px-3 py-2.5">
+                      <td data-label="Email" className="text-muted-foreground px-3 py-2.5">{u.email}</td>
+                      <td data-label="Role" className="px-3 py-2.5">{ROLE_LABELS[u.role.key]}</td>
+                      <td data-label="Team" className="text-muted-foreground px-3 py-2.5">{u.team?.name ?? '—'}</td>
+                      <td data-label="Last sign-in" className="text-muted-foreground px-3 py-2.5">
                         {u.lastLoginAt ? relativeTime(u.lastLoginAt) : 'never'}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td data-label="Status" className="px-3 py-2.5">
                         {u.isActive ? <Badge variant="secondary">active</Badge> : <Badge variant="destructive">deactivated</Badge>}
                       </td>
                       {canManage && (
-                        <td className="px-3 py-2.5 text-right">
+                        <td className="m-actions px-3 py-2.5 text-right">
                           {manageable ? (
                             <UserRowControls
                               userId={u.id}
