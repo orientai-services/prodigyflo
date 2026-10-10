@@ -55,7 +55,6 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   const cursorRef = useRef(initial.board?.today ?? '')
   const file = data.file, board = data.board, clients = data.clients ?? [], isAdmin = data.user.role === 'SUPER_ADMIN'
   const monthRef = useRef(board?.month)
-  cursorRef.current = cursor
   const tz = board?.timezone ?? file?.timezone ?? 'America/Los_Angeles'
   const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
   const closers = board?.closers ?? file?.closers ?? []
@@ -86,6 +85,7 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
     if (next.questionnaire && !touched.current.size && !saving.current) { answerRef.current = next.questionnaire.answers; setAnswers(next.questionnaire.answers); revision.current = next.questionnaire.revision }
   }
   useEffect(() => { monthRef.current = board?.month }, [board?.month])
+  useEffect(() => { cursorRef.current = cursor }, [cursor])
   useEffect(() => { const tick = () => setNow(new Date()); const timer = setInterval(tick, 15000); tick(); return () => { clearInterval(timer); if (toastTimer.current) clearTimeout(toastTimer.current) } }, [])
   useEffect(() => {
     const timer = setInterval(() => {
@@ -201,6 +201,7 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   async function jumpToday(kind: 'month' | 'week') {
     const iso = now ? civilDate(now, tz) : (board?.today ?? '')
     if (!iso) return
+    cursorRef.current = iso
     setCursor(iso)
     if (kind === 'week') await showWeek(iso)
     else await showMonth(iso.slice(0, 7))
