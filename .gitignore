@@ -61,3 +61,6 @@ reports/last-build.json
 # playwright artifacts
 test-results/
 playwright-report/
+
+# copied from pdfjs-dist by scripts/copy-pdfjs-assets.mjs
+/public/pdfjs
