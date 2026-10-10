@@ -6,6 +6,7 @@ import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
 import { refreshCysMirror } from '@/lib/cys/data'
 import { SCHEMA_VERSION, asRecord, str, type DocumentRef } from '@/lib/packet/schema'
 import { queueScsDocumentImports } from './scs-document-import'
+import { profileAddressAfterPacket } from './property-identity'
 
 export function isSchema42Payload(raw: unknown): boolean {
   const top = asRecord(raw)
@@ -121,12 +122,19 @@ export async function ingestScsPacket(opts: {
   if (street && city) {
     await store.$queryRaw`SELECT id FROM "Client" WHERE id=${opts.clientId} FOR UPDATE`
     const has = await store.clientAddress.findFirst({ where: { clientId: opts.clientId, isPrimary:true } })
-    const address={line1:street,city,state:str(answers.state),postalCode:str(answers.zip),isPrimary:true}
-    if(has) await store.clientAddress.update({where:{id:has.id},data:address})
-    else await store.clientAddress.create({data:{clientId:opts.clientId,...address}})
+    const incoming={line1:street,city,state:str(answers.state),postalCode:str(answers.zip)}
+    const kept=profileAddressAfterPacket(has?{line1:has.line1,city:has.city,state:has.state,postalCode:has.postalCode}:null,incoming)
+    const address={...kept.address,isPrimary:true}
+    if(has) {
+      if(!kept.sameHouse) {
+        await store.clientAddress.update({where:{id:has.id},data:address})
+        // The contract reading belonged to the previous house.
+        await store.documentExtraction.updateMany({where:{provider:'records',document:{clientId:opts.clientId}},data:{sourceActive:false}})
+      }
+    } else await store.clientAddress.create({data:{clientId:opts.clientId,...address}})
     if(address.state&&address.postalCode) {
       const {queuePropertyRecords}=await import('@/lib/property-records/jobs')
-      await queuePropertyRecords({organizationId:opts.organizationId,clientId:opts.clientId,sourceLeadId:str(raw.lead_id),address:{line1:street,city,state:address.state,postal_code:address.postalCode}},store)
+      await queuePropertyRecords({organizationId:opts.organizationId,clientId:opts.clientId,sourceLeadId:str(raw.lead_id),address:{line1:address.line1,city:address.city,state:address.state,postal_code:address.postalCode}},store)
     }
   }
 
