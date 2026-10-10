@@ -155,17 +155,20 @@ if (APP === 'scs') {
   }
 }
 
+// R-INT-006 skips this script: it holds both DB refs as patterns.
+const SELF = 'scripts/canon-check.mjs'
+
 if (APP === 'pf') {
   // R-META-005 — fixture leads never in prod config
   for (const f of ['vercel.json', '.env.production']) if (/META_FIXTURE_LEADS\s*[:=]\s*["']?true/.test(read(f))) fail('R-META-005', `META_FIXTURE_LEADS=true in ${f}`)
   // R-INT-006 — SCS DB ref must not appear in PF code
-  for (const f of changed) if (TEXT.test(f) && !/\.md$/.test(f) && addedLines(f).some(l => /vspmjtdwlcqfclkgksel/.test(l))) fail('R-INT-006', `SCS database ref added in ProdigyFlo file ${f}`)
+  for (const f of changed) if (TEXT.test(f) && !/\.md$/.test(f) && f !== SELF && addedLines(f).some(l => /vspmjtdwlcqfclkgksel/.test(l))) fail('R-INT-006', `SCS database ref added in ProdigyFlo file ${f}`)
   // R-PF-005 — legacy droplet deploy must not grow
   for (const f of changed) if (/^(deploy\/|src\/app\/api\/admin\/deploy\/|src\/lib\/deploy)/.test(f)) warn('R-PF-005', `OFF-LIMITS legacy droplet deploy code changed: ${f} (only the removal PR may touch it)`)
 }
 
 if (APP === 'scs') {
-  for (const f of changed) if (TEXT.test(f) && !/\.md$/.test(f) && addedLines(f).some(l => /acgmcenrbwabmpxzgwqb/.test(l))) fail('R-INT-006', `ProdigyFlo database ref added in SCS file ${f}`)
+  for (const f of changed) if (TEXT.test(f) && !/\.md$/.test(f) && f !== SELF && addedLines(f).some(l => /acgmcenrbwabmpxzgwqb/.test(l))) fail('R-INT-006', `ProdigyFlo database ref added in SCS file ${f}`)
 }
 
 if (APP === 'records') {
