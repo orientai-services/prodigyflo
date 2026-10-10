@@ -21,3 +21,16 @@ describe('bearer-auth continuation through the session proxy',()=>{
   expect(proxy(new NextRequest('https://preview.test/api/internal/records/run')).status).toBe(503)
  })
 })
+describe('Quick look PDF.js assets',()=>{
+ it('serves /pdfjs/ worker and decoder files without a session cookie',()=>{
+  vi.stubEnv('PRODIGYFLO_MAINTENANCE','false')
+  for(const path of ['/pdfjs/pdf.worker.min.mjs','/pdfjs/wasm/jbig2.wasm','/pdfjs/standard_fonts/FoxitSans.pfb']) {
+   const response=proxy(new NextRequest(`https://preview.test${path}`))
+   expect(response.headers.get('location')).toBeNull()
+  }
+ })
+ it('does not open look-alike paths',()=>{
+  vi.stubEnv('PRODIGYFLO_MAINTENANCE','false')
+  expect(proxy(new NextRequest('https://preview.test/pdfjs-admin')).headers.get('location')).toContain('/login')
+ })
+})

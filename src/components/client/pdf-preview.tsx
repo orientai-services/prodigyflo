@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
-type PdfDocument = Awaited<ReturnType<typeof import('unpdf').getDocumentProxy>>
+import { openPdfForPreview, previewScale } from './pdf-loader'
+
+type PdfDocument = Awaited<ReturnType<typeof openPdfForPreview>>
 
 /** Render the authenticated original without depending on a browser PDF plug-in. */
 export function PdfPreview({ url, title }: { url: string; title: string }) {
@@ -22,8 +24,7 @@ export function PdfPreview({ url, title }: { url: string; title: string }) {
         const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal })
         if (!response.ok) throw new Error(response.status === 403 ? 'This document link has expired. Close Quick view and reload the profile.' : `Document could not be opened (${response.status}).`)
         const bytes = new Uint8Array(await response.arrayBuffer())
-        const { getDocumentProxy } = await import('unpdf')
-        opened = await getDocumentProxy(bytes)
+        opened = await openPdfForPreview(bytes)
         if (disposed) { await opened.loadingTask.destroy(); return }
         setDocument(opened)
       } catch (cause) {
@@ -43,7 +44,8 @@ export function PdfPreview({ url, title }: { url: string; title: string }) {
         const page = await document.getPage(pageNumber)
         if (disposed || !canvasRef.current) return
         const canvas = canvasRef.current
-        const viewport = page.getViewport({ scale: 1.5 })
+        const base = page.getViewport({ scale: 1 })
+        const viewport = page.getViewport({ scale: previewScale(base.width, base.height) })
         canvas.width = viewport.width
         canvas.height = viewport.height
         const context = canvas.getContext('2d')

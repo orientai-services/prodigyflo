@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && node scripts/copy-pdfjs-assets.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -21,7 +21,9 @@
     "check:canonical": "bash scripts/check-canonical.sh pf",
     "e2e": "playwright test --config=playwright.workspace.config.ts",
     "e2e:headed": "playwright test --config=playwright.workspace.config.ts --headed",
-    "workspace:merge": "tsx scripts/merge-workspaces.ts"
+    "workspace:merge": "tsx scripts/merge-workspaces.ts",
+    "prebuild": "node scripts/copy-pdfjs-assets.mjs",
+    "predev": "node scripts/copy-pdfjs-assets.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
