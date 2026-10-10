@@ -10,7 +10,7 @@ import { setUserActiveAction } from '@/app/(app)/settings/users/actions'
 import { decideFinalSuggestion, inviteFinalCloser, saveFinalQuestionnaire } from '@/lib/final-desk/actions'
 import { QUESTION_SECTIONS, answerCount, type QuestionnaireAnswers } from '@/lib/final-desk/questions'
 import { DOCUMENT_MODULES } from '@/lib/final-desk/mapping'
-import { boardForMonth, civilDate, parseMonth, shiftIso, shiftMonth, timeLabel, weekCovered, weekDayIsos, weekTitle, zonedDate, type DeskChip } from '@/lib/daily-desk'
+import { boardForMonth, civilDate, parseMonth, shiftIso, shiftMonth, timeLabel, todayAction, weekCovered, weekDayIsos, weekTitle, zonedDate, type DeskChip } from '@/lib/daily-desk'
 import type { CaseCell, CaseDocTile } from '@/lib/daily-desk-case-types'
 import type { DeskView, FinalDeskPayload } from '@/lib/final-desk/types'
 import { DocumentTileActions } from './document-tile-actions'
@@ -193,7 +193,8 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   function showMonth(key: string) {
     const nextKey = parseMonth(key).key
     setMode('month')
-    if (monthRef.current === nextKey) return
+    // The ref can still say "this month" after the grid has moved. Trust the grid.
+    if (monthRef.current === nextKey && board?.month === nextKey) return
     rememberMonth(nextKey); showLoadedMonth(nextKey)
     void refresh(nextKey).catch(() => notify('Could not load appointments for that month.'))
   }
@@ -212,11 +213,13 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   }
   async function jumpToday(kind: 'month' | 'week') {
     const iso = now ? civilDate(now, tz) : (board?.today ?? '')
-    if (!iso) return
+    if (!iso || !board) return
+    const action = todayAction(kind, board.month, cursorRef.current || cursor, iso, board.days.map(d => d.iso))
     cursorRef.current = iso
     setCursor(iso)
-    if (kind === 'week') await showWeek(iso)
-    else await showMonth(iso.slice(0, 7))
+    if (action === 'day') { await selectDay(iso); return }
+    if (action === 'move-week') showWeek(iso)
+    else showMonth(iso.slice(0, 7))
   }
   function drop(event: React.DragEvent, date: string, time = '10:00') {
     event.preventDefault()

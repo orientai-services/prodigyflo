@@ -9,6 +9,7 @@ import {
   isoDate,
   missingDocsLabel,
   boardForMonth,
+  todayAction,
   monthGrid,
   monthTitle,
   parseMonth,
@@ -78,6 +79,26 @@ describe('boardForMonth', () => {
   it('walks a second arrow from the month it just landed on', () => {
     const september = boardForMonth(october, '2026-09')
     expect(boardForMonth(september, shiftMonth(september.month, -1)).title).toBe('August 2026')
+  })
+})
+
+describe('todayAction', () => {
+  const october = monthGrid(2026, 9).map((cell) => cell.iso)
+
+  it('opens the day when this month is already on screen', () => {
+    expect(todayAction('month', '2026-10', '2026-10-10', '2026-10-10', october)).toBe('day')
+  })
+
+  it('comes back to this month when another month is on screen', () => {
+    expect(todayAction('month', '2026-11', '2026-11-10', '2026-10-10', october)).toBe('move-month')
+  })
+
+  it('opens the day when this week is already on screen', () => {
+    expect(todayAction('week', '2026-10', '2026-10-09', '2026-10-10', october)).toBe('day')
+  })
+
+  it('comes back to this week when the cursor is on another week', () => {
+    expect(todayAction('week', '2026-10', '2026-10-20', '2026-10-10', october)).toBe('move-week')
   })
 })
 
