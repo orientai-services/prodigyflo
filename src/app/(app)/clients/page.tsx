@@ -219,7 +219,7 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
                             <BulkCheckbox id={c.id} name={fullName(c)} />
                           </td>
                         )}
-                        <td>
+                        <td className="m-main">
                           <Link href={`/clients/${c.id}`}>{fullName(c)}</Link>
                           <div className="desk-muted" style={{ marginBottom: 0 }}>
                             {c.email}
@@ -230,17 +230,17 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
                             </div>
                           )}
                         </td>
-                        <td>
+                        <td data-label="Stage">
                           <StageBadge
                             stageKey={c.currentStage.key}
                             name={c.currentStage.name}
                             category={c.currentStage.category}
                           />
                         </td>
-                        <td>
+                        <td data-label="In stage">
                           <SlaIndicator since={c.stageEnteredAt} slaHours={c.currentStage.slaHours} />
                         </td>
-                        <td>
+                        <td data-label="Owner">
                           {canReassign ? (
                             <OwnerReassign clientId={c.id} ownerId={c.owner?.id ?? null} owners={ownerOptions} />
                           ) : (
@@ -248,9 +248,9 @@ export default async function ClientsPage({ searchParams }: PageProps<'/clients'
                           )}
                           {c.team && <div className="desk-muted" style={{ marginBottom: 0 }}>{c.team.name}</div>}
                         </td>
-                        <td>{c.leadSource?.name ?? '—'}</td>
-                        <td>{listedMoney(c.estimatedValue)}</td>
-                        <td>{relativeTime(c.lastActivityAt)}</td>
+                        <td data-label="Source">{c.leadSource?.name ?? '—'}</td>
+                        <td data-label="Value">{listedMoney(c.estimatedValue)}</td>
+                        <td data-label="Activity">{relativeTime(c.lastActivityAt)}</td>
                       </tr>
                     )
                   })}

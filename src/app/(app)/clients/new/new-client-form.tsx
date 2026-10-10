@@ -202,7 +202,8 @@ export function NewClientForm({ owners, leadSources }: { owners: Option[]; leadS
         </Field>
       </div>
 
-      <div className="flex justify-end gap-2">
+      {/* Phones: the actions stay pinned within thumb reach while the form scrolls. */}
+      <div className="flex justify-end gap-2 max-md:sticky max-md:bottom-0 max-md:z-10 max-md:-mx-4 max-md:border-t max-md:bg-background/95 max-md:px-4 max-md:pt-3 max-md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:backdrop-blur max-md:[&>*]:flex-1">
         <Button type="button" variant="outline" size="sm" onClick={() => router.push('/clients')}>
           Cancel
         </Button>

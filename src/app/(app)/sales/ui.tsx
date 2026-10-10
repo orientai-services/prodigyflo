@@ -26,13 +26,13 @@ export function SalesNav({
   ] as const
   const tabs = TABS.filter((t) => t.key !== 'qualifier' || canQualify)
   return (
-    <div className="bg-surface-sunk mt-4 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border p-0.5">
+    <div className="bg-surface-sunk no-scrollbar mt-4 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border p-0.5 max-md:snap-x">
       {tabs.map((t) => (
         <Link
           key={t.key}
           href={t.href}
           className={cn(
-            'rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors',
+            'rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors max-md:inline-flex max-md:min-h-10 max-md:shrink-0 max-md:snap-start max-md:items-center',
             current === t.key
               ? 'bg-surface-raised shadow-e1'
               : 'text-muted-foreground hover:text-foreground',

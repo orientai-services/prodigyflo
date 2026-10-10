@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Bell, BellOff, Grid3x3, Mic, MicOff, PhoneOff, Settings2, X } from 'lucide-react'
+import { dockVisible } from '@/lib/telephony/ui/dock'
 import { clockLabel } from '@/lib/telephony/ui/result'
 import { AudioSettings } from './audio-settings'
 import { ConnectionTest } from './connection-test'
@@ -32,8 +34,15 @@ const LIGHT: Record<'good' | 'warn' | 'bad', { dot: string; text: string; label:
   },
 }
 
+/** Phone layout: the bar spans the screen below this width (Tailwind `sm`). */
+const PHONE_QUERY = '(max-width: 639.98px)'
+
 /**
  * The call bar: bottom right on a desk, a full-width bottom sheet on a phone.
+ * It lives in Call Center; elsewhere it shows only for a call in progress
+ * (`dockVisible`). On a phone the page gets bottom padding equal to the bar's
+ * height so nothing hides under it, and `--voice-dock-h` carries that height
+ * for pages that pin their own bars above it.
  * Idle it is a small pill that says whether this tab rings; during a call it
  * shows who, the talk timer, the quality light (one tip when it isn't
  * green), mute, keypad and hang up. Errors stay until
@@ -42,6 +51,8 @@ const LIGHT: Record<'good' | 'warn' | 'bad', { dot: string; text: string; label:
  */
 export function VoiceDock() {
   const voice = useVoice()
+  const pathname = usePathname()
+  const barRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [keypad, setKeypad] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -65,7 +76,39 @@ export function VoiceDock() {
     if (TITLE_PREFIX.test(document.title)) document.title = document.title.replace(TITLE_PREFIX, '')
   }, [inCall])
 
-  if (!voice) return null
+  const visible = Boolean(
+    voice &&
+      dockVisible({
+        pathname,
+        status: voice.status,
+        callError: Boolean(voice.error && voice.lastCall?.error === voice.error),
+      }),
+  )
+
+  // Reserve the bar's height at the bottom of the page on a phone.
+  useEffect(() => {
+    const bar = barRef.current
+    if (!visible || !bar) return
+    const root = document.documentElement
+    const phone = window.matchMedia(PHONE_QUERY)
+    const apply = () => {
+      const height = Math.ceil(bar.getBoundingClientRect().height)
+      root.style.setProperty('--voice-dock-h', phone.matches ? `${height}px` : '0px')
+      document.body.style.paddingBottom = phone.matches ? `${height}px` : ''
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(bar)
+    phone.addEventListener('change', apply)
+    return () => {
+      observer.disconnect()
+      phone.removeEventListener('change', apply)
+      root.style.removeProperty('--voice-dock-h')
+      document.body.style.paddingBottom = ''
+    }
+  }, [visible])
+
+  if (!voice || !visible) return null
   const { setup, status, leader, registered } = voice
   const busy = status !== 'idle'
   const showKeypad = keypad && status === 'in-call'
@@ -86,11 +129,12 @@ export function VoiceDock() {
 
   return (
     <div
-      className="bg-popover text-popover-foreground fixed inset-x-0 bottom-0 z-50 border-t shadow-lg sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-80 sm:rounded-xl sm:border"
+      ref={barRef}
+      className="bg-popover text-popover-foreground fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:max-h-none sm:w-80 sm:overflow-visible sm:rounded-xl sm:border sm:pb-0 sm:shadow-lg"
       role="region"
       aria-label="Phone"
     >
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 sm:flex-nowrap sm:px-3 sm:py-2">
         <span
           className={[
             'size-2 shrink-0 rounded-full',
@@ -102,76 +146,77 @@ export function VoiceDock() {
           title={light ? `${light.label}. MOS is a 1 to 4.5 score; above 4 sounds clear.` : undefined}
         />
         <div className="min-w-0 flex-1">
-          {voice.who && busy && <p className="truncate text-sm font-medium">{voice.who}</p>}
-          <p className="text-muted-foreground truncate text-xs" aria-live="polite">
+          {voice.who && busy && <p className="truncate text-base font-medium sm:text-sm">{voice.who}</p>}
+          <p className="text-muted-foreground truncate text-sm sm:text-xs" aria-live="polite">
             {stateLine}
           </p>
           {quality?.tip && light && (
-            <p className={`text-xs leading-snug ${light.text}`} role="status">
+            <p className={`text-sm leading-snug sm:text-xs ${light.text}`} role="status">
               {quality.tip}
             </p>
           )}
         </div>
         {busy ? (
-          <>
+          // A row of its own on a phone (big thumb targets); inline on a desk.
+          <div className="flex w-full items-center gap-2 sm:contents">
             <button
               type="button"
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md disabled:opacity-40"
+              className="hover:bg-muted inline-flex h-12 w-16 items-center justify-center rounded-lg border disabled:opacity-40 sm:size-8 sm:rounded-md sm:border-0"
               onClick={voice.toggleMute}
               disabled={status !== 'in-call'}
               aria-pressed={voice.muted}
               aria-label={voice.muted ? 'Unmute' : 'Mute'}
             >
-              {voice.muted ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+              {voice.muted ? <MicOff className="size-5 sm:size-4" /> : <Mic className="size-5 sm:size-4" />}
             </button>
             <button
               type="button"
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md disabled:opacity-40"
+              className="hover:bg-muted inline-flex h-12 w-16 items-center justify-center rounded-lg border disabled:opacity-40 sm:size-8 sm:rounded-md sm:border-0"
               onClick={() => setKeypad((v) => !v)}
               disabled={status !== 'in-call'}
               aria-pressed={keypad}
               aria-label="Keypad"
             >
-              <Grid3x3 className="size-4" />
+              <Grid3x3 className="size-5 sm:size-4" />
             </button>
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1 rounded-md bg-red-600 px-2.5 text-xs font-medium text-white hover:bg-red-700"
+              className="inline-flex h-12 flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 text-base font-medium text-white hover:bg-red-700 sm:h-8 sm:flex-none sm:gap-1 sm:rounded-md sm:px-2.5 sm:text-xs"
               onClick={voice.hangup}
             >
-              <PhoneOff className="size-3.5" />
+              <PhoneOff className="size-4 sm:size-3.5" />
               Hang up
             </button>
-          </>
+          </div>
         ) : (
           <>
             {leader && (
               <button
                 type="button"
-                className="hover:bg-muted text-muted-foreground inline-flex size-8 items-center justify-center rounded-md"
+                className="hover:bg-muted text-muted-foreground inline-flex size-11 items-center justify-center rounded-lg sm:size-8 sm:rounded-md"
                 onClick={() => voice.setRingtoneMuted(!voice.ringtoneMuted)}
                 aria-pressed={voice.ringtoneMuted}
                 aria-label={voice.ringtoneMuted ? 'Turn the ringtone on' : 'Mute the ringtone'}
                 title={voice.ringtoneMuted ? 'Ringtone off. Incoming calls still show here.' : 'Ringtone on'}
               >
-                {voice.ringtoneMuted ? <BellOff className="size-4" /> : <Bell className="size-4" />}
+                {voice.ringtoneMuted ? <BellOff className="size-5 sm:size-4" /> : <Bell className="size-5 sm:size-4" />}
               </button>
             )}
             <button
               type="button"
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md"
+              className="hover:bg-muted inline-flex size-11 items-center justify-center rounded-lg sm:size-8 sm:rounded-md"
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
               aria-label="Phone settings"
             >
-              <Settings2 className="size-4" />
+              <Settings2 className="size-5 sm:size-4" />
             </button>
           </>
         )}
       </div>
 
       {(setup.voiceLimited || setup.mode === 'mock') && (
-        <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+        <div className="flex flex-wrap gap-1.5 px-4 pb-2 sm:px-3">
           {setup.voiceLimited && (
             <span
               className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300"
@@ -189,21 +234,26 @@ export function VoiceDock() {
       )}
 
       {voice.error && (
-        <div className="text-destructive flex items-start gap-2 border-t px-3 py-2 text-xs" role="alert">
+        <div className="text-destructive flex items-start gap-2 border-t px-4 py-2 text-sm sm:px-3 sm:text-xs" role="alert">
           <span className="flex-1">{voice.error}</span>
-          <button type="button" onClick={voice.clearError} aria-label="Dismiss" className="shrink-0">
-            <X className="size-3.5" />
+          <button
+            type="button"
+            onClick={voice.clearError}
+            aria-label="Dismiss"
+            className="-my-2 -mr-2 inline-flex size-11 shrink-0 items-center justify-center sm:m-0 sm:size-auto"
+          >
+            <X className="size-4 sm:size-3.5" />
           </button>
         </div>
       )}
 
       {showKeypad && (
-        <div className="grid grid-cols-3 gap-1.5 border-t px-3 py-2">
+        <div className="grid grid-cols-3 gap-2 border-t px-4 py-3 sm:gap-1.5 sm:px-3 sm:py-2">
           {KEYS.map((key) => (
             <button
               key={key}
               type="button"
-              className="hover:bg-muted h-9 rounded-md border text-sm font-medium tabular-nums"
+              className="hover:bg-muted h-14 rounded-lg border text-xl font-medium tabular-nums sm:h-9 sm:rounded-md sm:text-sm"
               onClick={() => voice.sendDigits(key)}
             >
               {key}
@@ -213,12 +263,12 @@ export function VoiceDock() {
       )}
 
       {open && !busy && (
-        <div className="grid gap-3 border-t px-3 py-3">
+        <div className="grid gap-3 border-t px-4 py-3 sm:px-3">
           {setup.canPickLine && setup.lines.length > 0 && (
             <label className="grid gap-1 text-sm">
               <span className="text-muted-foreground text-xs">Call from</span>
               <select
-                className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+                className="border-input bg-background h-11 rounded-md border px-2 text-base sm:h-8 sm:text-sm"
                 value={voice.lineId ?? ''}
                 onChange={(e) => voice.setLineId(e.target.value)}
                 aria-label="Call from"

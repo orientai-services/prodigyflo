@@ -9,6 +9,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { dateTime, relativeTime } from '@/lib/format'
 import { getInboundEvent } from '@/lib/inbound/queries'
 import { CategoryPill, ConnectorChip } from '../pills'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Inbound event' }
 
@@ -48,7 +50,7 @@ export default async function InboundEventPage({ params }: PageProps<'/inbound/[
         </div>
       </PageHeader>
 
-      <div className="grid gap-4 p-4 sm:p-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:p-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card>
             <CardHeader>
@@ -58,7 +60,7 @@ export default async function InboundEventPage({ params }: PageProps<'/inbound/[
               {rows.length === 0 ? (
                 <p className="text-muted-foreground text-sm">No normalized fields were recorded for this event.</p>
               ) : (
-                <div className="scroll-x">
+                <div className={cn('scroll-x', STICKY_FIRST_COL)}>
                   <table className="w-full min-w-[32rem] text-sm">
                     <tbody>
                       {rows.map((r) => (

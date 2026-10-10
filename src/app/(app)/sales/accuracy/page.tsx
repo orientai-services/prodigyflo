@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { number, percent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { SalesNav } from '../ui'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'AI accuracy' }
 
@@ -90,7 +91,7 @@ export default async function AiAccuracyPage() {
         ) : (
           <>
             <Headline cal={cal} />
-            <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
               <ReliabilityCard buckets={cal.buckets} />
               <ThresholdCard cal={cal} />
             </div>
@@ -387,7 +388,7 @@ function PerCloserCard({ cal }: { cal: CalibrationResult }) {
           <span className="tabular-nums">8+</span> decided deals to judge.
         </p>
       </div>
-      <div className="scroll-x">
+      <div className={cn('scroll-x', STICKY_FIRST_COL)}>
         <table className="w-full min-w-[34rem] text-sm tabular-nums">
           <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
             <tr>

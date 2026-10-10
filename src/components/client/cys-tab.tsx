@@ -219,7 +219,7 @@ export async function CysTab({ clientId }: { clientId: string }) {
                   const attention = status === 'MISSING' || status === 'CONFLICT'
                   return (
                     <tr key={def.key} className={cn(attention && def.isRequired && 'bg-destructive/5')}>
-                      <td>
+                      <td className="m-main">
                         <span className="font-medium">{def.label}</span>
                         {def.isRequired && (
                           <span className="desk-v miss" title="Required">
@@ -229,7 +229,7 @@ export async function CysTab({ clientId }: { clientId: string }) {
                         )}
 
                       </td>
-                      <td>
+                      <td data-label="Value">
                         {v?.value ? (
                           <span className="break-all">{v.value}</span>
                         ) : (
@@ -248,12 +248,12 @@ export async function CysTab({ clientId }: { clientId: string }) {
                           </div>
                         )}
                       </td>
-                      <td>{v?.sourceLabel ?? '—'}</td>
-                      <td>
+                      <td data-label="Source">{v?.sourceLabel ?? '—'}</td>
+                      <td data-label="Status">
                         <StatusBadge status={status} confidence={v?.confidence ?? null} />
                       </td>
                       {canPrepare && (
-                        <td>
+                        <td className="m-actions">
                           {CYS_DOCUMENT_KINDS[def.key] ? (
                             <a className="text-sm underline" href={`#document-${CYS_DOCUMENT_KINDS[def.key]}`}>Open document module</a>
                           ) : <FieldActions

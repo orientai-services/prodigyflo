@@ -62,7 +62,48 @@ export default async function PortalPage() {
             <div className="mb-3">
               <p className="text-sm font-medium">{stage.headline}</p>
             </div>
-            <ol className="flex items-start" aria-label="Progress">
+            {/* Phones: a vertical checklist — every step label readable at full size. */}
+            <ol className="sm:hidden" aria-label="Progress">
+              {PORTAL_STEPS.map((s, i) => {
+                const state = i < (stage.step as number) ? 'done' : i === stage.step ? 'current' : 'upcoming'
+                const last = i === PORTAL_STEPS.length - 1
+                return (
+                  <li key={s.key} className="flex gap-3" aria-current={state === 'current' ? 'step' : undefined}>
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={cn(
+                          'flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold',
+                          state === 'done' && 'border-brand bg-brand text-primary-foreground',
+                          state === 'current' && 'border-brand bg-brand-soft text-brand ring-brand/25 ring-4',
+                          state === 'upcoming' && 'border-border bg-background text-muted-foreground',
+                        )}
+                      >
+                        {state === 'done' ? <Check className="size-4" /> : i + 1}
+                      </div>
+                      {!last && (
+                        <div
+                          className={cn('my-0.5 min-h-3 w-0.5 flex-1 rounded-full', state === 'done' ? 'bg-brand' : 'bg-border')}
+                          aria-hidden
+                        />
+                      )}
+                    </div>
+                    <div className={cn('flex min-h-8 flex-col justify-center', !last && 'pb-5')}>
+                      <span
+                        className={cn(
+                          'text-sm font-medium',
+                          state === 'current' ? 'text-brand' : state === 'done' ? 'text-foreground' : 'text-muted-foreground',
+                        )}
+                      >
+                        {s.label}
+                      </span>
+                      {state === 'current' && <span className="text-muted-foreground text-xs">You are here</span>}
+                      {state === 'done' && <span className="sr-only">Done</span>}
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
+            <ol className="hidden items-start sm:flex" aria-label="Progress">
               {PORTAL_STEPS.map((s, i) => {
                 const state = i < (stage.step as number) ? 'done' : i === stage.step ? 'current' : 'upcoming'
                 return (
@@ -240,7 +281,7 @@ export default async function PortalPage() {
                       href={a.meetingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-brand inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+                      className="text-brand inline-flex items-center gap-1.5 text-sm font-medium hover:underline max-sm:border-brand/40 max-sm:h-11 max-sm:w-full max-sm:justify-center max-sm:rounded-lg max-sm:border max-sm:text-base"
                     >
                       <Video className="size-4" /> Join
                     </a>

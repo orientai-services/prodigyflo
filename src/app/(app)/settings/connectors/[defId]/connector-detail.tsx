@@ -165,7 +165,7 @@ export function ConnectorDetail({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* ── Overview ── */}
       <Card>
         <CardHeader>
@@ -349,7 +349,7 @@ export function ConnectorDetail({
               value={payload}
               onChange={(e) => setPayload(e.target.value)}
               placeholder='{"first_name": "Ada", "email": "ada@example.com"}'
-              className="h-40 font-mono text-xs"
+              className="h-40 font-mono text-xs max-md:text-base"
               aria-label="Sample payload"
             />
             <div className="flex items-center gap-2">

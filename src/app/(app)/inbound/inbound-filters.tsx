@@ -25,7 +25,7 @@ function Select({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={placeholder}
-      className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-md border px-2 text-sm outline-none focus-visible:ring-3"
+      className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-md border px-2 text-sm outline-none focus-visible:ring-3 max-md:text-base"
     >
       <option value="">{placeholder}</option>
       {options.map((o) => (

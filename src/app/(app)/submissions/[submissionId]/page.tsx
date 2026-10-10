@@ -189,7 +189,7 @@ export default async function SubmissionDetailPage({
               <tbody>
                 {manifest.map((doc) => (
                   <tr key={doc.id}>
-                    <td>
+                    <td className="m-main">
                       {doc.name}
                       {doc.sizeBytes !== null && (
                         <div className="desk-muted" style={{ marginBottom: 0 }}>
@@ -197,9 +197,9 @@ export default async function SubmissionDetailPage({
                         </div>
                       )}
                     </td>
-                    <td>{doc.type}</td>
-                    <td>{doc.version}</td>
-                    <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{doc.checksum ?? '—'}</td>
+                    <td data-label="Type">{doc.type}</td>
+                    <td data-label="Version">{doc.version}</td>
+                    <td data-label="Checksum" className="m-full break-all" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{doc.checksum ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

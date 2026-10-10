@@ -124,6 +124,8 @@ function NavSections({
               const linkClass = cn(
                 'focus-visible:ring-ring flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none',
                 rail && 'justify-center gap-0 [.pf-nav-open_&]:justify-start [.pf-nav-open_&]:gap-2.5',
+                // Mobile drawer: full 44px rows for thumbs.
+                !rail && 'min-h-11 px-3 text-[0.95rem]',
                 active
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                   : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
@@ -352,17 +354,17 @@ export function AppShell({
         <SheetContent
           side="left"
           showCloseButton={false}
-          className="bg-sidebar gap-0 p-0 data-[side=left]:w-72 data-[side=left]:max-w-[85vw] lg:hidden"
+          className="bg-sidebar gap-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] data-[side=left]:h-dvh data-[side=left]:w-72 data-[side=left]:max-w-[85vw] lg:hidden"
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <div className="flex h-14 shrink-0 items-center justify-between border-b px-4">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b pr-2 pl-4">
             <Link href="/" className="flex items-center">
               <AppBrand slug={activeOrgSlug} className="h-7" />
             </Link>
             <SheetClose
-              render={<Button variant="ghost" size="icon-sm" aria-label="Close menu" />}
+              render={<Button variant="ghost" size="icon-sm" className="size-11" aria-label="Close menu" />}
             >
-              <X className="size-4" />
+              <X className="size-5" />
             </SheetClose>
           </div>
           <div className="min-h-0 flex-1">
@@ -376,21 +378,24 @@ export function AppShell({
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="desk-top sticky top-0 z-40 flex h-14 items-center gap-2 border-b px-3 sm:px-5">
+        <header className="desk-top sticky top-0 z-40 flex h-14 items-center gap-2 border-b px-3 max-sm:gap-1 max-sm:px-1.5 sm:px-5">
           <Button
             variant="ghost"
             size="icon-sm"
-            className="lg:hidden"
+            className="size-11 lg:hidden"
             onClick={() => setMobileOpen(true)}
             aria-label={t.openMenu}
+            aria-expanded={mobileOpen}
           >
-            <Menu className="size-4" />
+            <Menu className="size-5" />
           </Button>
 
           {/* The sidebar carries the mark on desktop; on smaller screens the
-              header does, so the brand never disappears. */}
-          <Link href="/" className="flex items-center lg:hidden">
-            <AppBrand slug={activeOrgSlug} className="h-6" />
+              header does, so the brand never disappears. Phones get the mark
+              alone so every header control keeps a 44px target. */}
+          <Link href="/" className="flex min-h-11 items-center lg:hidden" aria-label="Home">
+            <AppBrand slug={activeOrgSlug} className="hidden h-6 sm:inline-flex" />
+            <AppBrand slug={activeOrgSlug} showWordmark={false} className="h-7 sm:hidden" />
           </Link>
 
           {/* Full search field from sm up; a plain icon below that. */}
@@ -409,13 +414,13 @@ export function AppShell({
             <Button
               variant="ghost"
               size="icon-sm"
-              className="sm:hidden"
+              className="size-11 sm:hidden"
               onClick={() => setPaletteOpen(true)}
               aria-label="Search"
             >
-              <Search className="size-4" />
+              <Search className="size-5" />
             </Button>
-            <LocaleSwitch />
+            <LocaleSwitch className="max-lg:h-11 max-lg:px-1 max-lg:[&>button]:h-full max-lg:[&>button]:min-w-9 max-lg:[&>button]:text-xs" />
             <NotificationBell unreadCount={unreadCount} />
             <UserMenu user={user} />
           </div>

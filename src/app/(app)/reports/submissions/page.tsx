@@ -74,7 +74,7 @@ export default async function SubmissionsReportPage() {
             description="When deals start going out to CYS, weekly volume and outcomes appear here."
           />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
             <TrendChart
               title="Weekly submission activity"
               description="Created, sent, and approved per week — the gap between lines is your backlog"

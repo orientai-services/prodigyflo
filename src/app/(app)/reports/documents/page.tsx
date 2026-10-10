@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CollapsibleSection } from '@/components/ui/collapsible-section'
 import { number, percent, rate } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Document completion' }
 
@@ -69,7 +71,7 @@ export default async function DocumentCompletionPage() {
             description="Once document packages exist and requests go out, completion rates appear here."
           />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
             <CollapsibleSection
               variant="card"
               className="self-start"
@@ -78,7 +80,7 @@ export default async function DocumentCompletionPage() {
               description="Requested, received, and approved for each document"
               summary={`${number(rows.length)} requirements`}
             >
-              <div className="scroll-x">
+              <div className={cn('scroll-x', STICKY_FIRST_COL)}>
                 <table className="w-full min-w-[44rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr>

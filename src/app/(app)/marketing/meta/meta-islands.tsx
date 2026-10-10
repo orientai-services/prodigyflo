@@ -155,7 +155,7 @@ export function SpendCapForm({ campaignId, spendCap }: { campaignId: string; spe
         <Input
           id={`cap-${campaignId}`} name="spendCap" type="number" min="100" step="1"
           defaultValue={spendCap ?? ''} placeholder="e.g. 2500"
-          className="h-8 text-right text-sm"
+          className="h-8 text-right text-sm max-md:text-base"
         />
         <Button type="submit" size="sm" variant="outline" disabled={pending}>{pending ? '…' : 'Set cap'}</Button>
       </div>

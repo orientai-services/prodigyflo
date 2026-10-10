@@ -32,7 +32,7 @@ export function PhoneSetupSheet({
           </button>
         }
       />
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
+      <SheetContent side="right" className="w-full overflow-y-auto max-sm:w-full! sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Phone setup</SheetTitle>
           <SheetDescription>The carrier account, calling rules and the do-not-call list.</SheetDescription>

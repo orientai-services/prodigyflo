@@ -240,7 +240,7 @@ export default async function DataHealthPage() {
         </StatGrid>
 
         {/* Checklist */}
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {report.checks.map((check) => (
             <CheckCard key={check.key} check={check} />
           ))}

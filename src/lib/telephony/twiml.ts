@@ -192,7 +192,8 @@ export function browserDialTwiml(config: {
           ])}`
         : ''
       const params = Object.entries(leg.params)
-        .map(([name, value]) => `<Parameter ${attrs([['name', name], ['value', value]])}/>`)
+        // `value` is required even when empty (Twilio warns 12200 otherwise), so it bypasses attrs().
+        .map(([name, value]) => `<Parameter ${attrs([['name', name]])} value="${escapeXml(String(value ?? ''))}"/>`)
         .join('')
       return `<Client${status}><Identity>${escapeXml(leg.identity)}</Identity>${params}</Client>`
     })

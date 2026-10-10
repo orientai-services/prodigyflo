@@ -95,13 +95,13 @@ export function MissedCalls({
   }
 
   if (visible.length === 0) {
-    return <p className="text-muted-foreground p-4 text-sm">No missed calls waiting.</p>
+    return <p className="missed-empty text-muted-foreground p-4 text-sm">No missed calls waiting.</p>
   }
 
   return (
-    <div>
+    <div className="missed-list">
       {error && (
-        <p className="text-destructive px-4 pt-3 text-sm" role="alert">
+        <p className="missed-error text-destructive px-4 pt-3 text-sm sm:px-5" role="alert">
           {error}
         </p>
       )}
@@ -113,84 +113,87 @@ export function MissedCalls({
             <li
               key={call.id}
               ref={open ? openRef : undefined}
-              className={['grid gap-2 px-4 py-3', open ? 'bg-amber-500/10' : ''].join(' ')}
+              className={['missed-row flex flex-col gap-3 px-4 py-4 sm:px-5', open ? 'bg-amber-500/10' : ''].join(' ')}
             >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                    <span className="truncate">
-                      {href ? (
-                        <Link href={href} className="hover:underline">
-                          {call.caller}
-                        </Link>
-                      ) : (
-                        call.caller
-                      )}
-                    </span>
-                    {call.callbackRequested && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[0.7rem] font-medium text-amber-700 dark:text-amber-300">
-                        <PhoneIncoming className="size-3" aria-hidden="true" />
-                        Asked for a callback
-                      </span>
+              <div className="min-w-0">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold sm:text-sm">
+                  <span className="min-w-0 truncate">
+                    {href ? (
+                      <Link href={href} className="hover:underline">
+                        {call.caller}
+                      </Link>
+                    ) : (
+                      call.caller
                     )}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {whenLabel(call.at)} · {call.lineLabel} ·{' '}
-                    {call.callbackRequested ? 'Pressed 1 for a callback' : REASON_WORDS[call.reason]}
-                  </p>
-                </div>
+                  </span>
+                  {call.callbackRequested && (
+                    <span className="missed-badge inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 sm:text-[0.7rem] dark:text-amber-300">
+                      <PhoneIncoming className="size-3" aria-hidden="true" />
+                      Asked for a callback
+                    </span>
+                  )}
+                </p>
+                <p className="missed-meta text-muted-foreground mt-0.5 text-sm sm:text-xs">
+                  {whenLabel(call.at)} · {call.lineLabel} ·{' '}
+                  {call.callbackRequested ? 'Pressed 1 for a callback' : REASON_WORDS[call.reason]}
+                </p>
               </div>
               {call.voicemail && <RecordingPlayer src={call.voicemail.src} seconds={call.voicemail.seconds} label="Voicemail" />}
               {call.voicemail && call.transcript && (
-                <blockquote className="text-muted-foreground border-l-2 pl-3 text-xs leading-relaxed whitespace-pre-line">
+                <blockquote className="missed-transcript text-muted-foreground border-l-2 pl-3 text-sm leading-relaxed whitespace-pre-line sm:text-xs">
                   <span className="sr-only">Voicemail transcript: </span>“{call.transcript}”
                 </blockquote>
               )}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
                 <CallButton
                   target={call.target ?? { kind: 'missed', id: call.id }}
                   who={call.caller}
                   label="Call back"
                   canOverrideHours={canOverrideHours}
+                  className="w-full sm:w-auto"
                 />
-                <span className="text-muted-foreground text-xs" aria-hidden="true">
-                  Close as:
-                </span>
-                {DISPOSITIONS.map((d) => (
-                  <button
-                    key={d.value}
-                    type="button"
-                    className="hover:bg-muted inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-xs disabled:opacity-50"
-                    disabled={pending}
-                    aria-label={`Close as ${d.label.toLowerCase()}`}
-                    onClick={() => close(call, d.value)}
-                  >
-                    {busy?.id === call.id && busy.disposition === d.value && <Loader2 className="size-3.5 animate-spin" />}
-                    {d.label}
-                  </button>
-                ))}
-                {noteFor === call.id ? (
-                  <input
-                    className="border-input bg-background h-7 min-w-44 rounded-md border px-2 text-xs"
-                    value={note}
-                    maxLength={200}
-                    placeholder="Note (saved with the button you press)"
-                    onChange={(e) => setNote(e.target.value)}
-                    aria-label="Note"
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground h-7 px-1 text-xs underline-offset-2 hover:underline"
-                    onClick={() => {
-                      setNoteFor(call.id)
-                      setNote('')
-                    }}
-                  >
-                    Add note
-                  </button>
-                )}
+                <div className="flex min-w-0 flex-1 basis-full flex-col gap-2 sm:basis-auto" role="group" aria-label={`Close the call from ${call.caller}`}>
+                  <span className="text-muted-foreground text-xs" aria-hidden="true">
+                    Close as
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {DISPOSITIONS.map((d) => (
+                      <button
+                        key={d.value}
+                        type="button"
+                        className="missed-btn hover:bg-muted inline-flex h-11 grow basis-[calc(50%-0.25rem)] items-center justify-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-50 sm:h-8 sm:grow-0 sm:basis-auto sm:rounded-md sm:text-xs"
+                        disabled={pending}
+                        aria-label={`Close as ${d.label.toLowerCase()}`}
+                        onClick={() => close(call, d.value)}
+                      >
+                        {busy?.id === call.id && busy.disposition === d.value && <Loader2 className="size-3.5 animate-spin" />}
+                        {d.label}
+                      </button>
+                    ))}
+                    {noteFor === call.id ? (
+                      <input
+                        className="missed-note border-input bg-background h-11 basis-full min-w-0 rounded-lg border px-3 text-base sm:h-8 sm:min-w-56 sm:rounded-md sm:px-2 sm:text-xs"
+                        value={note}
+                        maxLength={200}
+                        placeholder="Note (saved with the button you press)"
+                        onChange={(e) => setNote(e.target.value)}
+                        aria-label="Note"
+                        autoFocus
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="missed-btn missed-link text-muted-foreground hover:text-foreground inline-flex h-11 grow basis-[calc(50%-0.25rem)] items-center justify-center rounded-lg px-3 text-sm underline-offset-2 hover:underline sm:h-8 sm:grow-0 sm:basis-auto sm:px-1 sm:text-xs"
+                        onClick={() => {
+                          setNoteFor(call.id)
+                          setNote('')
+                        }}
+                      >
+                        Add note
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </li>
           )

@@ -84,11 +84,8 @@
 }
 
 @media (max-width: 980px) {
+  /* The rail itself (compact top bar + menu sheet) is the final-desk shell's job. */
   .final-desk.call-center .shell { flex-direction: column; }
-  .final-desk.call-center .rail { display: flex; width: 100%; flex-direction: column; align-items: stretch; gap: 8px; overflow: visible; padding: 12px 16px 8px; }
-  .final-desk.call-center .nav { flex-direction: row; flex-wrap: wrap; margin-top: 0; gap: 4px; }
-  .final-desk.call-center .nav a { padding: 6px 10px; }
-  .final-desk.call-center .brand { flex-shrink: 0; }
   .final-desk.call-center .top { height: auto; flex-wrap: wrap; align-items: stretch; padding: 12px 16px; gap: 10px; }
   .final-desk.call-center .search { max-width: none; min-width: 0; width: 100%; }
   .final-desk.call-center .top-right { width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: space-between; }
@@ -200,3 +197,176 @@
 }
 
 .call-center .trail .transcript { margin: 4px 0 0; padding-left: 8px; border-left: 2px solid var(--line, #ddd); font-style: italic; white-space: pre-wrap; }
+
+/* Missed calls inside the desk. The final-desk reset (`* { margin:0; padding:0 }`)
+   is unlayered, so it beats the component's Tailwind spacing; give it back here. */
+.final-desk.call-center .missed-empty { padding: 18px 20px; }
+.final-desk.call-center .missed-error { padding: 14px 20px 0; }
+.final-desk.call-center .missed-row { padding: 16px 20px; }
+.final-desk.call-center .missed-meta { margin-top: 3px; }
+.final-desk.call-center .missed-badge { padding: 2px 8px; }
+.final-desk.call-center .missed-transcript { padding-left: 12px; }
+.final-desk.call-center .missed-btn { padding: 0 12px; }
+.final-desk.call-center .missed-note { padding: 0 10px; }
+.final-desk.call-center .missed-row [data-slot="button"] { padding: 0 14px; }
+@media (max-width: 767.98px) {
+  .final-desk.call-center .missed-row { padding: 16px; }
+}
+
+/* ── Mobile pass (docs/MOBILE.md). Desktop (≥1024) is untouched: every rule
+   below is either display:none there or sits in a phone media query. ── */
+.final-desk.call-center .detail-bar,
+.final-desk.call-center .sched-backdrop,
+.final-desk.call-center .sched-grab { display: none; }
+@media (min-width: 1024px) {
+  .final-desk.call-center .rail-toggle { display: none; }
+}
+
+@media (max-width: 767.98px) {
+  .final-desk.call-center .main { padding: 14px 16px 32px; }
+  .final-desk.call-center.power-on .main { padding-bottom: 150px; }
+
+  /* Header: search on its own row, then language · power · help, then the
+     calling note beside Phone setup. */
+  .final-desk.call-center .top { padding: 10px 16px 12px; gap: 8px; }
+  .final-desk.call-center .search input { min-height: 44px; font-size: 16px; }
+  .final-desk.call-center .top-right { flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-start; }
+  .final-desk.call-center .lang { position: relative; flex: 1 1 120px; min-width: 0; }
+  /* "Working language" becomes a small caption inside the select's box. */
+  .final-desk.call-center .lang-text {
+    position: absolute; left: 13px; top: 5px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; pointer-events: none;
+  }
+  .final-desk.call-center .lang select { width: 100%; min-height: 44px; padding: 16px 10px 2px 12px; font-size: 16px; }
+  .final-desk.call-center .power-toggle { min-height: 44px; padding: 0 14px; font-size: 14px; }
+  /* Phones have no keyboard for the shortcuts; the keys still work if one is attached. */
+  .final-desk.call-center .keys-btn { display: none; }
+  .final-desk.call-center .voice { flex: 1 1 52%; min-width: 0; font-size: 12px; line-height: 1.35; }
+  .final-desk.call-center .top-right > .btn { flex: 0 0 auto; min-height: 44px; padding: 0 12px; font-size: 14px; white-space: nowrap; }
+
+  .final-desk.call-center .page-title { margin-bottom: 12px; }
+  .final-desk.call-center .page-title h2 { font-size: 26px; line-height: 1.15; }
+  .final-desk.call-center .page-title p { font-size: 13px; line-height: 1.45; }
+
+  /* Tabs: one row that scrolls sideways, edge to edge. */
+  .final-desk.call-center .filters {
+    flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px 14px; padding: 0 16px 2px;
+    scroll-snap-type: x proximity; scroll-padding: 0 16px; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .final-desk.call-center .filters::-webkit-scrollbar { display: none; }
+  .final-desk.call-center .filters button { flex: 0 0 auto; min-height: 44px; padding: 0 16px; font-size: 14px; scroll-snap-align: start; }
+
+  /* Today */
+  .final-desk.call-center .kpis div { padding: 10px 12px; }
+  .final-desk.call-center .kpis dt { font-size: 12px; }
+  .final-desk.call-center .today .block { padding: 14px; }
+  .final-desk.call-center .today-list { gap: 8px; }
+  .final-desk.call-center .queue .today-list { padding: 0 14px 14px; }
+  .final-desk.call-center .today-row { min-height: 56px; padding: 12px 14px; }
+  .final-desk.call-center .today-row b { font-size: 16px; }
+  .final-desk.call-center .today-row .why { font-size: 14px; }
+  .final-desk.call-center .queue summary { min-height: 52px; font-size: 12px; }
+
+  /* Lead list: stacked rows instead of a wide table. */
+  .final-desk.call-center .lead-table { overflow-x: visible; }
+  .final-desk.call-center .lead-table table { min-width: 0; }
+  .final-desk.call-center .lead-table thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);
+  }
+  .final-desk.call-center .lead-table tbody { display: block; }
+  .final-desk.call-center .lead-table tr.row {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--line);
+  }
+  .final-desk.call-center .lead-table tr.row:last-child { border-bottom: 0; }
+  .final-desk.call-center .lead-table td { display: block; padding: 0; border: 0; }
+  .final-desk.call-center .lead-table td.c-person { flex: 1 0 100%; order: -1; margin-bottom: 2px; }
+  .final-desk.call-center .lead-table .person b { font-size: 16px; }
+  .final-desk.call-center .lead-table .person span { font-size: 13px; }
+  .final-desk.call-center .lead-table td[data-label] {
+    font-size: 12px; line-height: 1.3; padding: 4px 9px; border-radius: 999px; background: #f3eee4; color: var(--ink);
+  }
+  .final-desk.call-center .lead-table td[data-label]::before { content: attr(data-label) " · "; color: var(--muted); }
+  .final-desk.call-center .lead-table td.c-contacted.no { background: var(--amberbg); color: #7a3e10; }
+  .final-desk.call-center .lead-table td.c-contacted.yes { background: var(--greenbg); color: var(--green); }
+
+  /* The lead: a full-screen panel with a back button. */
+  .final-desk.call-center .detail:not(.open) { display: none; }
+  .final-desk.call-center .detail.open {
+    position: fixed; inset: 0; z-index: 40; height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
+    border: 0; border-radius: 0; box-shadow: none; background: var(--paper);
+    padding: 0 16px calc(var(--voice-dock-h, 0px) + 32px);
+  }
+  .final-desk.call-center.power-on .detail.open { padding-bottom: calc(var(--voice-dock-h, 0px) + 150px); }
+  .final-desk.call-center .detail-bar {
+    position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 6px;
+    margin: 0 -16px; padding: calc(env(safe-area-inset-top) + 4px) 8px 4px;
+    background: var(--paper); border-bottom: 1px solid var(--line);
+  }
+  .final-desk.call-center .detail-back {
+    display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 10px;
+    border: 0; border-radius: 10px; background: none; color: var(--teal); font-size: 16px; font-weight: 600;
+  }
+  .final-desk.call-center .detail-back span { font-size: 26px; line-height: 1; margin-top: -3px; }
+  .final-desk.call-center .detail-bar-name {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--muted); font-size: 14px;
+  }
+  .final-desk.call-center .detail .who { font-size: 28px; line-height: 1.15; }
+  .final-desk.call-center .detail h3 { margin-top: 18px; margin-bottom: 10px; }
+  .final-desk.call-center .detail .facts { grid-template-columns: 1fr 1fr; }
+  .final-desk.call-center .detail .facts dd { overflow-wrap: anywhere; }
+  .final-desk.call-center .detail .actions.duo,
+  .final-desk.call-center .detail .actions.trio,
+  .final-desk.call-center .actions.outcomes { display: grid; gap: 8px; align-items: stretch; }
+  .final-desk.call-center .detail .actions.duo,
+  .final-desk.call-center .actions.outcomes { grid-template-columns: 1fr 1fr; }
+  .final-desk.call-center .detail .actions.trio { grid-template-columns: repeat(3, 1fr); }
+  .final-desk.call-center .detail .actions .btn,
+  .final-desk.call-center .actions.outcomes .btn { width: 100%; height: auto; min-height: 48px; white-space: normal; font-size: 15px; }
+  .final-desk.call-center .actions.outcomes .linkish { grid-column: 1 / -1; min-height: 44px; margin: 0; font-size: 15px; }
+  .final-desk.call-center .call-slot,
+  .final-desk.call-center .call-slot > div { display: grid; width: 100%; }
+  .final-desk.call-center .note { min-height: 88px; font-size: 16px; }
+  .final-desk.call-center .banner.quiet { flex-direction: column; align-items: stretch; }
+  .final-desk.call-center .banner .linkish { min-height: 44px; margin: 0; font-size: 14px; text-align: left; }
+
+  /* Power mode: pinned just above the call bar, buttons in thumb reach. */
+  .final-desk.call-center .power-bar {
+    position: fixed; left: 0; right: 0; bottom: var(--voice-dock-h, 0px); z-index: 45; margin: 0;
+    flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 16px 12px;
+    border-radius: 16px 16px 0 0; border-width: 1px 0 0; box-shadow: 0 -6px 18px rgba(18, 32, 44, .12);
+  }
+  .final-desk.call-center .power-acts { flex-wrap: nowrap; }
+  .final-desk.call-center .power-acts .btn { flex: 1; min-height: 44px; }
+
+  /* Callback picker: a bottom sheet over everything but the incoming call. */
+  .final-desk.call-center .sched-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
+  .final-desk.call-center .sched {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 55; max-height: 88dvh; overflow-y: auto; overscroll-behavior: contain;
+    margin: 0; padding: 6px 16px 0; gap: 12px; background: var(--card);
+    border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
+  }
+  .final-desk.call-center .sched-grab { display: block; width: 40px; height: 4px; margin: 4px auto 0; border-radius: 99px; background: #d6cebf; }
+  .final-desk.call-center .sched-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .final-desk.call-center .sched-chips button { min-height: 56px; padding: 8px 12px; font-size: 15px; }
+  .final-desk.call-center .sched-day select { flex: 1; min-height: 44px; font-size: 16px; }
+  .final-desk.call-center .sched-slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; max-height: none; overflow: visible; }
+  .final-desk.call-center .sched-slots button { min-height: 44px; padding: 0 4px; text-align: center; font-size: 14px; }
+  .final-desk.call-center .sched-slots .muted { grid-column: 1 / -1; }
+  .final-desk.call-center .sched-acts {
+    position: sticky; bottom: 0; display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin: 0 -16px;
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line);
+  }
+  .final-desk.call-center .sched-acts .btn { width: 100%; min-height: 48px; }
+
+  /* Shortcuts list: a bottom sheet. */
+  .final-desk.call-center .keys-sheet { align-items: flex-end; padding: 0; }
+  .final-desk.call-center .keys-sheet .card {
+    width: 100%; max-height: 85dvh; border-radius: 18px 18px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+  .final-desk.call-center .keys-sheet .actions .btn { width: 100%; min-height: 48px; }
+}
+
+/* Touch-only screens have no keyboard for the shortcuts. */
+@media (hover: none) and (pointer: coarse) {
+  .final-desk.call-center .keys-btn,
+  .final-desk.call-center .wrap kbd { display: none; }
+}

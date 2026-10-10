@@ -5,6 +5,8 @@ import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { ActiveToggle, DefinitionEditor, type EditableDefinition } from './field-editor'
 import { SOURCE_TYPE_LABELS } from './constants'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'CYS field map' }
 
@@ -51,7 +53,7 @@ export default async function CysSettingsPage() {
           {[...groups.entries()].map(([groupName, defs]) => (
             <section key={groupName}>
               <h2 className="mb-2 text-sm font-semibold">{groupName}</h2>
-              <div className="scroll-x rounded-lg border">
+              <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
                 <table className="w-full min-w-[48rem] text-sm tabular-nums">
                   <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                     <tr className="border-b">
