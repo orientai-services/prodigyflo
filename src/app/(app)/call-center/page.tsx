@@ -6,6 +6,7 @@ import { can, requireUser } from '@/lib/rbac'
 import { getTwilioStatus, getVoiceSetup, listMissedCalls } from '@/lib/telephony/actions'
 import type { MissedCallVM, TwilioStatusVM, VoiceSetup } from '@/lib/telephony/voice-contract'
 import { loadPhoneSetup } from '@/lib/telephony/ui/phone-setup-data'
+import { MetaAdsContent } from '@/app/(app)/marketing/meta/dashboard'
 
 export const metadata: Metadata = { title: 'Call Center' }
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,11 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   const user = await requireUser()
   const params = await searchParams
   const owner = user.role === 'SUPER_ADMIN'
+  // The Meta Ads dashboard lives under the desk's "Ads" tab, so the ad numbers
+  // sit next to the leads they produced. Its views keep their own ?view=/?w=
+  // and link back here (docs/META_ADS_SCS.md).
+  const adsAllowed = can(user, 'connectors:read')
+  const adsTab = adsAllowed && params.tab === 'ads'
 
   const [desk, voice, missed, setup, status] = await Promise.all([
     loadCallCenterDesk(),
@@ -51,5 +57,14 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   // The Today ranking depends on the clock; the client starts from this one.
   const renderedAt = new Date().toISOString()
 
-  return <CallCenter initialLeads={desk.leads} viewerId={desk.viewerId} phone={phone} renderedAt={renderedAt} />
+  return (
+    <CallCenter
+      initialLeads={desk.leads}
+      viewerId={desk.viewerId}
+      phone={phone}
+      renderedAt={renderedAt}
+      adsAllowed={adsAllowed}
+      ads={adsTab ? <MetaAdsContent user={user} params={params} base="/call-center?tab=ads" embedded /> : null}
+    />
+  )
 }

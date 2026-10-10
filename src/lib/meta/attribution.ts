@@ -39,10 +39,15 @@ export type GraphLeadResponse = {
   is_organic?: boolean | string
 }
 
-/** The Graph fields we ask for on every lead read. */
+/**
+ * The Graph fields we ask for on every lead read. Ids only: a lead on a shared
+ * Page can come from an ad in an ad account ProdigyFlo must never read, so ad,
+ * ad set and campaign NAMES are never requested. Names are looked up at read
+ * time from synced rows of the approved account (ads/attribution-names.ts).
+ */
 export const GRAPH_LEAD_FIELDS = [
   'id', 'created_time', 'field_data',
-  'ad_id', 'ad_name', 'adset_id', 'adset_name', 'campaign_id', 'campaign_name',
+  'ad_id', 'adset_id', 'campaign_id',
   'form_id', 'platform', 'is_organic',
 ].join(',')
 
@@ -73,6 +78,7 @@ function bool(raw: unknown): boolean | null {
 /**
  * Merge Graph's lead attribution with the webhook's own ids. Graph wins when it
  * has a value; the webhook ids fill the gaps (ad_id, adgroup_id → adset, form_id).
+ * Names are always null, even if a response carries them (see GRAPH_LEAD_FIELDS).
  */
 export function attributionFromGraph(
   res: Partial<GraphLeadResponse>,
@@ -80,11 +86,11 @@ export function attributionFromGraph(
 ): MetaLeadAttribution {
   return {
     adId: clean(res.ad_id) ?? clean(webhook.adId),
-    adName: clean(res.ad_name),
+    adName: null,
     adsetId: clean(res.adset_id) ?? clean(webhook.adsetId),
-    adsetName: clean(res.adset_name),
+    adsetName: null,
     campaignId: clean(res.campaign_id),
-    campaignName: clean(res.campaign_name),
+    campaignName: null,
     formId: clean(res.form_id) ?? clean(webhook.formId),
     platform: normalizePlatform(res.platform),
     isOrganic: bool(res.is_organic),
@@ -201,6 +207,13 @@ export function storedAttribution(input: {
     leadgenId: input.leadgenId,
     pageId: clean(input.pageId) ?? null,
     ...input.attribution,
+    // Ids only. Graph-supplied names can belong to an ad account outside the
+    // approved one, so they live in memory for the request and are never
+    // stored; names are looked up at read time from synced, allowed rows
+    // (src/lib/meta/ads/attribution-names.ts).
+    adName: null,
+    adsetName: null,
+    campaignName: null,
     state: input.area.state,
     stateSource: input.area.source,
     outOfArea: input.area.outOfArea,
@@ -210,23 +223,52 @@ export function storedAttribution(input: {
 
 export type AttributionRow = { label: string; value: string }
 
-function named(name: string | null, id: string | null): string | null {
-  if (name && id) return `${name} (${id})`
-  return name ?? id
+/**
+ * Names for the Campaign / Ad set / Ad rows, resolved server-side from synced
+ * rows of the approved ad account only (attributionRowsFor). A null name means
+ * that id did not resolve. `outside` is true only when it is PROVEN that the
+ * ad belongs to another ad account (the lead's touch is outside, or Meta said
+ * the ad is in another account); an id that merely hasn't resolved yet (not
+ * synced, not bound, still being checked) is never called outside.
+ */
+export type AttributionNames = {
+  campaignName: string | null
+  adsetName: string | null
+  adName: string | null
+  outside?: boolean
 }
 
-/** Profile rows for a stored attribution blob. Anything malformed → []. */
-export function attributionRows(raw: unknown): AttributionRow[] {
+export const OUTSIDE_AD_ACCOUNT = 'Outside the connected ad account'
+export const NOT_MATCHED_YET = 'Not matched to an ad yet'
+
+/**
+ * Profile rows for a stored attribution blob. Anything malformed → [].
+ *
+ * Campaign, Ad set and Ad appear only with `names`, and only for ids that
+ * resolved, as "name (id)". When none resolved: one row with no id, "Ad:
+ * Outside the connected ad account" if that is proven, else "Ad: Not matched
+ * to an ad yet". Without `names` they never appear (fail closed).
+ */
+export function attributionRows(raw: unknown, names?: AttributionNames): AttributionRow[] {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
   const a = raw as Partial<StoredLeadAttribution>
   if (a.provider !== 'meta') return []
   const s = (v: unknown) => clean(v)
   const platform = a.platform === 'fb' ? 'Facebook' : a.platform === 'ig' ? 'Instagram' : s(a.platform)
+  const ids = { campaign: s(a.campaignId), adset: s(a.adsetId), ad: s(a.adId) }
+  const adRows: [string, string | null][] = []
+  if (names) {
+    const campaign = clean(names.campaignName), adset = clean(names.adsetName), ad = clean(names.adName)
+    if (ids.campaign && campaign) adRows.push(['Campaign', `${campaign} (${ids.campaign})`])
+    if (ids.adset && adset) adRows.push(['Ad set', `${adset} (${ids.adset})`])
+    if (ids.ad && ad) adRows.push(['Ad', `${ad} (${ids.ad})`])
+    if (adRows.length === 0 && (ids.campaign || ids.adset || ids.ad)) {
+      adRows.push(['Ad', names.outside ? OUTSIDE_AD_ACCOUNT : NOT_MATCHED_YET])
+    }
+  }
   const rows: [string, string | null][] = [
     ['Platform', platform],
-    ['Campaign', named(s(a.campaignName), s(a.campaignId))],
-    ['Ad set', named(s(a.adsetName), s(a.adsetId))],
-    ['Ad', named(s(a.adName), s(a.adId))],
+    ...adRows,
     ['Form', s(a.formId)],
     ['Organic', a.isOrganic === true ? 'Yes' : a.isOrganic === false ? 'No (paid)' : null],
     ['Lead state', a.state ? `${a.state}${a.stateSource === 'zip' ? ' (from ZIP)' : ''}` : null],

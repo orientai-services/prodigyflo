@@ -48,6 +48,7 @@ export const UI_COPY = {
     documents: 'Document lab',
     submissions: 'CYS',
     desk: 'Desk',
+    ads: 'Ads',
     more: 'More',
   },
   week: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],

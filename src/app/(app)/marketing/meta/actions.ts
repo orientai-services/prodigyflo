@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requirePermission } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
-import { getMetaProviderFor, ingestMetaLead } from '@/lib/meta'
+import { getMetaAdsWriteProviderFor, getMetaProviderFor, ingestMetaLead } from '@/lib/meta'
 import { igniteLead } from '@/lib/meta/ignition'
 import { parseConsoleCommand } from '@/lib/meta/console'
 import {
@@ -15,6 +15,8 @@ import {
 export type MetaActionState = { error?: string; ok?: string }
 
 const PAGE = '/marketing/meta'
+/** The same dashboard under Call Center's Ads tab. */
+const DESK = '/call-center'
 
 const campaignSchema = z.object({
   name: z.string().trim().min(3, 'Name the campaign.').max(120),
@@ -34,7 +36,8 @@ export async function createCampaignAction(_prev: MetaActionState, formData: For
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   try {
-    const provider = await getMetaProviderFor(user.organizationId)
+    // Writes use the ads credentials, never the lead-intake ones.
+    const provider = await getMetaAdsWriteProviderFor(user.organizationId)
     const c = await provider.createCampaign(user.organizationId, parsed.data)
     await recordAudit(user, {
       action: 'meta.campaign_created',
@@ -42,7 +45,7 @@ export async function createCampaignAction(_prev: MetaActionState, formData: For
       entityId: c.id,
       summary: `Created Meta campaign "${c.name}" ($${parsed.data.dailyBudget}/day, ${parsed.data.status})`,
     })
-    revalidatePath(PAGE)
+    revalidatePath(PAGE); revalidatePath(DESK)
     return { ok: `Campaign "${c.name}" created.` }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Campaign creation failed.' }
@@ -52,14 +55,14 @@ export async function createCampaignAction(_prev: MetaActionState, formData: For
 export async function setCampaignStatusAction(campaignId: string, status: 'ACTIVE' | 'PAUSED'): Promise<MetaActionState> {
   const user = await requirePermission('connectors:manage')
   const res = await opSetCampaignStatus(user, String(campaignId), status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED')
-  revalidatePath(PAGE)
+  revalidatePath(PAGE); revalidatePath(DESK)
   return res.ok ? { ok: res.message } : { error: res.message }
 }
 
 export async function setAdSetStatusAction(adSetId: string, status: 'ACTIVE' | 'PAUSED'): Promise<MetaActionState> {
   const user = await requirePermission('connectors:manage')
   const res = await opSetAdSetStatus(user, String(adSetId), status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED')
-  revalidatePath(PAGE)
+  revalidatePath(PAGE); revalidatePath(DESK)
   return res.ok ? { ok: res.message } : { error: res.message }
 }
 
@@ -78,7 +81,7 @@ export async function updateBudgetAction(_prev: MetaActionState, formData: FormD
   })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const res = await opSetBudget(user, { type: parsed.data.targetType, id: parsed.data.targetId }, parsed.data.dailyBudget)
-  revalidatePath(PAGE)
+  revalidatePath(PAGE); revalidatePath(DESK)
   return res.ok ? { ok: res.message } : { error: res.message }
 }
 
@@ -95,7 +98,7 @@ export async function setSpendCapAction(_prev: MetaActionState, formData: FormDa
   })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const res = await opSetSpendCap(user, parsed.data.campaignId, parsed.data.spendCap)
-  revalidatePath(PAGE)
+  revalidatePath(PAGE); revalidatePath(DESK)
   return res.ok ? { ok: res.message } : { error: res.message }
 }
 
@@ -114,7 +117,7 @@ export async function createAdAccountAction(_prev: MetaActionState, formData: Fo
   })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const res = await opCreateAdAccount(user, parsed.data)
-  revalidatePath(PAGE)
+  revalidatePath(PAGE); revalidatePath(DESK)
   return res.ok ? { ok: res.message } : { error: res.message }
 }
 
@@ -131,7 +134,7 @@ export async function runConsoleCommandAction(input: string): Promise<ConsoleRes
   if (!parsed.ok) return { lines: [parsed.error] }
   try {
     const result = await runConsoleCommand(user, parsed.command)
-    if (result.mutated) revalidatePath(PAGE)
+    if (result.mutated) revalidatePath(PAGE); revalidatePath(DESK)
     return { lines: result.lines }
   } catch (e) {
     return { lines: [`✗ ${e instanceof Error ? e.message : 'Command failed.'}`] }
@@ -163,6 +166,6 @@ export async function sendTestLeadAction(): Promise<MetaActionState> {
   }
 
   await recordAudit(user, { action: 'meta.test_lead_sent', entityType: 'IntakeSubmission', summary: 'Simulated a Lead Ads webhook delivery' })
-  revalidatePath(PAGE)
+  revalidatePath(PAGE); revalidatePath(DESK)
   return { ok: `Test lead delivered → ${r.submission.status}. Check All clients.` }
 }

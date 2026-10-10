@@ -29,15 +29,24 @@
 .final-desk.call-center .page-title h2 { font-family: var(--font-fraunces), serif; font-size: 34px; font-weight: 500; }
 .final-desk.call-center .page-title p { margin-top: 6px; max-width: 640px; }
 .final-desk.call-center .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
-.final-desk.call-center .filters button {
+.final-desk.call-center .filters :is(button, a) {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 7px 12px;
   color: var(--ink);
   font-size: 13px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
-.final-desk.call-center .filters button.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+.final-desk.call-center .filters :is(button, a).on { background: var(--teal); border-color: var(--teal); color: #fff; }
+/* The Ads tab: the Meta Ads dashboard, a Tailwind island inside the desk. */
+.final-desk.call-center .ads-panel {
+  min-width: 0; padding: 4px 0 24px;
+  /* The desk's `--muted` is a text colour; Tailwind's `bg-muted` inside the panel wants the surface tint. */
+  --muted: #eee8dc;
+}
 .final-desk.call-center .split { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .8fr); gap: 16px; align-items: start; }
 .final-desk.call-center tr.row.on { background: var(--teal2); }
 .final-desk.call-center tr.dead { opacity: .72; }
@@ -253,7 +262,7 @@
     scroll-snap-type: x proximity; scroll-padding: 0 16px; scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
   .final-desk.call-center .filters::-webkit-scrollbar { display: none; }
-  .final-desk.call-center .filters button { flex: 0 0 auto; min-height: 44px; padding: 0 16px; font-size: 14px; scroll-snap-align: start; }
+  .final-desk.call-center .filters :is(button, a) { flex: 0 0 auto; min-height: 44px; padding: 0 16px; font-size: 14px; scroll-snap-align: start; }
 
   /* Today */
   .final-desk.call-center .kpis div { padding: 10px 12px; }

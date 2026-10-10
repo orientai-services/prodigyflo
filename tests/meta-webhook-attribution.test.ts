@@ -20,6 +20,7 @@ vi.mock('next/server', async (orig) => ({
 
 import { db } from '@/lib/db'
 import { POST } from '@/app/api/meta/leads/route'
+import { GRAPH_LEAD_FIELDS } from '@/lib/meta/attribution'
 import { SCS_ENGLISH_PAGE_ID } from '@/lib/call-center/meta-route'
 
 const run = `mwatt-${Date.now().toString(36)}`
@@ -123,17 +124,27 @@ describe('Meta webhook → attribution + out-of-area', () => {
     // One GET to Graph, asking for the attribution fields. Never a write.
     expect(graphCalls).toHaveLength(1)
     expect(graphCalls[0].method).toBe('GET')
-    expect(graphCalls[0].url.searchParams.get('fields')).toContain('campaign_name')
+    expect(graphCalls[0].url.searchParams.get('fields')).toContain('campaign_id')
     expect(graphCalls[0].url.searchParams.get('fields')).toContain('is_organic')
+    // Ids only: names could belong to another ad account and are never requested.
+    expect(graphCalls[0].url.searchParams.get('fields')).not.toMatch(/ad_name|adset_name|campaign_name/)
+    // The outbound lead read is unchanged apart from the version segment:
+    // same path, same query keys, same fields, token placement unchanged.
+    expect(graphCalls[0].url.pathname).toMatch(/^\/v\d+\.\d+\/[^/]+$/)
+    expect(graphCalls[0].url.pathname.endsWith(`/${id}`)).toBe(true)
+    expect([...graphCalls[0].url.searchParams.keys()].sort()).toEqual(['access_token', 'fields'])
+    expect(graphCalls[0].url.searchParams.get('fields')).toBe(GRAPH_LEAD_FIELDS)
 
     const client = await db.client.findFirstOrThrow({ where: { organizationId: orgId, email: `${id}@example.test` } })
     expect(client.outOfArea).toBe(false)
     expect(client.utmSource).toBe('meta')
-    expect(client.utmCampaign).toBe('Q4 Solar Review')
+    // P0-A (changed for review): utm_campaign comes only from an allowed, synced
+    // local campaign, never from Graph's campaign name; names are not stored.
+    expect(client.utmCampaign).toBeNull()
     expect(client.leadAttribution).toMatchObject({
       provider: 'meta', leadgenId: id, pageId: OTHER_PAGE,
-      adId: 'ad_1', adName: 'Video A', adsetId: 'as_1', adsetName: 'LV 35+',
-      campaignId: 'c_1', campaignName: 'Q4 Solar Review', formId: 'form_1',
+      adId: 'ad_1', adName: null, adsetId: 'as_1', adsetName: null,
+      campaignId: 'c_1', campaignName: null, formId: 'form_1',
       platform: 'ig', isOrganic: false, state: 'NV', outOfArea: false,
     })
   })
@@ -165,7 +176,8 @@ describe('Meta webhook → attribution + out-of-area', () => {
     const clients = await db.client.findMany({ where: { organizationId: orgId, email: `${id}@example.test` } })
     expect(clients).toHaveLength(1)
     expect(clients[0].outOfArea).toBe(false)
-    expect((clients[0].leadAttribution as { campaignName: string }).campaignName).toBe('Q4 Solar Review')
+    // P0-A: first-touch attribution kept (ids); names are never stored.
+    expect(clients[0].leadAttribution).toMatchObject({ campaignId: 'c_1', campaignName: null })
   })
 
   it('English Page leads land on the Call Center desk with attribution + flag', async () => {
@@ -175,7 +187,7 @@ describe('Meta webhook → attribution + out-of-area', () => {
     expect(res.status).toBe(200)
     const lead = await db.callCenterLead.findFirstOrThrow({ where: { organizationId: orgId, pageId: SCS_ENGLISH_PAGE_ID } })
     expect(lead.outOfArea).toBe(true)
-    expect(lead.leadAttribution).toMatchObject({ campaignName: 'Q4 Solar Review', adId: 'ad_1', state: 'TX', platform: 'ig' })
+    expect(lead.leadAttribution).toMatchObject({ campaignId: 'c_1', campaignName: null, adId: 'ad_1', state: 'TX', platform: 'ig' })
     expect(await db.client.count({ where: { organizationId: orgId, email: `${id}@example.test` } })).toBe(0)
   })
 
@@ -206,7 +218,7 @@ describe('Meta webhook → attribution + out-of-area', () => {
     expect(graphCalls).toHaveLength(0)
     const client = await db.client.findFirstOrThrow({ where: { organizationId: orgId, email: `${id}@example.test` } })
     expect(client.firstName).toBe('STAGING')
-    expect(client.leadAttribution).toMatchObject({ campaignName: 'Q4 Solar Review', adsetName: 'LV 35+', platform: 'ig' })
+    expect(client.leadAttribution).toMatchObject({ campaignId: 'c_1', campaignName: null, adsetId: 'as_1', adsetName: null, platform: 'ig' })
   })
 
   it('fixture_lead is ignored in production: the real Graph read runs instead', async () => {

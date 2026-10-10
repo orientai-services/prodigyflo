@@ -3,6 +3,10 @@
     {
       "path": "/api/jobs/run",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/jobs/meta-sync",
+      "schedule": "*/10 * * * *"
     }
   ],
   "git": {

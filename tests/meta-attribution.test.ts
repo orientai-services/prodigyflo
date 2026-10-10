@@ -17,19 +17,22 @@ const graphLead = {
 }
 
 describe('Meta lead attribution', () => {
-  it('asks Graph for every attribution field on the lead read', () => {
-    for (const f of ['ad_id', 'ad_name', 'adset_id', 'adset_name', 'campaign_id', 'campaign_name', 'form_id', 'platform', 'is_organic', 'field_data']) {
+  it('asks Graph for the attribution ids on the lead read, never the names', () => {
+    for (const f of ['ad_id', 'adset_id', 'campaign_id', 'form_id', 'platform', 'is_organic', 'field_data']) {
       expect(GRAPH_LEAD_FIELDS.split(',')).toContain(f)
     }
+    // A lead on a shared Page can come from another ad account: its names are never fetched.
+    for (const f of ['ad_name', 'adset_name', 'campaign_name']) expect(GRAPH_LEAD_FIELDS.split(',')).not.toContain(f)
   })
 
   it('maps a Graph lead into fields + attribution', () => {
     const lead = leadFromGraphResponse(graphLead)
     expect(lead.leadgenId).toBe('lg_1')
     expect(lead.fields).toEqual({ full_name: 'Ana Test', email: 'ana@example.test' })
+    // Names are dropped even when a response carries them.
     expect(lead.attribution).toEqual({
-      adId: '111', adName: 'Video A', adsetId: '222', adsetName: 'LV 35+',
-      campaignId: '333', campaignName: 'Q4 Review', formId: '444', platform: 'ig', isOrganic: false,
+      adId: '111', adName: null, adsetId: '222', adsetName: null,
+      campaignId: '333', campaignName: null, formId: '444', platform: 'ig', isOrganic: false,
     })
   })
 
@@ -99,7 +102,13 @@ describe('profile rows', () => {
       now: new Date('2026-10-07T16:00:00Z'),
     })
     expect(stored.outOfArea).toBe(true)
-    const rows = Object.fromEntries(attributionRows(stored).map((r) => [r.label, r.value]))
+    // P0-A (changed for review): Graph-supplied names are never stored; ids stay.
+    expect([stored.campaignName, stored.adsetName, stored.adName]).toEqual([null, null, null])
+    expect([stored.campaignId, stored.adsetId, stored.adId]).toEqual(['333', '222', '111'])
+    // Names come only from synced, allowed rows, passed in at read time.
+    const rows = Object.fromEntries(
+      attributionRows(stored, { campaignName: 'Q4 Review', adsetName: 'LV 35+', adName: 'Video A' }).map((r) => [r.label, r.value]),
+    )
     expect(rows.Platform).toBe('Instagram')
     expect(rows.Campaign).toBe('Q4 Review (333)')
     expect(rows['Ad set']).toBe('LV 35+ (222)')
@@ -107,6 +116,32 @@ describe('profile rows', () => {
     expect(rows.Form).toBe('444')
     expect(rows.Organic).toBe('No (paid)')
     expect(rows['Lead state']).toBe('CA')
+  })
+
+  it('fails closed: no names given means no Campaign / Ad set / Ad rows', () => {
+    const stored = storedAttribution({ leadgenId: 'lg_1', attribution: leadFromGraphResponse(graphLead).attribution, area: leadArea({}) })
+    const labels = attributionRows(stored).map((r) => r.label)
+    expect(labels).not.toContain('Campaign')
+    expect(labels).not.toContain('Ad set')
+    expect(labels).not.toContain('Ad')
+    expect(labels).toContain('Platform')
+  })
+
+  it('only resolved ids show; nothing resolved reads "Not matched to an ad yet", with no id', () => {
+    const stored = storedAttribution({ leadgenId: 'lg_1', attribution: leadFromGraphResponse(graphLead).attribution, area: leadArea({}) })
+    const partial = attributionRows(stored, { campaignName: 'Q4 Review', adsetName: null, adName: null })
+    expect(partial.filter((r) => ['Campaign', 'Ad set', 'Ad'].includes(r.label))).toEqual([{ label: 'Campaign', value: 'Q4 Review (333)' }])
+    // Not bound, not synced or still being checked is NOT "outside".
+    const none = attributionRows(stored, { campaignName: null, adsetName: null, adName: null })
+    expect(none.filter((r) => ['Campaign', 'Ad set', 'Ad'].includes(r.label))).toEqual([{ label: 'Ad', value: 'Not matched to an ad yet' }])
+    expect(JSON.stringify(none)).not.toMatch(/111|222|333/)
+  })
+
+  it('"Outside the connected ad account" only when proven, and never with an id', () => {
+    const stored = storedAttribution({ leadgenId: 'lg_1', attribution: leadFromGraphResponse(graphLead).attribution, area: leadArea({}) })
+    const rows = attributionRows(stored, { campaignName: null, adsetName: null, adName: null, outside: true })
+    expect(rows.filter((r) => ['Campaign', 'Ad set', 'Ad'].includes(r.label))).toEqual([{ label: 'Ad', value: 'Outside the connected ad account' }])
+    expect(JSON.stringify(rows)).not.toMatch(/111|222|333/)
   })
 
   it('ignores malformed or non-Meta blobs', () => {
@@ -131,7 +166,8 @@ describe('preview fixture mode guard', () => {
   })
   it('reads the mocked Graph lead and insists it matches the leadgen id', () => {
     const lead = fixtureLeadFrom({ fixture_lead: graphLead }, 'lg_1')
-    expect(lead.attribution.campaignName).toBe('Q4 Review')
+    expect(lead.attribution.campaignId).toBe('333')
+    expect(lead.attribution.campaignName).toBeNull()
     expect(() => fixtureLeadFrom({ fixture_lead: graphLead }, 'other')).toThrow(/must equal/)
     expect(() => fixtureLeadFrom({}, 'lg_1')).toThrow(/no fixture_lead/)
   })

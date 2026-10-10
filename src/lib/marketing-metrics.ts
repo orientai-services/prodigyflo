@@ -1,5 +1,6 @@
 import 'server-only'
 import { db } from '@/lib/db'
+import { allowedCampaignDailyStatWhere, allowedMetaCampaignWhere } from '@/lib/meta/ads/where'
 import { clientScope, type SessionUser } from '@/lib/rbac'
 import { rate } from '@/lib/format'
 
@@ -252,7 +253,7 @@ export async function getMarketingOverview(
       select: { id: true, name: true, channel: true, isActive: true },
     }),
     db.campaign.findMany({
-      where: { organizationId: user.organizationId },
+      where: allowedMetaCampaignWhere(user.organizationId),
       select: {
         id: true,
         name: true,
@@ -263,7 +264,7 @@ export async function getMarketingOverview(
     }),
     db.campaignDailyStat.groupBy({
       by: ['campaignId'],
-      where: { campaign: { organizationId: user.organizationId }, date: { gte: range.from } },
+      where: { ...allowedCampaignDailyStatWhere(user.organizationId), date: { gte: range.from } },
       _sum: { spend: true, impressions: true, clicks: true, leads: true },
     }),
   ])
