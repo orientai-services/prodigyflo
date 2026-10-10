@@ -78,7 +78,7 @@ export type TrailEvent = {
   /** A carrier call that was answered for CONNECTED_SECONDS or more. */
   connected?: boolean
   /** A real recording (voicemail or recorded call), played through /api/voice/recordings/<id>. */
-  recording?: { src: string; seconds: number }
+  recording?: { src: string; seconds: number; transcript?: string | null }
 }
 
 /** Seed data only. Real calls carry TrailEvent.recording instead. */
@@ -117,6 +117,8 @@ export type CallLead = {
   missedCallId?: string
   /** When that missed call came in. */
   missedCallAt?: string
+  /** They pressed 1 for a callback on that missed call. */
+  callbackRequested?: boolean
   /** Why nextAttemptAt is set. Derived from the trail; see followUpOf. */
   followUp?: FollowUp | null
 }

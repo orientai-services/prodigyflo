@@ -9,6 +9,7 @@ import type { DialTarget, MissedCallVM, MissedDisposition } from '@/lib/telephon
 import { actionFailure, thrownMessage, whenLabel } from '@/lib/telephony/ui/result'
 import { CallButton } from '@/components/voice/call-button'
 import { RecordingPlayer } from '@/components/voice/recording-player'
+import { leadHref } from '@/lib/call-center/lead-link'
 
 /**
  * Missed calls and voicemails that still need someone (plan §2.12, §6.1;
@@ -40,7 +41,7 @@ const DISPOSITIONS: { value: MissedDisposition; label: string }[] = [
 function recordHref(target: DialTarget | null): string | null {
   if (!target) return null
   if (target.kind === 'client') return `/clients/${target.id}`
-  if (target.kind === 'lead') return `/call-center?lead=${target.id}`
+  if (target.kind === 'lead') return leadHref(target.id)
   return null
 }
 

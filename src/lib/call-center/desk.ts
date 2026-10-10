@@ -97,10 +97,11 @@ function toStored(row: {
  * the playback route checks access again on every request.
  */
 async function deskCallExtras(organizationId: string, leadIds: string[]) {
-  const recordings = new Map<string, { src: string; seconds: number }>()
+  const recordings = new Map<string, { src: string; seconds: number; transcript?: string | null }>()
   const missedByLead = new Map<string, string>()
   const missedAtByLead = new Map<string, string>()
-  if (leadIds.length === 0) return { recordings, missedByLead, missedAtByLead }
+  const callbackByLead = new Set<string>()
+  if (leadIds.length === 0) return { recordings, missedByLead, missedAtByLead, callbackByLead }
   const calls = await db.voiceCall.findMany({
     where: { organizationId, callCenterLeadId: { in: leadIds } },
     orderBy: { startedAt: 'desc' },
@@ -112,16 +113,20 @@ async function deskCallExtras(organizationId: string, leadIds: string[]) {
       needsAction: true,
       handledAt: true,
       startedAt: true,
+      transcript: true,
+      callbackRequested: true,
     },
   })
   for (const vc of calls) {
-    if (vc.recordingSid) recordings.set(vc.id, { src: recordingPath(vc.id), seconds: vc.recordingDurationSeconds ?? 0 })
+    if (vc.recordingSid) recordings.set(vc.id, { src: recordingPath(vc.id), seconds: vc.recordingDurationSeconds ?? 0, transcript: vc.transcript })
     if (vc.needsAction && !vc.handledAt && vc.callCenterLeadId && !missedByLead.has(vc.callCenterLeadId)) {
       missedByLead.set(vc.callCenterLeadId, vc.id)
       missedAtByLead.set(vc.callCenterLeadId, vc.startedAt.toISOString())
     }
+    // Any open press-1 request from this lead puts them at the top of Today.
+    if (vc.callbackRequested && vc.needsAction && !vc.handledAt && vc.callCenterLeadId) callbackByLead.add(vc.callCenterLeadId)
   }
-  return { recordings, missedByLead, missedAtByLead }
+  return { recordings, missedByLead, missedAtByLead, callbackByLead }
 }
 
 /** Desk list for one org. Secrets stay on the server. */

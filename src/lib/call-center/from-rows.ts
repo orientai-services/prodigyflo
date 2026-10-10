@@ -149,11 +149,13 @@ function personZip(row: StoredCallCenterLead): string | null {
 /** Real-call extras the desk loader attaches (never present on seed rows). */
 export type CallLeadExtras = {
   /** VoiceCall id → its recording, for CALL / INBOUND events that name one. */
-  recordings?: ReadonlyMap<string, { src: string; seconds: number }>
+  recordings?: ReadonlyMap<string, { src: string; seconds: number; transcript?: string | null }>
   /** The newest unhandled missed call from this lead. */
   missedCallId?: string | null
   /** When that missed call came in (ISO). */
   missedCallAt?: string | null
+  /** They pressed 1 for a callback and nobody has handled it yet. */
+  callbackRequested?: boolean
 }
 
 /**
@@ -226,6 +228,7 @@ export function callLeadFromRow(
     timeZone: row.timeZone || 'America/Los_Angeles',
     ...(extras.missedCallId ? { missedCallId: extras.missedCallId } : {}),
     ...(extras.missedCallId && extras.missedCallAt ? { missedCallAt: extras.missedCallAt } : {}),
+    ...(extras.callbackRequested ? { callbackRequested: true } : {}),
   }
 }
 
@@ -235,9 +238,10 @@ export function callLeadsForDesk(
   viewerId?: string | null,
   lockNames?: ReadonlyMap<string, string>,
   extras?: {
-    recordings?: ReadonlyMap<string, { src: string; seconds: number }>
+    recordings?: ReadonlyMap<string, { src: string; seconds: number; transcript?: string | null }>
     missedByLead?: ReadonlyMap<string, string>
     missedAtByLead?: ReadonlyMap<string, string>
+    callbackByLead?: ReadonlySet<string>
   },
 ): CallLead[] {
   if (rows.length === 0) return seedLeads()
@@ -246,6 +250,7 @@ export function callLeadsForDesk(
       recordings: extras?.recordings,
       missedCallId: extras?.missedByLead?.get(row.id) ?? null,
       missedCallAt: extras?.missedAtByLead?.get(row.id) ?? null,
+      callbackRequested: extras?.callbackByLead?.has(row.id) ?? false,
     }),
   )
 }

@@ -735,6 +735,9 @@ export function CallCenter({
                           {event.recording ? (
                             <RecordingPlayer src={event.recording.src} seconds={event.recording.seconds} className="mt-1.5" />
                           ) : null}
+                          {event.recording?.transcript ? (
+                            <blockquote className="muted transcript">&ldquo;{event.recording.transcript}&rdquo;</blockquote>
+                          ) : null}
                         </li>
                       ))}
                     </ol>

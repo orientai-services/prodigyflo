@@ -198,3 +198,5 @@
   .final-desk.call-center .main { padding: 16px 16px 48px; }
   .final-desk.call-center .wrap .actions .btn { flex: 1 1 calc(50% - 8px); }
 }
+
+.call-center .trail .transcript { margin: 4px 0 0; padding-left: 8px; border-left: 2px solid var(--line, #ddd); font-style: italic; white-space: pre-wrap; }

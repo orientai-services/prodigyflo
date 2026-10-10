@@ -100,6 +100,10 @@ export function rankLead(lead: CallLead, now: Date, rep: string = CURRENT_REP): 
   }
   if (missedToday(lead, now)) {
     const at = Date.parse(lead.missedCallAt as string)
+    if (lead.callbackRequested) {
+      // A press-1 request outranks every other tier-0 row: they asked for this call.
+      return { ...base, hot: true, tier: 0, why: `Asked us to call back at ${formatWhen(lead.missedCallAt as string)}`, key: at - 1e13 }
+    }
     return { ...base, tier: 0, why: `Called us at ${formatWhen(lead.missedCallAt as string)} and we missed it`, key: at }
   }
   if (lead.status === 'booked') return null
@@ -199,8 +203,8 @@ export function todayQueues(leads: readonly CallLead[], ranked: readonly Ranked[
         ? row.why
         : followUpOf(lead) === 'callback' && lead.nextAttemptAt
           ? `Callback ${zonedLabel(lead.nextAttemptAt, lead.timeZone)} their time`
-          : `Missed call ${lead.missedCallAt ? formatWhen(lead.missedCallAt) : ''}`.trim()
-      return { item: { lead, why }, urgent, at }
+          : `${lead.callbackRequested ? 'Asked for a callback' : 'Missed call'} ${lead.missedCallAt ? formatWhen(lead.missedCallAt) : ''}`.trim()
+      return { item: { lead, why }, urgent, at: lead.callbackRequested ? at - 1e13 : at }
     })
     .sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.at - b.at)
     .map((row) => row.item)
