@@ -1,9 +1,20 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { getVoiceToken } from '@/lib/telephony/actions'
 import { INCOMING_PARAMS, type DialTarget, type VoiceSetup } from '@/lib/telephony/voice-contract'
+import { type Edge, type LiveLevel, edgePlan, liveQuality, maxBitrate } from '@/lib/telephony/quality'
 import { MIC_PREF_KEY, SPEAKER_PREF_KEY, storedDeviceId } from '@/lib/telephony/ui/audio-prefs'
+import {
+  browserTimeZone,
+  readLowData,
+  readMeasuredEdge,
+  readRingMuted,
+  writeLowData,
+  writeMeasuredEdge,
+  writeRingMuted,
+} from '@/lib/telephony/ui/voice-prefs'
 import { actionFailure } from '@/lib/telephony/ui/result'
 
 /**
@@ -21,8 +32,17 @@ import { actionFailure } from '@/lib/telephony/ui/result'
  *   "Calls ring in your other tab." and can still place calls.
  * - The microphone is taken when a call starts and released when it ends. A
  *   held input device blocks other apps (video meetings) from the headset, and
- *   clearing it mid-call drops the caller's audio, so it is never touched
- *   between those two moments.
+ *   clearing it mid-call drops the caller's audio, so it is never unset
+ *   between those two moments. The one mid-call change is failover: when the
+ *   mic's track goes silent-muted for 1.2 s or ends (headset unplugged, dead
+ *   battery) the call moves to another live mic, and back to the rep's own
+ *   pick when it reappears. Moving between two live mics keeps the audio up.
+ *
+ * Connection quality (docs/DIALER_POWER.md Lane B): the Device's edge list
+ * comes from the browser's time zone, led by the edge the last full "Test
+ * connection" measured; low-data mode caps Opus at 16 kbps. The call bar's
+ * light follows the SDK's `warning`/`warning-cleared` events; the thresholds
+ * and wording live in lib/telephony/quality.ts.
  *
  * The browser sends only the custom params `target`, `line` and `override`.
  * The server resolves the number, the caller ID and the compliance decision
@@ -43,12 +63,19 @@ type SdkCall = {
   mute(shouldMute?: boolean): void
   isMuted(): boolean
   sendDigits(digits: string): void
+  getLocalStream?(): MediaStream | undefined
   customParameters?: Map<string, string>
 }
 
 type SdkAudio = {
   setInputDevice(id: string): Promise<void>
   unsetInputDevice(): Promise<void>
+  /** Enables/disables the incoming ringtone; returns the new state. */
+  incoming(enable?: boolean): boolean
+  inputDevice?: MediaDeviceInfo | null
+  /** 'deviceChange' fires with the active devices that were unplugged. */
+  on?(event: string, fn: Listener): unknown
+  removeListener?(event: string, fn: Listener): unknown
   isOutputSelectionSupported: boolean
   speakerDevices: { set(ids: string | string[]): Promise<void> }
   ringtoneDevices: { set(ids: string | string[]): Promise<void> }
@@ -60,6 +87,8 @@ type SdkDevice = {
   unregister(): Promise<void>
   destroy(): void
   updateToken(token: string): void
+  /** Throws if the edge changes while a call is up. */
+  updateOptions(options: Record<string, unknown>): void
   connect(options: { params: Record<string, string> }): Promise<SdkCall>
   audio?: SdkAudio | null
 }
@@ -98,6 +127,23 @@ export type EndedCall = {
   error: string | null
 }
 
+/** The call bar's quality light for the call in progress. */
+export type LiveCallQuality = {
+  level: LiveLevel
+  /** One plain-English tip for the most urgent warning, or null when all is well. */
+  tip: string | null
+  /** Latest mean opinion score (1–4.5), once the SDK has computed one. */
+  mos: number | null
+}
+
+/** How this browser connects: the edge list handed to Device, and low-data mode. */
+export type VoiceConnection = {
+  edges: Edge[]
+  /** The edge the last full test measured, which leads `edges`. */
+  measuredEdge: Edge | null
+  lowData: boolean
+}
+
 export type VoiceContextValue = {
   setup: ReadyVoiceSetup
   /** This tab is the one that rings. */
@@ -122,6 +168,16 @@ export type VoiceContextValue = {
   accept: () => Promise<void>
   decline: () => void
   clearError: () => void
+  /** Null when no call is in progress. */
+  callQuality: LiveCallQuality | null
+  ringtoneMuted: boolean
+  setRingtoneMuted: (muted: boolean) => void
+  connection: VoiceConnection
+  /**
+   * Save the edge a full test measured and/or low-data mode. Applied to the
+   * Device right away when idle, otherwise as soon as the call ends.
+   */
+  applyConnection: (next: { edge?: Edge | null; lowData?: boolean }) => void
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null)
@@ -136,6 +192,21 @@ const CHANNEL = 'pf-voice'
 const LEADER_BEAT_MS = 4_000
 const LEADER_STALE_MS = 12_000
 const PRESENCE_EVERY_MS = 60_000
+/** A mic track muted this long mid-call is treated as gone (contract: 1.2 s). */
+const MIC_DEAD_MS = 1_200
+/** Failovers per call before giving up and telling the rep, so a flapping mic can't loop. */
+const MAX_FAILOVERS = 3
+
+/** The edge list and bitrate cap from this browser's saved preferences. */
+function readConnection(): VoiceConnection {
+  const measuredEdge = readMeasuredEdge()
+  return { edges: edgePlan(browserTimeZone(), measuredEdge), measuredEdge, lowData: readLowData() }
+}
+
+function deviceLabel(d: MediaDeviceInfo | undefined, fallback: string): string {
+  const label = d?.label.replace(/^(Default|Communications)\s*-\s*/i, '').trim()
+  return label || fallback
+}
 
 export function targetParam(target: DialTarget): string {
   return `${target.kind}:${target.id}`
@@ -211,6 +282,21 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
   const seqRef = useRef(0)
   const unmountedRef = useRef(false)
 
+  // Quality, failover and connection prefs. Prefs start at their defaults and
+  // are read from localStorage after mount, so the server render and the
+  // first client render agree.
+  const [callQuality, setCallQuality] = useState<LiveCallQuality | null>(null)
+  const [ringtoneMuted, setRingtoneMutedState] = useState(false)
+  const [connection, setConnection] = useState<VoiceConnection>({ edges: ['roaming'], measuredEdge: null, lowData: false })
+  const ringMutedRef = useRef(false)
+  /** Connection prefs changed during a call; apply them when it ends. */
+  const optionsPendingRef = useRef(false)
+  /** Undo for the current call's mic-track watcher and devicechange listener. */
+  const micWatchRef = useRef<(() => void) | null>(null)
+  const returnWatchRef = useRef<(() => void) | null>(null)
+  const lostWatchRef = useRef<(() => void) | null>(null)
+  const failoversRef = useRef(0)
+
   // ── Microphone: taken at call start, released at call end ────────────────
 
   const takeAudio = useCallback(async (device: SdkDevice) => {
@@ -238,10 +324,172 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
     void audio.unsetInputDevice().catch(() => {})
   }, [])
 
+  // ── Audio failover: a dead mic mid-call moves to a live one ──────────────
+
+  const stopMicWatch = useCallback(() => {
+    micWatchRef.current?.()
+    micWatchRef.current = null
+    returnWatchRef.current?.()
+    returnWatchRef.current = null
+    lostWatchRef.current?.()
+    lostWatchRef.current = null
+  }, [])
+
+  const startMicWatch = useCallback((call: SdkCall) => {
+    stopMicWatch()
+    // Watches the call's current input track. Re-armed after every switch,
+    // because a new device means a new track.
+    const watch = () => {
+      micWatchRef.current?.()
+      micWatchRef.current = null
+      if (activeRef.current !== call) return
+      const track = call.getLocalStream?.()?.getAudioTracks()[0]
+      if (!track) return
+      let timer: number | null = null
+      const cleanup = () => {
+        if (timer !== null) window.clearTimeout(timer)
+        timer = null
+        track.removeEventListener('mute', onMute)
+        track.removeEventListener('unmute', onUnmute)
+        track.removeEventListener('ended', onEnded)
+      }
+      const dead = () => {
+        cleanup()
+        if (micWatchRef.current === cleanup) micWatchRef.current = null
+        void failover(track)
+      }
+      // `muted` here is the browser saying no audio is arriving from the
+      // device (not the rep's mute button, which disables the track instead).
+      const onMute = () => {
+        if (timer === null) timer = window.setTimeout(dead, MIC_DEAD_MS)
+      }
+      const onUnmute = () => {
+        if (timer !== null) window.clearTimeout(timer)
+        timer = null
+      }
+      const onEnded = () => dead()
+      track.addEventListener('mute', onMute)
+      track.addEventListener('unmute', onUnmute)
+      track.addEventListener('ended', onEnded)
+      micWatchRef.current = cleanup
+      if (track.readyState === 'ended') dead()
+      else if (track.muted) onMute()
+    }
+
+    const failover = async (deadTrack: MediaStreamTrack) => {
+      const audio = deviceRef.current?.audio
+      if (!audio || activeRef.current !== call) return
+      if (failoversRef.current >= MAX_FAILOVERS) {
+        toast.error('Your microphone keeps cutting out. Check the headset, or hang up and pick another mic in Phone settings.')
+        return
+      }
+      failoversRef.current += 1
+      let devices: MediaDeviceInfo[] = []
+      try {
+        devices = await navigator.mediaDevices.enumerateDevices()
+      } catch {
+        devices = []
+      }
+      const inputs = devices.filter((d) => d.kind === 'audioinput')
+      const deadId = audio.inputDevice?.deviceId ?? deadTrack.getSettings?.().deviceId ?? ''
+      // The OS default follows the unplug (it moves to the laptop mic), so it
+      // is the right place to land; browsers without the alias get the first
+      // other mic.
+      const next = inputs.find((d) => d.deviceId === 'default') ?? inputs.find((d) => d.deviceId && d.deviceId !== deadId && d.deviceId !== 'communications')
+      if (!next || activeRef.current !== call) {
+        toast.error('Your microphone stopped and no other one was found. Plug one in to keep talking.')
+        return
+      }
+      try {
+        await audio.setInputDevice(next.deviceId)
+        micHeldRef.current = true
+      } catch {
+        toast.error('Your microphone stopped. Check the headset.')
+        return
+      }
+      if (activeRef.current !== call) return
+      toast.warning(`Your microphone stopped. Switched to ${deviceLabel(next, 'the system microphone')}.`)
+      watch()
+      watchForReturn()
+    }
+
+    // After a failover, the rep's own pick wins again as soon as it is back.
+    const watchForReturn = () => {
+      const media = navigator.mediaDevices
+      if (returnWatchRef.current || !media?.addEventListener) return
+      const onChange = () => {
+        void (async () => {
+          const audio = deviceRef.current?.audio
+          if (!audio || activeRef.current !== call) return
+          const mine = await storedDeviceId(MIC_PREF_KEY, 'audioinput')
+          if (!mine || audio.inputDevice?.deviceId === mine) return
+          try {
+            await audio.setInputDevice(mine)
+            micHeldRef.current = true
+          } catch {
+            return
+          }
+          if (activeRef.current !== call) return
+          returnWatchRef.current?.()
+          returnWatchRef.current = null
+          const devices = await media.enumerateDevices().catch(() => [] as MediaDeviceInfo[])
+          toast.success(`Back on ${deviceLabel(devices.find((d) => d.deviceId === mine), 'your microphone')}.`)
+          watch()
+        })()
+      }
+      media.addEventListener('devicechange', onChange)
+      returnWatchRef.current = () => media.removeEventListener('devicechange', onChange)
+    }
+
+    // An unplugged device is handled by the SDK itself (it moves the call to
+    // the default mic and stops the old track without an 'ended' event), so
+    // listen for that too: say so, re-arm the watcher on the new track, and
+    // wait for the rep's own mic to come back.
+    const audio = deviceRef.current?.audio
+    if (audio?.on && audio.removeListener) {
+      const onLost = (lost: unknown) => {
+        if (activeRef.current !== call) return
+        const devices = Array.isArray(lost) ? (lost as MediaDeviceInfo[]) : []
+        if (!devices.some((d) => d.kind === 'audioinput')) return
+        micHeldRef.current = true
+        toast.warning('Your microphone was unplugged. Switched to the system microphone.')
+        window.setTimeout(watch, 1_000)
+        watchForReturn()
+      }
+      audio.on('deviceChange', onLost)
+      lostWatchRef.current = () => audio.removeListener?.('deviceChange', onLost)
+    }
+
+    failoversRef.current = 0
+    watch()
+  }, [stopMicWatch])
+
+  // ── Connection prefs → the Device ────────────────────────────────────────
+
+  const syncDeviceOptions = useCallback(() => {
+    const device = deviceRef.current
+    if (!device) return
+    if (activeRef.current) {
+      optionsPendingRef.current = true
+      return
+    }
+    const next = readConnection()
+    try {
+      device.updateOptions({ edge: next.edges, maxAverageBitrate: maxBitrate(next.lowData) })
+      optionsPendingRef.current = false
+    } catch {
+      optionsPendingRef.current = true
+    }
+    // updateOptions rebuilds the SDK's sounds; keep the ringtone choice.
+    device.audio?.incoming(!ringMutedRef.current)
+  }, [])
+
   const endCall = useCallback(
     (call: SdkCall) => {
       if (activeRef.current !== call) return
       activeRef.current = null
+      stopMicWatch()
+      setCallQuality(null)
       const meta = metaRef.current
       metaRef.current = null
       if (meta) {
@@ -264,8 +512,10 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       setAnsweredAt(null)
       setMuted(false)
       releaseAudio()
+      // The SDK still counts the call as busy while it emits 'disconnect'.
+      if (optionsPendingRef.current) window.setTimeout(syncDeviceOptions, 500)
     },
-    [releaseAudio],
+    [releaseAudio, stopMicWatch, syncDeviceOptions],
   )
 
   const watchCall = useCallback(
@@ -279,6 +529,37 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
         if (metaRef.current) metaRef.current.answeredAt = at
         setStatus('in-call')
         setAnsweredAt(at)
+        setCallQuality({ level: 'good', tip: null, mos: null })
+        startMicWatch(call)
+      })
+      // The live light: warnings the SDK has raised and not yet cleared.
+      // (The SDK holds them back for the first ~5 s, which are always choppy.)
+      const active = new Set<string>()
+      let mos: number | null = null
+      const showQuality = () => {
+        if (activeRef.current !== call) return
+        const { level, tip } = liveQuality(active)
+        setCallQuality((prev) =>
+          prev && prev.level === level && prev.tip === tip && prev.mos === mos ? prev : { level, tip, mos },
+        )
+      }
+      call.on('warning', (name) => {
+        if (typeof name !== 'string') return
+        active.add(name)
+        showQuality()
+      })
+      call.on('warning-cleared', (name) => {
+        if (typeof name !== 'string') return
+        active.delete(name)
+        showQuality()
+      })
+      call.on('sample', (sample) => {
+        const value = (sample as { mos?: number | null } | null)?.mos
+        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return
+        const rounded = Math.round(value * 10) / 10
+        if (rounded === mos) return
+        mos = rounded
+        showQuality()
       })
       call.on('mute', (isMuted) => {
         if (activeRef.current === call) setMuted(Boolean(isMuted))
@@ -293,7 +574,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
         endCall(call)
       })
     },
-    [endCall],
+    [endCall, startMicWatch],
   )
 
   // ── The Device: created on first need, one per tab ───────────────────────
@@ -327,11 +608,16 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
         return null
       }
       if (unmountedRef.current) return null
+      const conn = readConnection()
       const device = new sdk.Device(token, {
         codecPreferences: ['opus', 'pcmu'],
         closeProtection: 'A call is in progress. Leaving this page will hang up.',
         logLevel: 'error',
+        // Nearest edge first; the SDK falls through the list if one is down.
+        edge: conn.edges,
+        maxAverageBitrate: maxBitrate(conn.lowData),
       })
+      device.audio?.incoming(!ringMutedRef.current)
       device.on('registered', () => setRegistered(true))
       device.on('unregistered', () => setRegistered(false))
       device.on('error', (err) => setError(plainVoiceError(err)))
@@ -369,6 +655,13 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       loadingRef.current = null
     }
   }, [fetchToken])
+
+  // Saved prefs, read once after mount (localStorage is browser-only).
+  useEffect(() => {
+    ringMutedRef.current = readRingMuted()
+    setRingtoneMutedState(ringMutedRef.current)
+    setConnection(readConnection())
+  }, [])
 
   // ── Leader election: one ringing tab per browser ─────────────────────────
 
@@ -437,6 +730,9 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       window.removeEventListener('pagehide', leave)
       leave()
       channel?.close()
+      micWatchRef.current?.()
+      returnWatchRef.current?.()
+      lostWatchRef.current?.()
       deviceRef.current?.destroy()
       deviceRef.current = null
     }
@@ -573,6 +869,23 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
 
   const clearError = useCallback(() => setError(null), [])
 
+  const setRingtoneMuted = useCallback((next: boolean) => {
+    ringMutedRef.current = next
+    setRingtoneMutedState(next)
+    writeRingMuted(next)
+    deviceRef.current?.audio?.incoming(!next)
+  }, [])
+
+  const applyConnection = useCallback(
+    (next: { edge?: Edge | null; lowData?: boolean }) => {
+      if (next.edge !== undefined) writeMeasuredEdge(next.edge)
+      if (next.lowData !== undefined) writeLowData(next.lowData)
+      setConnection(readConnection())
+      syncDeviceOptions()
+    },
+    [syncDeviceOptions],
+  )
+
   const value = useMemo<VoiceContextValue>(
     () => ({
       setup,
@@ -595,8 +908,17 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       accept,
       decline,
       clearError,
+      callQuality,
+      ringtoneMuted,
+      setRingtoneMuted,
+      connection,
+      applyConnection,
     }),
-    [setup, leader, registered, status, who, answeredAt, muted, error, incoming, lastCall, activeTarget, lineId, call, hangup, toggleMute, sendDigits, accept, decline, clearError],
+    [
+      setup, leader, registered, status, who, answeredAt, muted, error, incoming, lastCall, activeTarget, lineId,
+      call, hangup, toggleMute, sendDigits, accept, decline, clearError,
+      callQuality, ringtoneMuted, setRingtoneMuted, connection, applyConnection,
+    ],
   )
 
   return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>
