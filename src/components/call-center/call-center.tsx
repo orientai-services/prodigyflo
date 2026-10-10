@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   recordCallCenterAttempt,
   recordCallCenterText,
@@ -91,6 +92,13 @@ const TABS: { id: LeadTab; label: string }[] = [
 
 type DeskView = 'today' | 'list' | 'missed'
 
+/** Below this width the lead opens as a full-screen panel instead of the split view. */
+const PHONE_QUERY = '(max-width: 767.98px)'
+
+function onPhone(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia(PHONE_QUERY).matches
+}
+
 function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (lead: CallLead) => void }) {
   return (
     <button type="button" className="person" disabled={lead.disabled} onClick={() => onOpen(lead)}>
@@ -153,6 +161,11 @@ export function CallCenter({
   const [scheduling, setScheduling] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [help, setHelp] = useState(false)
+  /** The desk menu on a phone (the rail collapses into a top bar there). */
+  const [navOpen, setNavOpen] = useState(false)
+  const detailRef = useRef<HTMLElement>(null)
+  /** The desk root, where the phone's bottom sheets mount. */
+  const [sheetHost, setSheetHost] = useState<HTMLDivElement | null>(null)
   /** The last ended call whose result is in (or that the rep left for later). */
   const [wrappedSeq, setWrappedSeq] = useState(0)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -266,6 +279,20 @@ export function CallCenter({
     }
   }, [revealLeadId])
 
+  // On a phone the selected lead is a full-screen panel: start it at the top
+  // and keep the page behind it from scrolling.
+  const panelOpen = Boolean(selected)
+  useEffect(() => {
+    if (!panelOpen || !onPhone()) return
+    detailRef.current?.scrollTo({ top: 0 })
+    const root = document.documentElement
+    const before = root.style.overflow
+    root.style.overflow = 'hidden'
+    return () => {
+      root.style.overflow = before
+    }
+  }, [panelOpen, selectedId])
+
   function chooseLanguage(next: LanguageFilter) {
     setLanguage(next)
     if (next === 'es') setTab('all')
@@ -320,7 +347,7 @@ export function CallCenter({
   }
 
   function scheduler(lead: CallLead) {
-    return (
+    const picker = (
       <CallbackScheduler
         key={lead.id}
         name={lead.name}
@@ -331,6 +358,10 @@ export function CallCenter({
         onCancel={() => setScheduling(null)}
       />
     )
+    // On a phone it is a bottom sheet. The lead panel is its own stacking
+    // layer under the call bar, so the sheet mounts at the desk root to sit
+    // above both. It only ever opens after a tap, so this never runs on the server.
+    return sheetHost && onPhone() ? createPortal(picker, sheetHost) : picker
   }
 
   /** J/K walk the list on screen: the Today ranking then its queues, or the open tab's rows. */
@@ -362,6 +393,8 @@ export function CallCenter({
       case 'close':
         if (help) setHelp(false)
         else if (scheduling) setScheduling(null)
+        else if (navOpen) setNavOpen(false)
+        else if (selected && onPhone()) setSelectedId(null)
         else return false
         return true
       case 'search':
@@ -412,19 +445,39 @@ export function CallCenter({
   })
 
   return (
-    <div className="final-desk call-center">
+    <div
+      ref={setSheetHost}
+      className={[
+        'final-desk call-center',
+        navOpen ? 'nav-open' : '',
+        power.on ? 'power-on' : '',
+        selected ? 'detail-open' : '',
+      ].filter(Boolean).join(' ')}
+    >
       <div className="shell">
         <aside className="rail">
           <div className="brand">
             <small>SCS operations</small>
             <strong>Prodigy<span className="flo">Flo</span></strong>
           </div>
-          <nav className="nav" aria-label="Desk">
+          {/* Shown below lg by the final-desk shell styles; opens the same links in a sheet. */}
+          <button
+            type="button"
+            className="rail-toggle"
+            aria-expanded={navOpen}
+            aria-controls="call-center-nav"
+            aria-label={navOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setNavOpen((open) => !open)}
+          >
+            <span aria-hidden="true">{navOpen ? '✕' : '☰'}</span>
+            <span className="rail-toggle-label">Menu</span>
+          </button>
+          <nav className="nav" id="call-center-nav" aria-label="Desk">
             {RAIL.map((item) =>
               item.href === '/call-center' ? (
-                <Link key={item.href} href={item.href} className="here" aria-current="page">{item.label}</Link>
+                <Link key={item.href} href={item.href} className="here" aria-current="page" onClick={() => setNavOpen(false)}>{item.label}</Link>
               ) : (
-                <Link key={item.href} href={item.href}>{item.label}</Link>
+                <Link key={item.href} href={item.href} onClick={() => setNavOpen(false)}>{item.label}</Link>
               ),
             )}
           </nav>
@@ -443,7 +496,7 @@ export function CallCenter({
             </label>
             <div className="top-right">
               <label className="lang">
-                Working language
+                <span className="lang-text">Working language</span>
                 <select
                   aria-label="Working language"
                   value={language}
@@ -465,7 +518,7 @@ export function CallCenter({
                 Power mode {power.on ? 'on' : 'off'}
               </button>
               <button type="button" className="keys-btn" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>?</button>
-              <span className="voice">
+              <span className="voice" role="note">
                 {voice
                   ? voice.setup.mode === 'mock'
                     ? 'Test mode. No real calls are placed.'
@@ -538,7 +591,7 @@ export function CallCenter({
               {view === 'today' ? (
                 <TodayView board={board} rep={repFor} selectedId={selectedId} onOpen={openLead} />
               ) : (
-              <div className="card">
+              <div className="card lead-table">
                 <table>
                   <thead>
                     <tr>
@@ -557,11 +610,11 @@ export function CallCenter({
                         aria-selected={selectedId === lead.id}
                         onClick={() => openLead(lead)}
                       >
-                        <td>{formatWhen(lead.arrivedAt)}</td>
-                        <td><Person lead={lead} rep={repFor(lead)} onOpen={openLead} /></td>
-                        <td>{channelLabel(lead.channel)}</td>
-                        <td>{lead.contacted ? 'Yes' : 'No'}</td>
-                        <td>{lead.status}</td>
+                        <td className="c-when" data-label="When">{formatWhen(lead.arrivedAt)}</td>
+                        <td className="c-person"><Person lead={lead} rep={repFor(lead)} onOpen={openLead} /></td>
+                        <td className="c-chan" data-label="Came in as">{channelLabel(lead.channel)}</td>
+                        <td className={`c-contacted ${lead.contacted ? 'yes' : 'no'}`} data-label="Contacted">{lead.contacted ? 'Yes' : 'No'}</td>
+                        <td className="c-status" data-label="Status">{lead.status}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -569,9 +622,19 @@ export function CallCenter({
                 {!rows.length && <p className="block muted">No leads in this view.</p>}
               </div>
               )}
-              <article className="card block">
+              <article
+                ref={detailRef}
+                className={`card block detail${selected ? ' open' : ''}`}
+                aria-label={selected ? `Lead: ${selected.name}` : undefined}
+              >
                 {selected ? (
                   <>
+                    <div className="detail-bar">
+                      <button type="button" className="detail-back" onClick={() => setSelectedId(null)}>
+                        <span aria-hidden="true">‹</span> {view === 'today' ? 'Today' : 'Leads'}
+                      </button>
+                      <span className="detail-bar-name">{selected.name}</span>
+                    </div>
                     <div className="tags">
                       <span className="tag">{badgeLabel(selected.channel)}</span>
                       <span className="tag">{languageLabel(selected.language)}</span>
@@ -623,13 +686,13 @@ export function CallCenter({
                       </div>
                     ) : null}
                     <h3>Queue</h3>
-                    <div className="actions">
+                    <div className="actions trio">
                       <button type="button" className="btn secondary" disabled={!canTake(selected, who)} onClick={() => { void commit(selected, () => takeCallCenterLead(selected.id), () => replace(takeLead(selected, CURRENT_REP, stamp()))) }}>Take</button>
                       <button type="button" className="btn secondary" onClick={() => { void skipSelected() }}>Skip</button>
                       <button type="button" className="btn secondary" onClick={jump}>Next</button>
                     </div>
                     <h3>Contact</h3>
-                    <div className="actions">
+                    <div className="actions duo">
                       <span ref={callRef} className="call-slot">
                         {selected.persisted ? (
                           <CallButton
@@ -673,7 +736,7 @@ export function CallCenter({
                     {scheduling === selected.id && !(wrapPending && wrapLead?.id === selected.id) ? (
                       scheduler(selected)
                     ) : (
-                      <div className="actions">
+                      <div className="actions outcomes">
                         {OUTCOMES.map((item) => (
                           <button
                             key={item.id}
@@ -688,7 +751,7 @@ export function CallCenter({
                       </div>
                     )}
                     <h3>Handoff</h3>
-                    <div className="actions">
+                    <div className="actions solo">
                       <button
                         type="button"
                         className="btn secondary"
@@ -708,7 +771,7 @@ export function CallCenter({
                       disabled={!canSaveNote(selected, who) || !holding(selected)}
                       onChange={(event) => setNote(event.target.value)}
                     />
-                    <div className="actions">
+                    <div className="actions solo">
                       <button
                         type="button"
                         className="btn secondary"

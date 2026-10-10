@@ -22,7 +22,7 @@ export function RecordingPlayer({
 }) {
   return (
     <div className={['flex flex-wrap items-center gap-2', className].filter(Boolean).join(' ')}>
-      <audio controls preload="none" src={src} className="h-8 max-w-full min-w-0 flex-1">
+      <audio controls preload="none" src={src} className="h-10 w-full max-w-full min-w-0 basis-full sm:h-8 sm:w-auto sm:flex-1 sm:basis-auto">
         <a href={src}>Download the recording</a>
       </audio>
       <span className="text-muted-foreground text-xs tabular-nums whitespace-nowrap">

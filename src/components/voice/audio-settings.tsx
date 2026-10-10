@@ -75,7 +75,7 @@ export function AudioSettings() {
       <label className="grid gap-1">
         <span className="text-muted-foreground text-xs">Microphone</span>
         <select
-          className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+          className="border-input bg-background h-11 rounded-md border px-2 text-base sm:h-8 sm:text-sm"
           value={mics.some((d) => d.deviceId === mic) ? mic : ''}
           onChange={(e) => choose(MIC_PREF_KEY, 'audioinput', e.target.value, setMic)}
           aria-label="Microphone"
@@ -91,7 +91,7 @@ export function AudioSettings() {
       <label className="grid gap-1">
         <span className="text-muted-foreground text-xs">Speaker</span>
         <select
-          className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+          className="border-input bg-background h-11 rounded-md border px-2 text-base sm:h-8 sm:text-sm"
           value={speakers.some((d) => d.deviceId === speaker) ? speaker : ''}
           onChange={(e) => choose(SPEAKER_PREF_KEY, 'audiooutput', e.target.value, setSpeaker)}
           aria-label="Speaker"

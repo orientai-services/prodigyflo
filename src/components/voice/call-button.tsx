@@ -32,6 +32,7 @@ export function CallButton({
   appearance = 'app',
   canOverrideHours = false,
   disabled = false,
+  className,
   onDialed,
 }: {
   target: DialTarget
@@ -44,6 +45,8 @@ export function CallButton({
   /** The viewer holds telephony:manage. The server re-checks. */
   canOverrideHours?: boolean
   disabled?: boolean
+  /** Extra classes on the wrapper (e.g. full width on a phone). */
+  className?: string
   onDialed?: (via: 'browser' | 'tel') => void
 }) {
   const voice = useVoice()
@@ -104,13 +107,13 @@ export function CallButton({
   const icon = pending ? <Loader2 className="size-3.5 animate-spin" /> : <Phone className="size-3.5" />
 
   return (
-    <div className="inline-grid gap-1.5">
+    <div className={['inline-flex flex-col gap-1.5', className].filter(Boolean).join(' ')}>
       {appearance === 'desk' ? (
         <button type="button" className="btn" disabled={disabled || busy} onClick={() => void run()}>
           {label}
         </button>
       ) : (
-        <Button variant="outline" size="sm" disabled={disabled || busy} onClick={() => void run()}>
+        <Button variant="outline" size="sm" className="h-11 text-sm sm:h-7 sm:text-[0.8rem]" disabled={disabled || busy} onClick={() => void run()}>
           {icon}
           {label}
         </Button>
@@ -141,8 +144,8 @@ export function CallButton({
           )}
 
           {blocked.canOverride === 'hours' && canOverrideHours && overriding && (
-            <div className="mt-2 grid gap-1.5">
-              <label className="grid gap-1">
+            <div className="mt-2 flex flex-col gap-1.5">
+              <label className="flex flex-col gap-1">
                 <span className="text-muted-foreground">Why now? This is logged.</span>
                 <input
                   className="border-input bg-background h-8 rounded-md border px-2 text-sm"

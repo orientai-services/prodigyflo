@@ -46,7 +46,7 @@ export function WrapUp({
       </p>
       {error ? <p className="muted" role="status">{error}</p> : null}
       {scheduler ?? (
-        <div className="actions">
+        <div className="actions outcomes">
           {OUTCOMES.map((item, index) => (
             <button
               key={item.id}

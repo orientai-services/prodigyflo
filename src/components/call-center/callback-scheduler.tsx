@@ -51,62 +51,67 @@ export function CallbackScheduler({
   const differs = mine !== leadZone && zonedLabel(at.toISOString(), mine, false) !== zonedLabel(at.toISOString(), leadZone, false)
 
   return (
-    <div className="sched" role="group" aria-label={`Call back ${name}`}>
-      <p className="muted">
-        When should we call {name} back? Times are their time ({leadZone.replace(/_/g, ' ')}).
-      </p>
-      <div className="sched-chips">
-        {chips.map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            className={picked === chip.at ? 'on' : ''}
-            aria-pressed={picked === chip.at}
-            onClick={() => setPicked(chip.at)}
-          >
-            {chip.label}
-            <small>{zonedLabel(chip.at, leadZone)}</small>
-          </button>
-        ))}
-      </div>
-      <label className="sched-day">
-        Day
-        <select value={dayIndex} onChange={(event) => setDayIndex(Number(event.target.value))} aria-label="Day for the call back">
-          {days.map((d, index) => (
-            <option key={d.key} value={index}>{dayName(d, index)}</option>
-          ))}
-        </select>
-      </label>
-      <div className="sched-slots" role="listbox" aria-label="Time for the call back">
-        {slots.length ? (
-          slots.map((slot) => (
-            <button
-              key={slot}
-              type="button"
-              role="option"
-              aria-selected={picked === slot}
-              className={picked === slot ? 'on' : ''}
-              onClick={() => setPicked(slot)}
-            >
-              {zonedLabel(slot, leadZone, false)}
-            </button>
-          ))
-        ) : (
-          <p className="muted">No times left that day. Pick another day.</p>
-        )}
-      </div>
-      {picked ? (
-        <p className="sched-pick" role="status">
-          Call back {zonedLabel(picked, leadZone)} their time
-          {differs ? ` · ${zonedLabel(picked, mine)} your time` : ''}
+    <>
+      {/* A bottom sheet on a phone: the backdrop closes it like Cancel. Hidden on a desk. */}
+      <div className="sched-backdrop" aria-hidden="true" onClick={onCancel} />
+      <div className="sched" role="group" aria-label={`Call back ${name}`}>
+        <div className="sched-grab" aria-hidden="true" />
+        <p className="muted">
+          When should we call {name} back? Times are their time ({leadZone.replace(/_/g, ' ')}).
         </p>
-      ) : null}
-      <div className="actions">
-        <button type="button" className="btn" disabled={!picked || busy} onClick={() => picked && onSave(picked)}>
-          Save callback
-        </button>
-        <button type="button" className="btn secondary" onClick={onCancel}>Cancel</button>
+        <div className="sched-chips">
+          {chips.map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              className={picked === chip.at ? 'on' : ''}
+              aria-pressed={picked === chip.at}
+              onClick={() => setPicked(chip.at)}
+            >
+              {chip.label}
+              <small>{zonedLabel(chip.at, leadZone)}</small>
+            </button>
+          ))}
+        </div>
+        <label className="sched-day">
+          Day
+          <select value={dayIndex} onChange={(event) => setDayIndex(Number(event.target.value))} aria-label="Day for the call back">
+            {days.map((d, index) => (
+              <option key={d.key} value={index}>{dayName(d, index)}</option>
+            ))}
+          </select>
+        </label>
+        <div className="sched-slots" role="listbox" aria-label="Time for the call back">
+          {slots.length ? (
+            slots.map((slot) => (
+              <button
+                key={slot}
+                type="button"
+                role="option"
+                aria-selected={picked === slot}
+                className={picked === slot ? 'on' : ''}
+                onClick={() => setPicked(slot)}
+              >
+                {zonedLabel(slot, leadZone, false)}
+              </button>
+            ))
+          ) : (
+            <p className="muted">No times left that day. Pick another day.</p>
+          )}
+        </div>
+        {picked ? (
+          <p className="sched-pick" role="status">
+            Call back {zonedLabel(picked, leadZone)} their time
+            {differs ? ` · ${zonedLabel(picked, mine)} your time` : ''}
+          </p>
+        ) : null}
+        <div className="actions sched-acts">
+          <button type="button" className="btn" disabled={!picked || busy} onClick={() => picked && onSave(picked)}>
+            Save callback
+          </button>
+          <button type="button" className="btn secondary" onClick={onCancel}>Cancel</button>
+        </div>
       </div>
-    </div>
+    </>
   )
 }

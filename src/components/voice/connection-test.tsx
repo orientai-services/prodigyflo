@@ -116,19 +116,19 @@ export function ConnectionTest() {
   return (
     <div className="grid gap-2 border-t pt-3 text-sm">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-xs">Connection</span>
+        <span className="text-muted-foreground text-sm sm:text-xs">Connection</span>
         {last && phase.kind === 'idle' && (
-          <span className="text-muted-foreground truncate text-[11px]">
+          <span className="text-muted-foreground truncate text-xs sm:text-[11px]">
             Last test: {last.verdict}
             {last.edge ? ` · ${EDGE_LABELS[last.edge]}` : ''}
           </span>
         )}
       </div>
 
-      <label className="flex items-start gap-2 text-xs">
+      <label className="flex items-start gap-2 text-sm sm:text-xs">
         <input
           type="checkbox"
-          className="mt-0.5"
+          className="mt-0.5 size-5 shrink-0 sm:size-auto"
           checked={connection.lowData}
           onChange={(e) => applyConnection({ lowData: e.target.checked })}
         />
@@ -139,10 +139,10 @@ export function ConnectionTest() {
       </label>
 
       {mock ? (
-        <p className="text-muted-foreground text-xs">Test mode. There is no real connection to test.</p>
+        <p className="text-muted-foreground text-sm sm:text-xs">Test mode. There is no real connection to test.</p>
       ) : running ? (
         <div className="grid gap-1.5" aria-live="polite">
-          <p className="flex items-center gap-1.5 text-xs">
+          <p className="flex items-center gap-1.5 text-sm sm:text-xs">
             <Loader2 className="size-3.5 animate-spin" />
             {phase.kind === 'mic'
               ? 'Listening to your microphone. Say a few words…'
@@ -156,23 +156,23 @@ export function ConnectionTest() {
               />
             </div>
           )}
-          <Button type="button" variant="outline" size="xs" className="justify-self-start" onClick={stop}>
+          <Button type="button" variant="outline" size="xs" className="h-11 justify-self-start px-4 text-sm sm:h-6 sm:px-2 sm:text-xs" onClick={stop}>
             Stop
           </Button>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
-          <Button type="button" variant="outline" size="xs" onClick={() => void run(false)} disabled={status !== 'idle'}>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-1.5">
+          <Button type="button" variant="outline" size="xs" className="h-11 text-sm sm:h-6 sm:text-xs" onClick={() => void run(false)} disabled={status !== 'idle'}>
             Quick test
           </Button>
-          <Button type="button" variant="outline" size="xs" onClick={() => void run(true)} disabled={status !== 'idle'}>
+          <Button type="button" variant="outline" size="xs" className="h-11 text-sm sm:h-6 sm:text-xs" onClick={() => void run(true)} disabled={status !== 'idle'}>
             Full test (about 45 s)
           </Button>
         </div>
       )}
 
       {phase.kind === 'error' && (
-        <p className="text-destructive text-xs" role="alert">
+        <p className="text-destructive text-sm sm:text-xs" role="alert">
           {phase.message}
         </p>
       )}
@@ -180,11 +180,11 @@ export function ConnectionTest() {
       {phase.kind === 'done' && (
         <div className="grid gap-1.5 rounded-md border p-2" aria-live="polite">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${VERDICT_STYLE[phase.rec.verdict]}`}>
+            <span className={`rounded-full px-2 py-0.5 text-xs sm:text-[11px] font-medium ${VERDICT_STYLE[phase.rec.verdict]}`}>
               {phase.rec.verdict === 'Failed' ? 'Could not connect' : phase.rec.verdict}
             </span>
             {phase.rec.measured && (
-              <span className="text-muted-foreground text-[11px] tabular-nums">
+              <span className="text-muted-foreground text-xs sm:text-[11px] tabular-nums">
                 {EDGE_LABELS[phase.rec.measured.edge]} · {phase.rec.measured.rttMs} ms
                 {phase.rec.measured.lossPct !== null ? ` · ${phase.rec.measured.lossPct}% lost` : ''}
                 {phase.rec.measured.mos !== null ? ` · MOS ${phase.rec.measured.mos}` : ''}
@@ -192,17 +192,17 @@ export function ConnectionTest() {
             )}
           </div>
           {phase.mic && (
-            <p className="text-muted-foreground text-[11px]">
+            <p className="text-muted-foreground text-xs sm:text-[11px]">
               Microphone: {phase.rec.micSilent ? 'too quiet' : phase.rec.micClipping ? 'too loud' : 'OK'}
             </p>
           )}
-          <ul className="grid gap-1 text-xs">
+          <ul className="grid gap-1 text-sm sm:text-xs">
             {phase.rec.tips.map((tip) => (
               <li key={tip}>{tip}</li>
             ))}
           </ul>
           {phase.edges.some((e) => !e.ok && e.error) && (
-            <ul className="text-muted-foreground grid gap-0.5 text-[11px]">
+            <ul className="text-muted-foreground grid gap-0.5 text-xs sm:text-[11px]">
               {phase.edges
                 .filter((e) => !e.ok && e.error)
                 .map((e) => (
@@ -211,16 +211,16 @@ export function ConnectionTest() {
             </ul>
           )}
           {phase.full && phase.rec.bestEdge && (
-            <p className="text-muted-foreground text-[11px]">Calls now connect through {EDGE_LABELS[phase.rec.bestEdge]}.</p>
+            <p className="text-muted-foreground text-xs sm:text-[11px]">Calls now connect through {EDGE_LABELS[phase.rec.bestEdge]}.</p>
           )}
           {phase.applied ? (
-            <p className="text-xs text-emerald-700 dark:text-emerald-400">Saved. The next call uses it.</p>
+            <p className="text-sm sm:text-xs text-emerald-700 dark:text-emerald-400">Saved. The next call uses it.</p>
           ) : change ? (
-            <Button type="button" size="xs" className="h-auto justify-self-start py-1 text-left whitespace-normal" onClick={apply}>
+            <Button type="button" size="xs" className="h-auto min-h-11 justify-self-start py-1 text-left whitespace-normal sm:min-h-0" onClick={apply}>
               Apply recommended: {change}
             </Button>
           ) : (
-            phase.rec.verdict !== 'Failed' && <p className="text-muted-foreground text-xs">Your settings already match.</p>
+            phase.rec.verdict !== 'Failed' && <p className="text-muted-foreground text-sm sm:text-xs">Your settings already match.</p>
           )}
         </div>
       )}
