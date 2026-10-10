@@ -9,7 +9,7 @@ import { setUserActiveAction } from '@/app/(app)/settings/users/actions'
 import { decideFinalSuggestion, inviteFinalCloser, saveFinalQuestionnaire } from '@/lib/final-desk/actions'
 import { QUESTION_SECTIONS, answerCount, type QuestionnaireAnswers } from '@/lib/final-desk/questions'
 import { DOCUMENT_MODULES } from '@/lib/final-desk/mapping'
-import { civilDate, shiftIso, shiftMonth, timeLabel, weekCovered, weekDayIsos, weekTitle, zonedDate, type DeskChip } from '@/lib/daily-desk'
+import { boardForMonth, civilDate, parseMonth, shiftIso, shiftMonth, timeLabel, weekCovered, weekDayIsos, weekTitle, zonedDate, type DeskChip } from '@/lib/daily-desk'
 import type { CaseCell, CaseDocTile } from '@/lib/daily-desk-case-types'
 import type { DeskView, FinalDeskPayload } from '@/lib/final-desk/types'
 import { DocumentTileActions } from './document-tile-actions'
@@ -52,19 +52,36 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   const [answers, setAnswers] = useState<QuestionnaireAnswers>(initial.questionnaire?.answers ?? {}), [page, setPage] = useState(initial.questionnaire?.page ?? 0)
   const answerRef = useRef(answers), touched = useRef(new Set<string>()), revision = useRef(initial.questionnaire?.revision ?? 0), saving = useRef<Promise<boolean> | null>(null)
   const calendarRef = useRef<HTMLDivElement>(null), busyRef = useRef(false), refreshEpoch = useRef(0), bookingRequest = useRef('')
+  const cursorRef = useRef(initial.board?.today ?? '')
   const file = data.file, board = data.board, clients = data.clients ?? [], isAdmin = data.user.role === 'SUPER_ADMIN'
   const monthRef = useRef(board?.month)
+  cursorRef.current = cursor
   const tz = board?.timezone ?? file?.timezone ?? 'America/Los_Angeles'
   const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
   const closers = board?.closers ?? file?.closers ?? []
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   function notify(message: string) { setToast(message); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 6000) }
+  function rememberMonth(key: string) {
+    monthRef.current = key
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('month') === key) return
+    url.searchParams.set('month', key)
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+  }
+  function showLoadedMonth(key: string) {
+    setData((prev) => (prev.board && prev.board.month !== key ? { ...prev, board: boardForMonth(prev.board, key) } : prev))
+  }
   async function refresh(month?: string) {
+    const requested = month ?? monthRef.current
     const epoch = ++refreshEpoch.current
-    const params = new URLSearchParams({ view, ...query, ...(clientId ? { clientId } : {}), ...(month || monthRef.current ? { month: month ?? monthRef.current! } : {}) })
+    const params = new URLSearchParams({ view, ...query, ...(clientId ? { clientId } : {}), ...(requested ? { month: requested } : {}) })
     const response = await fetch(`/api/desk?${params}`, { cache: 'no-store' })
     if (!response.ok) { if ([401, 403, 404].includes(response.status)) router.refresh(); throw Error('Unable to refresh this view') }
-    const next: FinalDeskPayload = await response.json(); if (epoch !== refreshEpoch.current) return; setData(next)
+    const next: FinalDeskPayload = await response.json()
+    // The 15s poll can still be answering for the previous month. Applying it snaps the arrows back.
+    if (epoch !== refreshEpoch.current) return
+    if (next.board && monthRef.current && next.board.month !== monthRef.current) return
+    setData(next)
     if (next.board?.month) monthRef.current = next.board.month
     if (next.questionnaire && !touched.current.size && !saving.current) { answerRef.current = next.questionnaire.answers; setAnswers(next.questionnaire.answers); revision.current = next.questionnaire.revision }
   }
@@ -153,12 +170,27 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
     try { return await task } finally { if (saving.current === task) saving.current = null }
   }
   async function moveQuestionnaire(next: number, complete = false) { setBusy(true); try { if (await flush(next, complete)) { if (complete) open(clientId!); else { setPage(next); notify('Draft saved') } } } finally { setBusy(false) } }
-  async function selectDay(next: string) { setDay(next); setCursor(next); setMode('day'); if (next.slice(0, 7) !== board?.month) await refresh(next.slice(0, 7)) }
+  async function selectDay(next: string) {
+    setDay(next); setCursor(next); cursorRef.current = next; setMode('day')
+    const nextKey = parseMonth(next.slice(0, 7)).key
+    if (monthRef.current === nextKey) return
+    rememberMonth(nextKey); showLoadedMonth(nextKey)
+    try { await refresh(nextKey) } catch { notify('Could not load appointments for that day.') }
+  }
   function shiftDay(delta: number) { void selectDay(shiftIso(day, delta)) }
-  async function showMonth(key: string) { setMode('month'); if (key !== board?.month) await refresh(key) }
-  async function showWeek(iso: string) {
-    setCursor(iso); setMode('week')
-    if (board && !weekCovered(iso, board.days.map(d => d.iso))) await refresh(iso.slice(0, 7))
+  function showMonth(key: string) {
+    const nextKey = parseMonth(key).key
+    setMode('month')
+    if (monthRef.current === nextKey) return
+    rememberMonth(nextKey); showLoadedMonth(nextKey)
+    void refresh(nextKey).catch(() => notify('Could not load appointments for that month.'))
+  }
+  function showWeek(iso: string) {
+    cursorRef.current = iso; setCursor(iso); setMode('week')
+    if (board && weekCovered(iso, board.days.map(d => d.iso))) return
+    const nextKey = parseMonth(iso.slice(0, 7)).key
+    if (monthRef.current !== nextKey) { rememberMonth(nextKey); showLoadedMonth(nextKey) }
+    void refresh(nextKey).catch(() => notify('Could not load appointments for that week.'))
   }
   function openWeek() {
     if (!board) return
@@ -199,8 +231,8 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
     const periodNav = (kind: 'month' | 'week' | 'day') => {
       const prevLabel = kind === 'month' ? t.prevMonth : kind === 'week' ? t.prevWeek : t.prevDay
       const nextLabel = kind === 'month' ? t.nextMonth : kind === 'week' ? t.nextWeek : t.nextDay
-      const onPrev = kind === 'month' ? () => void showMonth(shiftMonth(board.month, -1)) : kind === 'week' ? () => void showWeek(shiftIso(focus, -7)) : () => shiftDay(-1)
-      const onNext = kind === 'month' ? () => void showMonth(shiftMonth(board.month, 1)) : kind === 'week' ? () => void showWeek(shiftIso(focus, 7)) : () => shiftDay(1)
+      const onPrev = kind === 'month' ? () => void showMonth(shiftMonth(monthRef.current || board.month, -1)) : kind === 'week' ? () => void showWeek(shiftIso(cursorRef.current || focus, -7)) : () => shiftDay(-1)
+      const onNext = kind === 'month' ? () => void showMonth(shiftMonth(monthRef.current || board.month, 1)) : kind === 'week' ? () => void showWeek(shiftIso(cursorRef.current || focus, 7)) : () => shiftDay(1)
       return <>
         {kind !== 'day' && <div className="seg" role="group" aria-label={t.calendarView}><button type="button" className={kind === 'month' ? 'on' : ''} onClick={() => kind === 'week' && void showMonth(board.month)}>{t.month}</button><button type="button" className={kind === 'week' ? 'on' : ''} onClick={() => kind === 'month' && openWeek()}>{t.weekView}</button></div>}
         <button type="button" className="btn secondary" aria-label={prevLabel} onClick={onPrev}>←</button>

@@ -8,6 +8,7 @@ import {
   deskMonthRange,
   isoDate,
   missingDocsLabel,
+  boardForMonth,
   monthGrid,
   monthTitle,
   parseMonth,
@@ -51,6 +52,32 @@ describe('shiftMonth', () => {
   it('walks across year boundaries', () => {
     expect(shiftMonth('2026-01', -1)).toBe('2025-12')
     expect(shiftMonth('2026-12', 1)).toBe('2027-01')
+  })
+})
+
+describe('boardForMonth', () => {
+  const chip = (iso: string) => ({
+    appointmentId: iso, startsAt: `${iso}T17:00:00.000Z`, status: 'SCHEDULED', clientId: 'c',
+    firstName: 'Roy', lastName: 'Labrador', timeLabel: '10:00', ownerName: null, missingDocs: 0, email: '', phone: '',
+  })
+  const october = {
+    timezone: 'America/Los_Angeles', month: '2026-10', title: 'October 2026', today: '2026-10-09',
+    days: monthGrid(2026, 9).map((cell) => ({ ...cell, isToday: cell.iso === '2026-10-09', chips: cell.iso === '2026-09-27' || cell.iso === '2026-10-09' ? [chip(cell.iso)] : [] })),
+    unscheduled: [], unscheduledTotal: 0, closers: [], unassignedCount: 0, canAssign: false, canBook: true,
+  }
+
+  it('changes the title immediately and keeps appointments already on screen', () => {
+    const september = boardForMonth(october, shiftMonth(october.month, -1))
+    expect(september.month).toBe('2026-09')
+    expect(september.title).toBe('September 2026')
+    expect(september.days.find((day) => day.iso === '2026-09-27')?.chips).toHaveLength(1)
+    expect(september.days.some((day) => day.iso === '2026-10-09')).toBe(false)
+    expect(boardForMonth(september, '2026-09')).toBe(september)
+  })
+
+  it('walks a second arrow from the month it just landed on', () => {
+    const september = boardForMonth(october, '2026-09')
+    expect(boardForMonth(september, shiftMonth(september.month, -1)).title).toBe('August 2026')
   })
 })
 

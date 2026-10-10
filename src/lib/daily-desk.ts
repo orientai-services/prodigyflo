@@ -148,6 +148,27 @@ export function monthGrid(year: number, monthIndex: number): { iso: string; day:
   return cells
 }
 
+/**
+ * Point an already loaded board at another month immediately.
+ * Days that were already on screen keep their appointments; the rest start empty
+ * until the desk reload fills them.
+ */
+export function boardForMonth(board: DeskBoard, key: string): DeskBoard {
+  const { year, monthIndex, key: month } = parseMonth(key)
+  if (board.month === month) return board
+  const chips = new Map(board.days.map((day) => [day.iso, day.chips]))
+  return {
+    ...board,
+    month,
+    title: monthTitle(year, monthIndex),
+    days: monthGrid(year, monthIndex).map((cell) => ({
+      ...cell,
+      isToday: cell.iso === board.today,
+      chips: chips.get(cell.iso) ?? [],
+    })),
+  }
+}
+
 /** Civil date `YYYY-MM-DD` + `HH:MM` in `timeZone` → UTC Date. Independent of the host zone. */
 export function zonedDate(ymd: string, hm: string, timeZone: string): Date {
   const [year, month, day] = ymd.split('-').map(Number)
