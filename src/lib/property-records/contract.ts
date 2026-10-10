@@ -14,9 +14,9 @@ export function addressVersion(address:PropertyAddress) {return createHash('sha2
 export const PERMIT_REASONS=['no_solar_permit','outside_service_area','needs_human_check','login_required','lookup_failed'] as const
 export const PERMIT_REASON_TEXT:Record<typeof PERMIT_REASONS[number],string>={no_solar_permit:'no solar permit on record',outside_service_area:'outside service area',needs_human_check:'needs human check',login_required:'portal needs a login',lookup_failed:'lookup failed'}
 export const recordsResult=z.object({version:z.literal('property-records-v1'),case_key:z.string(),address_version:z.string(),address:addressSchema,
-  parcel:z.object({id:z.string(),address:addressSchema,source_url:z.string()}).nullable(),
+  parcel:z.object({id:z.string(),address:addressSchema,source_url:z.string(),match_method:z.enum(['exact','fuzzy_street']).optional(),assessor_address:z.string().nullable().optional()}).nullable(),
   status:z.enum(['complete','partial','no_match','unsupported','paused']),
-  outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused','assessor_copy','recorder_record_summary','permit_record_page','no_permit_found']),reason:z.enum(PERMIT_REASONS).optional(),retry_after:z.string().datetime().optional(),source_url:z.string().optional(),detail:z.string().optional()})),
+  outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused','assessor_copy','recorder_record_summary','permit_record_page','no_permit_found']),reason:z.enum(PERMIT_REASONS).optional(),retry_after:z.string().datetime().optional(),source_url:z.string().optional(),detail:z.string().optional(),address_tried:z.string().optional(),match_method:z.enum(['exact','fuzzy_street']).optional()})),
   originals:z.array(z.object({url:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/),mime:z.string(),filename:z.string(),category:z.enum(['deed','ucc','permit']),source_url:z.string(),provenance:z.enum(['assessor_copy','recorder_record_summary','city_permit','recorder_unofficial_copy','original','permit_record_page']).optional(),record_key:z.string().regex(/^(deed|ucc|permit):[A-Za-z0-9:._-]{1,160}$/).optional(),amendment_only:z.boolean().optional()})),cached:z.boolean()})
 export type RecordsOriginal=z.infer<typeof recordsResult>['originals'][number]
 export const AMENDMENT_ONLY_LABEL='amendment only, original not on index'
@@ -50,6 +50,31 @@ export function permitStatusNote(result:unknown):string|null {
   if(permit.status==='no_permit_found') return `No permit found — ${headline??reason??'see records detail'}`
   const legacy:Record<string,string>={no_match:'no solar permit on record',unsupported:'outside service area',failed:'lookup failed',budget_paused:'lookup paused'}
   return legacy[permit.status??'']?`No permit found — ${legacy[permit.status!]}`:null
+}
+/** Staff-facing line when the county could not find the property at all; null otherwise. */
+export function addressNotFoundNote(result:unknown):string|null {
+  const r=result as {status?:unknown;parcel?:unknown;address?:{line1?:unknown;city?:unknown;state?:unknown;postal_code?:unknown};outcomes?:unknown}|null|undefined
+  if(!r||r.status!=='no_match'||r.parcel) return null
+  const parcel=Array.isArray(r.outcomes)?r.outcomes.find((o:unknown)=>(o as {kind?:unknown})?.kind==='parcel') as {status?:string;address_tried?:string}|undefined:undefined
+  if(parcel&&parcel.status!=='no_match') return null
+  const a=r.address??{}
+  const tried=parcel?.address_tried||[a.line1,a.city,a.state,a.postal_code].filter(v=>typeof v==='string'&&v).join(', ')
+  return `Address not found at county — check spelling${tried?` (tried: ${tried})`:''}`
+}
+/** Staff-facing line for a records job that has not completed: retrying, or stopped for a human. */
+export function recordsJobStatusNote(job:{status:string;error?:string|null}|null|undefined):string|null {
+  if(!job) return null
+  if(job.status==='PENDING'||job.status==='RUNNING') return 'County records lookup in progress'
+  if(job.status==='FAILED') return 'County records temporarily unavailable — retrying automatically'
+  if(job.status==='PAUSED') return `Records lookup needs human check${job.error?` — ${job.error.replace(/^Needs human check after repeated failures: /,'')}`:''}`
+  return null
+}
+/** Deed outcome that failed verification (e.g. a stamped/blank assessor image): never shown as a deed. */
+export function deedCheckNote(result:unknown):string|null {
+  const outcomes=(result as {outcomes?:unknown})?.outcomes
+  if(!Array.isArray(outcomes)) return null
+  const deed=outcomes.find((o:unknown)=>(o as {kind?:unknown})?.kind==='deed') as {status?:string;detail?:string}|undefined
+  return deed?.status==='failed'&&/needs human check/i.test(deed.detail??'')?deed.detail!:null
 }
 /** Stable filing identity. The same instrument or attachment keeps one key when the PDF bytes change. */
 export function filingIdentity(file:{category:string;filename:string;record_key?:string|null}) {

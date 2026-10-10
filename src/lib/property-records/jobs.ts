@@ -72,6 +72,12 @@ export async function queuePropertyRecords(args:{organizationId:string;clientId:
   return store.propertyRecordsJob.update({where:{id:job.id},data:{status:'PENDING',attempts:0,claimToken:null,claimedAt:null,nextAttemptAt:new Date(),error:null}})
 }
 
+/** Transient county/service failures retry with backoff through the cron, then stop for a human. */
+export const MAX_ATTEMPTS=5
+export const NEEDS_HUMAN_CHECK='Needs human check after repeated failures: '
+const RETRY_DELAYS_MS=[2*60_000,10*60_000,30*60_000,2*60*60_000]
+export function retryDelayMs(attempts:number) {return RETRY_DELAYS_MS[Math.min(Math.max(attempts,1),RETRY_DELAYS_MS.length)-1]}
+
 /** Result and file commits are fenced by the live primary address and claim. */
 export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
   const counts={completed:0,failed:0,paused:0}
@@ -79,7 +85,7 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
   for(let i=0;i<limit;i++) {
     const token=randomUUID()
     const rows=await db.$queryRaw<{id:string}[]>`WITH due AS (
-      SELECT id FROM "PropertyRecordsJob" WHERE ("clientId"=${clientId??null} OR ${clientId??null}::text IS NULL) AND attempts<3 AND "nextAttemptAt"<=now()
+      SELECT id FROM "PropertyRecordsJob" WHERE ("clientId"=${clientId??null} OR ${clientId??null}::text IS NULL) AND attempts<${MAX_ATTEMPTS} AND "nextAttemptAt"<=now()
        AND (status IN ('PENDING','FAILED') OR status='RUNNING' AND "claimedAt"<now()-interval '10 minutes')
       ORDER BY "nextAttemptAt","createdAt" FOR UPDATE SKIP LOCKED LIMIT 1
     ) UPDATE "PropertyRecordsJob" j SET status='RUNNING',"claimToken"=${token},"claimedAt"=now(),"updatedAt"=now() FROM due WHERE j.id=due.id RETURNING j.id`
@@ -101,7 +107,7 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
         continue
       }
       const response=job.result?null:await fetch(new URL('/api/service/property-records',base),{method:'POST',headers:{...headers,'Content-Type':'application/json','idempotency-key':job.id},body:JSON.stringify({address,address_version:job.addressVersion}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(180_000)}).catch((error:unknown)=>{throw serviceUnreachable(error)})
-      if(response&&!response.ok) throw Error(response.status===404?'Records service endpoint not found (404)':`Records service returned ${response.status}`)
+      if(response&&!response.ok) throw Error(response.status===404?'Records service endpoint not found (404)':response.status===503?'County records temporarily unavailable (503)':`Records service returned ${response.status}`)
       const result=validateRecordsResult(job.result??await response!.json(),job.caseKey,address)
       const persisted=await db.$transaction(async tx=>{
         await tx.$queryRaw`SELECT id FROM "Client" WHERE id=${job.clientId} FOR UPDATE`
@@ -162,9 +168,10 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
       counts.completed++
     } catch(error) {
       const message=error instanceof Error?error.message:'Records lookup failed'
-      const outcome=job.attempts+1>=3?'PAUSED':'FAILED'
       const attempts=job.attempts+1
-      await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token,status:'RUNNING'},data:{status:outcome,attempts:{increment:1},error:message,claimedAt:null,nextAttemptAt:new Date(Date.now()+30_000)}})
+      const outcome=attempts>=MAX_ATTEMPTS?'PAUSED':'FAILED'
+      const stored=outcome==='PAUSED'?`${NEEDS_HUMAN_CHECK}${message}`:message
+      await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token,status:'RUNNING'},data:{status:outcome,attempts:{increment:1},error:stored,claimedAt:null,nextAttemptAt:new Date(Date.now()+retryDelayMs(attempts))}})
       logJobFinish(job,outcome,message,attempts,job.result)
       counts.failed++
     }
