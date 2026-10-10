@@ -1374,3 +1374,36 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Mobile pass: shared primitives (docs/MOBILE.md). Below md, fields are a
+   44px tap target; below sm, centred dialogs become bottom sheets with
+   safe-area padding and their own scroll, so long forms fit a phone. */
+@media (max-width: 767.98px) {
+  [data-slot="input"],
+  [data-slot="native-select"],
+  [data-slot="select-trigger"] {
+    min-height: 44px;
+  }
+  [data-slot="section-tabs"] :is(a, button) {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+@media (max-width: 639.98px) {
+  [data-slot="dialog-content"] {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    transform: none;
+    translate: none;
+    max-width: 100%;
+    width: 100%;
+    max-height: 92dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}

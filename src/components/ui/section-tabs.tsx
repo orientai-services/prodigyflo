@@ -47,7 +47,7 @@ export function SectionTabs({
   }, [active])
 
   return (
-    <nav aria-label={ariaLabel} className={cn('scroll-x no-scrollbar mt-4', className)}>
+    <nav data-slot="section-tabs" aria-label={ariaLabel} className={cn('scroll-x no-scrollbar mt-4', className)}>
       <div
         ref={listRef}
         className="bg-muted relative inline-flex items-center gap-0.5 rounded-full border p-0.5"
