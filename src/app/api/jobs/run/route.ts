@@ -8,6 +8,7 @@ import { getAIProvider } from '@/lib/ai'
 import { buildAssistContext } from '@/lib/ai/assists'
 import { sendWeeklyDigests } from '@/lib/digest'
 import { renewNumbers } from '@/lib/telephony/renewal'
+import { runTelephonySweep } from '@/lib/telephony/sweep'
 import { runPendingScsDocumentExtractions, runPendingScsDocumentImports } from '@/lib/intake/scs-document-import'
 
 export const maxDuration = 300
@@ -116,11 +117,14 @@ async function run(request: NextRequest) {
   const scsDocumentExtractions = await runPendingScsDocumentExtractions()
   const propertyRecords=await (await import('@/lib/property-records/jobs')).runPropertyRecordsJobs(1)
   const recordsStaff=process.env.DOCUMENT_ANALYZER==='records' ? await (await import('@/lib/records-analyzer/staff-jobs')).runStaffAnalysisJobs(1) : null
+  // Telephony housekeeping (lost callbacks, stuck calls, honest SMS status)
+  // runs in every mode, including the final desk. It never throws.
+  const telephonySweep = await runTelephonySweep(new Date())
   if (new URL(request.url).searchParams.get('scope') === 'scs-document-extractions') {
     return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentExtractions })
   }
   if (process.env.PRODIGYFLO_FINAL_DESK === 'true') {
-    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, recordsStaff, propertyRecords, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
+    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, recordsStaff, propertyRecords, telephonySweep, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
   }
   const counts = await runDueWork(new Date())
   const scores = await freshenScores()
@@ -132,7 +136,7 @@ async function run(request: NextRequest) {
   // month per line. A wallet that cannot cover it suspends the line (never
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
-  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine: { status: 'RETIRED' }, telephony, scsDocumentImports, scsDocumentExtractions })
+  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine: { status: 'RETIRED' }, telephony, telephonySweep, scsDocumentImports, scsDocumentExtractions })
 }
 
 export const POST = run

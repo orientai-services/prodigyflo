@@ -25,6 +25,8 @@ export type StoredCallCenterLead = {
   phoneLast4: string | null
   createdAt: Date
   events: StoredCallCenterEvent[]
+  /** IANA zone staff set on the lead. Optional so older callers keep compiling. */
+  timeZone?: string | null
 }
 
 function last4(value: string | null): string | null {
@@ -66,6 +68,8 @@ type EventCopy = {
   action?: string
   userId?: string
   name?: string
+  /** The VoiceCall a CALL / INBOUND event is about, when it came from the carrier. */
+  voiceCallId?: string
 }
 
 function readCopy(body: string): EventCopy | null {
@@ -78,6 +82,7 @@ function readCopy(body: string): EventCopy | null {
     if (typeof parsed.action === 'string') copy.action = parsed.action
     if (typeof parsed.userId === 'string') copy.userId = parsed.userId
     if (typeof parsed.name === 'string') copy.name = parsed.name
+    if (typeof parsed.voiceCallId === 'string') copy.voiceCallId = parsed.voiceCallId
     return copy
   } catch {
     return null
@@ -137,10 +142,19 @@ function personZip(row: StoredCallCenterLead): string | null {
   return null
 }
 
+/** Real-call extras the desk loader attaches (never present on seed rows). */
+export type CallLeadExtras = {
+  /** VoiceCall id → its recording, for CALL / INBOUND events that name one. */
+  recordings?: ReadonlyMap<string, { src: string; seconds: number }>
+  /** The newest unhandled missed call from this lead. */
+  missedCallId?: string | null
+}
+
 export function callLeadFromRow(
   row: StoredCallCenterLead,
   viewerId?: string | null,
   lockName?: string | null,
+  extras: CallLeadExtras = {},
 ): CallLead {
   const page = pageName(row)
   const language: LeadLanguage = row.language === 'ES' ? 'es' : 'en'
@@ -164,11 +178,16 @@ export function callLeadFromRow(
     recording: null,
     trail: row.events.map((event) => {
       const copy = event.type === 'FORM' ? null : readCopy(event.body)
+      const recording =
+        copy?.voiceCallId && (event.type === 'CALL' || event.type === 'INBOUND')
+          ? extras.recordings?.get(copy.voiceCallId)
+          : undefined
       return {
         kind: trailKind(event.type),
         at: event.createdAt.toISOString(),
         label: copy?.label ? safeText(copy.label) || trailLabel(event.type) : trailLabel(event.type),
         detail: trailDetail(event.type, event.body, page, viewerId),
+        ...(recording && event.type === 'CALL' ? { recording: { ...recording } } : {}),
       }
     }),
     lockedBy: row.lockedBy,
@@ -177,7 +196,8 @@ export function callLeadFromRow(
     tries: row.tries,
     nextAttemptAt: row.nextAttemptAt ? row.nextAttemptAt.toISOString() : null,
     dnc: row.doNotCallAt != null,
-    timeZone: 'America/Los_Angeles',
+    timeZone: row.timeZone || 'America/Los_Angeles',
+    ...(extras.missedCallId ? { missedCallId: extras.missedCallId } : {}),
   }
 }
 
@@ -186,7 +206,16 @@ export function callLeadsForDesk(
   rows: readonly StoredCallCenterLead[],
   viewerId?: string | null,
   lockNames?: ReadonlyMap<string, string>,
+  extras?: {
+    recordings?: ReadonlyMap<string, { src: string; seconds: number }>
+    missedByLead?: ReadonlyMap<string, string>
+  },
 ): CallLead[] {
   if (rows.length === 0) return seedLeads()
-  return rows.map((row) => callLeadFromRow(row, viewerId, row.lockedBy ? lockNames?.get(row.lockedBy) ?? null : null))
+  return rows.map((row) =>
+    callLeadFromRow(row, viewerId, row.lockedBy ? lockNames?.get(row.lockedBy) ?? null : null, {
+      recordings: extras?.recordings,
+      missedCallId: extras?.missedByLead?.get(row.id) ?? null,
+    }),
+  )
 }

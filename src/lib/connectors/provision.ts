@@ -12,6 +12,7 @@ import {
   type ConnectorStatusValue,
 } from '@/lib/connectors/credential-logic'
 import { generateIntakeSecret, hashIntakeSecret } from '@/lib/intake/hmac'
+import { checkTwilioConnectorSave } from '@/lib/connectors/twilio-account-check'
 import {
   applyMapping,
   missingRequiredFields,
@@ -451,6 +452,10 @@ export async function saveConnectorCredentials(
     .filter(([k, v]) => allowed.has(k) && v.length > 0)
   if (entries.length === 0) return { ok: false, error: 'Nothing to save — all fields were blank.' }
 
+  // Twilio: never the platform's Account SID, and a pair Twilio itself accepts.
+  const twilio = await checkTwilioConnectorSave(actor.organizationId, def.backing.kind, Object.fromEntries(entries))
+  if (!twilio.ok) return { ok: false, error: twilio.error }
+
   const connector = await db.connector.upsert({
     where: { organizationId_kind: { organizationId: actor.organizationId, kind: def.backing.kind } },
     create: {
@@ -514,6 +519,8 @@ export async function rotateConnectorCredential(
   if (!field) return { ok: false, error: 'Unknown credential field.' }
   const value = (input.value ?? '').trim()
   if (!value) return { ok: false, error: 'Enter the new value to rotate to.' }
+  const twilio = await checkTwilioConnectorSave(actor.organizationId, def.backing.kind, { [field.key]: value })
+  if (!twilio.ok) return { ok: false, error: twilio.error }
 
   const connector = await db.connector.findUnique({
     where: { organizationId_kind: { organizationId: actor.organizationId, kind: def.backing.kind } },

@@ -133,6 +133,7 @@ export async function POST(req: Request) {
           formId,
           adExternalId: change.value.ad_id,
           adSetExternalId: change.value.adgroup_id,
+          fixture,
         })
         results.push({
           leadgenId: lead.leadgenId,

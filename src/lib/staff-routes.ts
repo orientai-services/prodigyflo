@@ -12,6 +12,6 @@ export function staffRouteAllowed(role: RoleKey, path: string): boolean {
   if (role !== 'CLOSER') return false
   if (path === '/api/desk' && process.env.PRODIGYFLO_FINAL_DESK === 'true') return true
   return /^\/(board|call-center|clients|queue|documents|submissions|profile|notifications|forbidden)(\/|$)/.test(path)
-    || /^\/api\/(documents|cys|submissions|notifications|search|profile|signout|messages|templates)(\/|$)/.test(path)
+    || /^\/api\/(documents|cys|submissions|notifications|search|profile|signout|messages|templates|voice)(\/|$)/.test(path)
     || path === '/settings/profile' || path === '/'
 }

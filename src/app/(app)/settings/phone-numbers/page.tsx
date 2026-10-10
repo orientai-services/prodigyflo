@@ -8,6 +8,13 @@ import { ensureWallet, recentLedger } from '@/lib/telephony/billing'
 import { agencyPassphraseStatus } from '@/lib/telephony/passphrase'
 import { money, quoteNumber } from '@/lib/telephony/pricing'
 import { formatE164 } from '@/lib/telephony/provider'
+import { ringsBrowsers, takesCallbacks } from '@/lib/telephony/lines'
+import { getTwilioStatus } from '@/lib/telephony/actions'
+import type { TwilioStatusVM } from '@/lib/telephony/voice-contract'
+import { loadPhoneSetup } from '@/lib/telephony/ui/phone-setup-data'
+import { TwilioStatusCard } from '@/components/telephony/twilio-status-card'
+import { CallingRulesCard } from '@/components/telephony/calling-rules-card'
+import { DncListCard } from '@/components/telephony/dnc-list-card'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,30 +50,59 @@ export default async function PhoneNumbersPage() {
     agencyPassphraseStatus(user.homeOrganizationId ?? user.organizationId),
   ])
 
+  // Sync and browser-ringing state for each line, plus the phone-setup context.
+  // The status and setup reads never take the page down: a carrier outage
+  // leaves the lines and balance readable.
+  const extras = await db.phoneNumber.findMany({
+    where: { id: { in: numbers.map((n) => n.id) }, organizationId: user.organizationId },
+    select: { id: true, importedAt: true, webhookDrift: true, ringBrowsers: true },
+  })
+  const [setup, status] = await Promise.all([
+    loadPhoneSetup(user).catch(() => ({
+      canManage,
+      canAdd: can(user, 'communications:send'),
+      showSync: false,
+      organizations: [],
+      consentForms: [],
+    })),
+    getTwilioStatus(false).catch(() => null),
+  ])
+  const extraById = new Map(extras.map((e) => [e.id, e]))
+  const statusVM = status && 'account' in status ? (status as TwilioStatusVM) : null
+
   const mock = isMockTelephony()
-  const numberVMs: NumberVM[] = numbers.map((n) => ({
-    id: n.id,
-    e164: n.e164,
-    display: formatE164(n.e164),
-    friendlyName: n.friendlyName,
-    kind: n.kind,
-    status: n.status,
-    isPrimary: n.isPrimary,
-    place: [n.locality, n.region].filter(Boolean).join(', ') || null,
-    routing: n.routing,
-    forwardTo: n.forwardTo,
-    forwardToDisplay: n.forwardTo ? formatE164(n.forwardTo) : null,
-    teamUserIds: Array.isArray(n.teamUserIds)
-      ? (n.teamUserIds as unknown[]).filter((v): v is string => typeof v === 'string')
-      : [],
-    voicemailGreeting: n.voicemailGreeting,
-    recordCalls: n.recordCalls,
-    assignedUserId: n.assignedUserId,
-    assignedUserName: n.assignedUser?.name ?? null,
-    monthlyLabel: money(n.monthlyCostCents),
-    renewsLabel: n.nextRenewalAt ? shortDate(n.nextRenewalAt) : null,
-    provider: n.provider,
-  }))
+  const numberVMs: NumberVM[] = numbers.map((n) => {
+    const extra = extraById.get(n.id)
+    const line = { ...n, ringBrowsers: extra?.ringBrowsers ?? null }
+    return {
+      id: n.id,
+      e164: n.e164,
+      display: formatE164(n.e164),
+      friendlyName: n.friendlyName,
+      kind: n.kind,
+      status: n.status,
+      isPrimary: n.isPrimary,
+      place: [n.locality, n.region].filter(Boolean).join(', ') || null,
+      routing: n.routing,
+      forwardTo: n.forwardTo,
+      forwardToDisplay: n.forwardTo ? formatE164(n.forwardTo) : null,
+      teamUserIds: Array.isArray(n.teamUserIds)
+        ? (n.teamUserIds as unknown[]).filter((v): v is string => typeof v === 'string')
+        : [],
+      voicemailGreeting: n.voicemailGreeting,
+      recordCalls: n.recordCalls,
+      assignedUserId: n.assignedUserId,
+      assignedUserName: n.assignedUser?.name ?? null,
+      monthlyLabel: money(n.monthlyCostCents),
+      renewsLabel: n.nextRenewalAt ? shortDate(n.nextRenewalAt) : null,
+      provider: n.provider,
+      importedLabel: extra?.importedAt ? shortDate(extra.importedAt) : null,
+      driftHost: driftHostOf(extra?.webhookDrift),
+      ringBrowsers: extra?.ringBrowsers ?? null,
+      ringsBrowsers: ringsBrowsers(line),
+      takesCallbacks: takesCallbacks(line),
+    }
+  })
 
   const ledgerVMs: LedgerRowVM[] = ledger.map((row) => ({
     id: row.id,
@@ -106,6 +142,8 @@ export default async function PhoneNumbersPage() {
     numbers: numberVMs,
     ledger: ledgerVMs,
     members: members.map((m) => ({ id: m.id, name: m.name, hasPhone: Boolean(m.phone) })),
+    showSync: setup.showSync,
+    syncOrganizations: setup.organizations,
   }
 
   const primary = numberVMs.find((n) => n.isPrimary && n.status === 'ACTIVE')
@@ -131,7 +169,8 @@ export default async function PhoneNumbersPage() {
         )}
       </PageHeader>
 
-      <div className="px-4 py-5 sm:px-6">
+      <div className="space-y-4 px-4 py-5 sm:px-6">
+        <TwilioStatusCard initial={statusVM} />
         {numberVMs.length === 0 && !canManage ? (
           <Card>
             <CardHeader>
@@ -152,6 +191,14 @@ export default async function PhoneNumbersPage() {
         ) : (
           <NumbersConsole vm={vm} />
         )}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <CallingRulesCard
+            canManage={setup.canManage}
+            consentForms={setup.consentForms}
+            mediaAuthOff={statusVM?.mediaAuth.state === 'off'}
+          />
+          <DncListCard canManage={setup.canManage} canAdd={setup.canAdd} />
+        </div>
       </div>
     </>
   )
@@ -165,6 +212,21 @@ function quoteVM(kind: PhoneNumberKind): QuoteVM {
     dueTodayLabel: money(q.dueTodayCents),
     dueTodayCents: q.dueTodayCents,
   }
+}
+
+/** The host a drifted line's calls go to, from `webhookDrift.voiceUrl` (else the SMS URL). */
+function driftHostOf(drift: unknown): string | null {
+  if (!drift || typeof drift !== 'object' || Array.isArray(drift)) return null
+  const d = drift as Record<string, unknown>
+  for (const url of [d.voiceUrl, d.smsUrl]) {
+    if (typeof url !== 'string' || !url) continue
+    try {
+      return new URL(url).host
+    } catch {
+      return url.slice(0, 60)
+    }
+  }
+  return null
 }
 
 function routingSummary(n: NumberVM): string {

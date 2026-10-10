@@ -48,6 +48,11 @@ export type EncryptedSecret = {
  * deliberately NOT AUTH_SECRET: rotating session signing must never brick the
  * credential vault, and vice versa. keyVersion is stored per row so a future
  * rotation can decrypt old rows with the old key while writing with the new.
+ *
+ * Do not rotate PHONE_HASH_KEY. If it ever leaks, hashes reveal nothing without
+ * a guess of the number; rotating it breaks the do-not-call list (it keys the
+ * phone-number hashes, which is why it is NOT this vault key — see
+ * src/lib/telephony/compliance-core.ts).
  */
 function vaultKey(keyOverride?: string): Buffer {
   const raw = keyOverride ?? process.env.VAULT_KEY

@@ -1,4 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+
+// Calling hours are not this file's subject: pin their clock (see the stub).
+vi.mock('@/lib/telephony/compliance', async (orig) =>
+  (await import('./stubs/pinned-calling-clock')).pinnedCallingClock(orig),
+)
+
 import { db } from '@/lib/db'
 import { ForbiddenError, type SessionUser } from '@/lib/rbac'
 import type { PermissionKey } from '@/lib/permissions'

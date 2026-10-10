@@ -5,16 +5,26 @@ import type { CallRouting } from '@prisma/client'
  * connects. Pure string building on purpose: what a caller hears is a
  * behaviour worth testing, and testing it should not need a phone.
  *
- * Three shapes, one per routing mode:
+ * Inbound shapes, one per routing mode:
  *
+ *   browser stage  (when anyone is signed in and ready) ring up to five
+ *                  browsers at once, then fall into the line's routing
  *   FORWARD        greet, ring one number, fall through to voicemail
- *   TEAM           greet, ring each teammate in turn, fall through to voicemail
+ *   TEAM           greet, ring ONE teammate; the dial action rings the next
+ *                  one in turn (one <Dial> per teammate, chained through
+ *                  ?stage=team&i=n), then voicemail. Sequential on purpose:
+ *                  ringing everyone at once double-books the team and, while
+ *                  the account allows one call at a time, fails outright.
  *   VOICEMAIL_ONLY greet and record
  *
  * Every shape ends at voicemail, because a business line that rings out into
  * silence loses the lead. Recording is opt-in per number (recordCalls) and the
  * greeting says so when it is on — one-party-consent is not the rule
  * everywhere, and the announcement is what makes the recording safe to keep.
+ *
+ * Outbound (browser calls): one <Dial> with an honest callerId, and — only
+ * when outbound recording is on — a whisper that sends the recording notice to
+ * the callee on answer.
  */
 
 export const DEFAULT_GREETING = 'Thanks for calling. Please hold while we connect you.'
@@ -26,6 +36,10 @@ export const RECORDING_NOTICE = 'This call may be recorded for quality.'
 export const RING_SECONDS = 20
 /** Longest voicemail we keep. */
 export const VOICEMAIL_MAX_SECONDS = 120
+/** Browsers rung at once on an inbound call. */
+export const MAX_BROWSER_LEGS = 5
+/** Seconds an outbound browser call rings the callee. */
+export const OUTBOUND_RING_SECONDS = 30
 
 export function escapeXml(value: string): string {
   return value
@@ -44,11 +58,18 @@ function document(body: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`
 }
 
+function attrs(pairs: [string, string | number | null | undefined | false][]): string {
+  return pairs
+    .filter(([, v]) => v !== null && v !== undefined && v !== false && v !== '')
+    .map(([k, v]) => `${k}="${escapeXml(String(v))}"`)
+    .join(' ')
+}
+
 export type VoiceRouteConfig = {
   routing: CallRouting
   /** FORWARD: the single number to ring. */
   forwardTo?: string | null
-  /** TEAM: E.164 numbers of the teammates to ring, in dial order. */
+  /** TEAM: E.164 numbers of the teammates to ring, in dial order. Only the first is rung here. */
   teamNumbers?: string[]
   recordCalls: boolean
   greeting?: string | null
@@ -56,51 +77,155 @@ export type VoiceRouteConfig = {
   voicemailCallbackUrl: string
   /** Absolute URL that Twilio posts the dial outcome to. */
   actionUrl: string
+  /** Absolute URL for the recording of an answered call (kind=call). */
+  callRecordingUrl?: string
+  /** Absolute URL for the answered child leg's status (who picked up). */
+  childStatusUrl?: string
+  /** Skip the spoken greeting (it was already said in an earlier stage). */
+  skipGreeting?: boolean
+}
+
+function greetingFor(config: Pick<VoiceRouteConfig, 'greeting' | 'recordCalls' | 'skipGreeting'>): string {
+  if (config.skipGreeting) return ''
+  const greeting = config.greeting?.trim() || DEFAULT_GREETING
+  const notice = config.recordCalls ? ` ${RECORDING_NOTICE}` : ''
+  return say(`${greeting}${notice}`)
+}
+
+function dialOpen(config: {
+  actionUrl: string
+  recordCalls: boolean
+  callRecordingUrl?: string
+  timeout?: number
+}): string {
+  return `<Dial ${attrs([
+    ['timeout', config.timeout ?? RING_SECONDS],
+    ['action', config.actionUrl],
+    ['method', 'POST'],
+    ['answerOnBridge', 'true'],
+    ['record', config.recordCalls ? 'record-from-answer-dual' : null],
+    ['recordingStatusCallback', config.recordCalls ? config.callRecordingUrl ?? null : null],
+    ['recordingStatusCallbackMethod', config.recordCalls && config.callRecordingUrl ? 'POST' : null],
+  ])}>`
+}
+
+function numberNoun(e164: string, childStatusUrl?: string): string {
+  const a = childStatusUrl
+    ? ` ${attrs([
+        ['statusCallback', childStatusUrl],
+        ['statusCallbackEvent', 'answered completed'],
+        ['statusCallbackMethod', 'POST'],
+      ])}`
+    : ''
+  return `<Number${a}>${escapeXml(e164)}</Number>`
 }
 
 /**
- * The answer for an incoming call. `actionUrl` receives the result of the dial
- * so an unanswered call continues into voicemail rather than hanging up — a
- * <Dial> that nobody picks up falls through to the next verb only when the
- * dial itself completes, which is exactly what action= gives us.
+ * The answer for an incoming call's routing stage. `actionUrl` receives the
+ * result of the dial so an unanswered call continues (to the next teammate, or
+ * voicemail) rather than hanging up — a <Dial> that nobody picks up falls
+ * through only when the dial itself completes, which is what action= gives us.
  */
 export function voiceAnswerTwiml(config: VoiceRouteConfig): string {
-  const greeting = config.greeting?.trim() || DEFAULT_GREETING
-  const notice = config.recordCalls ? ` ${RECORDING_NOTICE}` : ''
-
   if (config.routing === 'VOICEMAIL_ONLY') {
-    return document(say(`${greeting}${notice}`) + voicemailBody(config))
+    return document(greetingFor(config) + voicemailBody(config))
   }
 
-  const targets =
+  const target =
     config.routing === 'FORWARD'
-      ? [config.forwardTo].filter((n): n is string => Boolean(n))
-      : (config.teamNumbers ?? []).filter(Boolean)
+      ? config.forwardTo || null
+      : (config.teamNumbers ?? []).filter(Boolean)[0] ?? null
 
   // A misconfigured line still answers: voicemail beats a dead tone.
-  if (targets.length === 0) {
-    return document(say(`${greeting}${notice}`) + voicemailBody(config))
+  if (!target) {
+    return document(greetingFor(config) + voicemailBody(config))
   }
 
-  const dialAttrs = [
-    `timeout="${RING_SECONDS}"`,
-    `action="${escapeXml(config.actionUrl)}"`,
-    'method="POST"',
-    'answerOnBridge="true"',
-    config.recordCalls ? 'record="record-from-answer-dual"' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-
-  const numbers = targets.map((n) => `<Number>${escapeXml(n)}</Number>`).join('')
-  return document(`${say(`${greeting}${notice}`)}<Dial ${dialAttrs}>${numbers}</Dial>`)
+  return document(`${greetingFor(config)}${dialOpen(config)}${numberNoun(target, config.childStatusUrl)}</Dial>`)
 }
 
-function voicemailBody(config: VoiceRouteConfig): string {
+/** One TEAM step: ring teammate `number` (already chosen by index), no greeting. */
+export function teamStepTwiml(config: {
+  number: string
+  actionUrl: string
+  recordCalls: boolean
+  callRecordingUrl?: string
+  childStatusUrl?: string
+}): string {
+  return document(`${dialOpen(config)}${numberNoun(config.number, config.childStatusUrl)}</Dial>`)
+}
+
+export type BrowserLeg = {
+  identity: string
+  params: Record<string, string>
+}
+
+/**
+ * The browser stage of an inbound call: up to five signed-in browsers ring at
+ * once (exactly one while the account is limited to one call at a time). Each
+ * leg carries <Parameter>s the incoming banner shows.
+ */
+export function browserDialTwiml(config: {
+  legs: BrowserLeg[]
+  actionUrl: string
+  recordCalls: boolean
+  greeting?: string | null
+  callRecordingUrl?: string
+  childStatusUrl?: string
+  /** One call at a time: ring only the first browser. */
+  limited?: boolean
+}): string {
+  const legs = config.legs.slice(0, config.limited ? 1 : MAX_BROWSER_LEGS)
+  const clients = legs
+    .map((leg) => {
+      const status = config.childStatusUrl
+        ? ` ${attrs([
+            ['statusCallback', config.childStatusUrl],
+            ['statusCallbackEvent', 'answered completed'],
+            ['statusCallbackMethod', 'POST'],
+          ])}`
+        : ''
+      const params = Object.entries(leg.params)
+        .map(([name, value]) => `<Parameter ${attrs([['name', name], ['value', value]])}/>`)
+        .join('')
+      return `<Client${status}><Identity>${escapeXml(leg.identity)}</Identity>${params}</Client>`
+    })
+    .join('')
+  return document(
+    `${greetingFor({ greeting: config.greeting, recordCalls: config.recordCalls })}${dialOpen(config)}${clients}</Dial>`,
+  )
+}
+
+/** Greeting (when still due) then voicemail — the end of every chain. */
+export function voicemailTwiml(config: {
+  voicemailCallbackUrl: string
+  greeting?: string | null
+  recordCalls?: boolean
+  skipGreeting?: boolean
+}): string {
+  return document(
+    greetingFor({ greeting: config.greeting, recordCalls: Boolean(config.recordCalls), skipGreeting: config.skipGreeting }) +
+      voicemailBody(config),
+  )
+}
+
+/**
+ * `action` and `recordingStatusCallback` both point at the recording route
+ * (kind=voicemail); it is idempotent on the RecordingSid, so the two posts
+ * store one voicemail.
+ */
+function voicemailBody(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl'>): string {
   return (
     say(DEFAULT_VOICEMAIL_PROMPT) +
-    `<Record maxLength="${VOICEMAIL_MAX_SECONDS}" playBeep="true" transcribe="false" ` +
-    `action="${escapeXml(config.voicemailCallbackUrl)}" method="POST" recordingStatusCallback="${escapeXml(config.voicemailCallbackUrl)}" />` +
+    `<Record ${attrs([
+      ['maxLength', VOICEMAIL_MAX_SECONDS],
+      ['playBeep', 'true'],
+      ['transcribe', 'false'],
+      ['action', config.voicemailCallbackUrl],
+      ['method', 'POST'],
+      ['recordingStatusCallback', config.voicemailCallbackUrl],
+      ['recordingStatusCallbackMethod', 'POST'],
+    ])} />` +
     say('We did not get a message. Goodbye.') +
     '<Hangup/>'
   )
@@ -108,12 +233,49 @@ function voicemailBody(config: VoiceRouteConfig): string {
 
 /** The follow-up answer after a dial that nobody picked up. */
 export function noAnswerTwiml(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl' | 'actionUrl' | 'routing' | 'recordCalls'>): string {
-  return document(
-    say(DEFAULT_VOICEMAIL_PROMPT) +
-      `<Record maxLength="${VOICEMAIL_MAX_SECONDS}" playBeep="true" transcribe="false" ` +
-      `action="${escapeXml(config.voicemailCallbackUrl)}" method="POST" recordingStatusCallback="${escapeXml(config.voicemailCallbackUrl)}" />` +
-      '<Hangup/>',
-  )
+  return document(voicemailBody(config))
+}
+
+/**
+ * An outbound browser call (P0b). The callerId is a line of the same account
+ * that can take callbacks; the callee's number was resolved on the server.
+ */
+export function outboundDialTwiml(config: {
+  callerId: string
+  callee: string
+  actionUrl: string
+  statusUrl: string
+  record: boolean
+  recordingStatusUrl: string
+  whisperUrl: string
+}): string {
+  const dial = `<Dial ${attrs([
+    ['callerId', config.callerId],
+    ['answerOnBridge', 'true'],
+    ['timeout', OUTBOUND_RING_SECONDS],
+    ['action', config.actionUrl],
+    ['method', 'POST'],
+    ['record', config.record ? 'record-from-answer-dual' : null],
+    ['recordingStatusCallback', config.record ? config.recordingStatusUrl : null],
+    ['recordingStatusCallbackMethod', config.record ? 'POST' : null],
+  ])}>`
+  const number = `<Number ${attrs([
+    ['url', config.record ? config.whisperUrl : null],
+    ['statusCallback', config.statusUrl],
+    ['statusCallbackEvent', 'initiated ringing answered completed'],
+    ['statusCallbackMethod', 'POST'],
+  ])}>${escapeXml(config.callee)}</Number>`
+  return document(`${dial}${number}</Dial>`)
+}
+
+/** Played to the callee on answer, before they are bridged. */
+export function whisperTwiml(): string {
+  return document(say(RECORDING_NOTICE))
+}
+
+/** Say the plain reason, then hang up. Every refusal on a call ends this way. */
+export function sayAndHangup(reason: string): string {
+  return document(say(reason) + '<Hangup/>')
 }
 
 /** A polite dead end — used when a number posts to us that we no longer own. */

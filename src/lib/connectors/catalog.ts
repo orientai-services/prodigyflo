@@ -374,6 +374,7 @@ export const CONNECTORS: ConnectorDef[] = [
       'In the Twilio Console, copy your Account SID and Auth Token from the account dashboard.',
       'Buy or pick an SMS-capable number and enter it as the From number (E.164, e.g. +17025550100).',
       'Store all three in the Credentials card — once complete, messaging flips from mock to live sending.',
+      'Then use Sync numbers from Twilio under Settings → Phone numbers so texts go out from that line and replies (STOP included) come back here.',
     ],
     docsUrl: 'https://www.twilio.com/docs',
   },

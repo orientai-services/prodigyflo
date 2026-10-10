@@ -59,3 +59,58 @@ async function readVault(
     return null
   }
 }
+
+/**
+ * The same read, but honest about WHY nothing came back. Telephony cannot
+ * afford the silent fallback above: a vault row that exists but cannot be
+ * decrypted must not quietly turn into the platform's env credentials, or an
+ * org that brought its own carrier would start spending the platform's.
+ *
+ *   none        nothing stored for this org (or the connector is off)
+ *   unreadable  stored, but it could not be decrypted (wrong VAULT_KEY, tampered)
+ *   ok          decrypted; the caller still checks the fields it needs
+ */
+export type VaultRead =
+  | { state: 'none' }
+  | { state: 'unreadable'; organizationId: string }
+  | { state: 'ok'; organizationId: string; creds: Record<string, string> }
+
+async function readVaultDetailed(organizationId: string, kind: 'EMAIL' | 'TWILIO_SMS'): Promise<VaultRead> {
+  let fn: ((orgId: string, kind: string) => Promise<Record<string, string> | null>) | null = null
+  try {
+    const mod = (await import('@/lib/connectors/credentials')) as unknown as Record<string, unknown>
+    if (typeof mod.getConnectorCredentials === 'function') {
+      fn = mod.getConnectorCredentials as (orgId: string, kind: string) => Promise<Record<string, string> | null>
+    }
+  } catch {
+    return { state: 'none' }
+  }
+  if (!fn) return { state: 'none' }
+  try {
+    const creds = await fn(organizationId, kind)
+    return creds && Object.keys(creds).length > 0 ? { state: 'ok', organizationId, creds } : { state: 'none' }
+  } catch {
+    return { state: 'unreadable', organizationId }
+  }
+}
+
+/** Own vault first, then (when asked) the parent's — one step, as above. */
+export async function vaultCredentialsDetailed(
+  organizationId: string | null | undefined,
+  kind: 'EMAIL' | 'TWILIO_SMS',
+  opts: { inheritFromParent?: boolean; accept?: (creds: Record<string, string>) => boolean } = {},
+): Promise<VaultRead> {
+  if (!organizationId) return { state: 'none' }
+  const own = await readVaultDetailed(organizationId, kind)
+  const usable = (r: VaultRead) => r.state === 'unreadable' || (r.state === 'ok' && (!opts.accept || opts.accept(r.creds)))
+  if (usable(own) || !opts.inheritFromParent) return usable(own) ? own : { state: 'none' }
+
+  const { db } = await import('@/lib/db')
+  const org = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: { parentOrganizationId: true },
+  })
+  if (!org?.parentOrganizationId) return { state: 'none' }
+  const parent = await readVaultDetailed(org.parentOrganizationId, kind)
+  return usable(parent) ? parent : { state: 'none' }
+}

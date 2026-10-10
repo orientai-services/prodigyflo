@@ -14,6 +14,13 @@ import {
   takeCallCenterLead,
 } from '@/lib/call-center/actions'
 import type { DeskResult } from '@/lib/call-center/desk-types'
+import type { MissedCallVM, TwilioStatusVM } from '@/lib/telephony/voice-contract'
+import type { PhoneSetupVM } from '@/lib/telephony/ui/phone-setup-data'
+import { CallButton } from '@/components/voice/call-button'
+import { RecordingPlayer } from '@/components/voice/recording-player'
+import { useVoice } from '@/components/voice/voice-provider'
+import { MissedCalls } from '@/components/telephony/missed-calls'
+import { PhoneSetupSheet } from '@/components/telephony/phone-setup-sheet'
 import {
   CALL_CENTER_COPY,
   CURRENT_REP,
@@ -33,7 +40,6 @@ import {
   canText,
   channelLabel,
   formatWhen,
-  hasCall,
   inboundFormMatch,
   languageLabel,
   lockLabel,
@@ -73,51 +79,6 @@ const TABS: { id: LeadTab; label: string }[] = [
   { id: 'dnc', label: 'Do not call' },
 ]
 
-function clock(total: number): string {
-  const minutes = Math.floor(total / 60)
-  const seconds = total % 60
-  return `${minutes}:${String(seconds).padStart(2, '0')}`
-}
-
-function Recording({ seconds, label }: { seconds: number; label: string }) {
-  const [playing, setPlaying] = useState(false)
-  const [at, setAt] = useState(0)
-
-  useEffect(() => {
-    if (!playing) return
-    const timer = setInterval(() => {
-      setAt((current) => {
-        if (current + 1 >= seconds) {
-          setPlaying(false)
-          return seconds
-        }
-        return current + 1
-      })
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [playing, seconds])
-
-  return (
-    <div className="player">
-      <button
-        type="button"
-        className="btn secondary"
-        onClick={() => {
-          if (at >= seconds) setAt(0)
-          setPlaying((on) => !on)
-        }}
-      >
-        {playing ? 'Pause' : 'Play'}
-      </button>
-      <div>
-        <div className="track" aria-hidden="true"><i style={{ width: `${seconds ? (at / seconds) * 100 : 0}%` }} /></div>
-        <small>{label} · {clock(at)} / {clock(seconds)} · play is a preview</small>
-      </div>
-      <span className="sr">No audio file is loaded.</span>
-    </div>
-  )
-}
-
 function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (lead: CallLead) => void }) {
   return (
     <button type="button" className="person" disabled={lead.disabled} onClick={() => onOpen(lead)}>
@@ -134,13 +95,40 @@ function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (l
   )
 }
 
-export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead[]; viewerId?: string }) {
+/** Server-side phone context for the desk. Everything optional so the seed-only desk still renders. */
+export type CallCenterPhone = {
+  /** Why browser calling is off (plain English), or null when it is on. */
+  voiceNote?: string | null
+  missed?: MissedCallVM[]
+  /** `?missed=<id>`: open the Missed tab on that row. */
+  openMissedId?: string | null
+  /** `?lead=<id>`: open that lead. */
+  openLeadId?: string | null
+  /** Holds telephony:manage; may stretch a narrowed calling window with a reason. */
+  canOverrideHours?: boolean
+  /** SUPER_ADMIN only: the Phone setup sheet. */
+  setup?: { vm: PhoneSetupVM; status: TwilioStatusVM | null } | null
+}
+
+export function CallCenter({
+  initialLeads,
+  viewerId,
+  phone = {},
+}: {
+  initialLeads?: CallLead[]
+  viewerId?: string
+  phone?: CallCenterPhone
+}) {
   const router = useRouter()
+  const voice = useVoice()
   const [draft, setDraft] = useState<{ source: CallLead[] | undefined; leads: CallLead[] } | null>(null)
   const [tab, setTab] = useState<LeadTab>('all')
+  const [missedView, setMissedView] = useState(Boolean(phone.openMissedId))
+  const [openMissedId, setOpenMissedId] = useState<string | null>(phone.openMissedId ?? null)
   const [language, setLanguage] = useState<LanguageFilter>('all')
   const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(phone.openLeadId ?? null)
+  const missed = phone.missed ?? []
   const [now, setNow] = useState<string | null>(null)
   const [callAnywayId, setCallAnywayId] = useState<string | null>(null)
   const [note, setNote] = useState('')
@@ -278,11 +266,18 @@ export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead
                   <option value="es">Spanish page later</option>
                 </select>
               </label>
-              <span className="voice">Voice not connected</span>
+              <span className="voice">
+                {voice
+                  ? voice.setup.mode === 'mock'
+                    ? 'Test mode. No real calls are placed.'
+                    : 'Browser calling on'
+                  : (phone.voiceNote ?? 'Voice not connected')}
+              </span>
+              {phone.setup ? <PhoneSetupSheet setup={phone.setup.vm} status={phone.setup.status} /> : null}
             </div>
           </header>
           <main className="main">
-            <div className="banner" role="status">{PREVIEW_BANNER}</div>
+            {!voice ? <div className="banner" role="status">{PREVIEW_BANNER}</div> : null}
             <div className="page-title">
               <h2>Call Center</h2>
               <p className="muted">{CALL_CENTER_COPY}</p>
@@ -293,14 +288,31 @@ export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead
                   key={item.id}
                   type="button"
                   role="tab"
-                  aria-selected={tab === item.id}
-                  className={tab === item.id ? 'on' : ''}
-                  onClick={() => setTab(item.id)}
+                  aria-selected={!missedView && tab === item.id}
+                  className={!missedView && tab === item.id ? 'on' : ''}
+                  onClick={() => {
+                    setMissedView(false)
+                    setTab(item.id)
+                  }}
                 >
                   {item.label}
                 </button>
               ))}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={missedView}
+                className={missedView ? 'on' : ''}
+                onClick={() => setMissedView(true)}
+              >
+                Missed{missed.length ? ` (${missed.length})` : ''}
+              </button>
             </div>
+            {missedView ? (
+              <div className="card">
+                <MissedCalls calls={missed} openId={openMissedId} canOverrideHours={phone.canOverrideHours} />
+              </div>
+            ) : (
             <div className="split">
               <div className="card">
                 <table>
@@ -348,13 +360,28 @@ export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead
                     <dl className="facts">
                       <div><dt>Page</dt><dd>{selected.page}</dd></div>
                       <div><dt>ZIP</dt><dd>{selected.zip ?? '—'}</dd></div>
-                      <div><dt>Phone</dt><dd>{dialPhone ? <a href={`tel:${dialPhone}`}>{dialPhone}</a> : phoneLabel(selected)}</dd></div>
+                      {/* Plain text, never a tel: link: every dial goes through the server check behind Call. */}
+                      <div><dt>Phone</dt><dd>{dialPhone ?? phoneLabel(selected)}</dd></div>
                       {dialEmail ? <div><dt>Email</dt><dd>{dialEmail}</dd></div> : null}
                       <div><dt>Tries</dt><dd>{triesLine(selected)}</dd></div>
                       {nextTryLine(selected) ? <div><dt>Next try</dt><dd>{nextTryLine(selected)}</dd></div> : null}
                       {inboundFormMatch(selected, leads) ? <div><dt>Match</dt><dd>{inboundFormMatch(selected, leads)}</dd></div> : null}
                     </dl>
-                    {now && callNeedsConfirm(selected, now) ? (
+                    {selected.missedCallId ? (
+                      <div className="banner" role="status">
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => {
+                            setOpenMissedId(selected.missedCallId ?? null)
+                            setMissedView(true)
+                          }}
+                        >
+                          Missed call waiting. Open it.
+                        </button>
+                      </div>
+                    ) : null}
+                    {!selected.persisted && now && callNeedsConfirm(selected, now) ? (
                       <div className="banner quiet" role="status">
                         <span>{QUIET_BANNER}</span>
                         <button
@@ -375,19 +402,26 @@ export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead
                     </div>
                     <h3>Contact</h3>
                     <div className="actions">
-                      {dialPhone && holding(selected) && canCall(selected, who) && !quietBlocked ? (
-                        <a
-                          className="btn"
-                          href={`tel:${dialPhone}`}
-                          onClick={() => { void commit(selected, () => recordCallCenterAttempt(selected.id), () => {}) }}
-                        >
-                          Call
-                        </a>
+                      {selected.persisted ? (
+                        <CallButton
+                          key={selected.id}
+                          appearance="desk"
+                          target={{ kind: 'lead', id: selected.id }}
+                          tel={dialPhone}
+                          who={selected.name}
+                          canOverrideHours={phone.canOverrideHours}
+                          disabled={!canCall(selected, who) || !holding(selected)}
+                          onDialed={(via) => {
+                            // A browser call is written by the carrier webhooks; only the
+                            // tel: flow records its own attempt.
+                            if (via === 'tel') void commit(selected, () => recordCallCenterAttempt(selected.id), () => {})
+                          }}
+                        />
                       ) : (
                         <button
                           type="button"
                           className="btn"
-                          disabled={!canCall(selected, who) || !holding(selected) || quietBlocked || Boolean(selected.persisted)}
+                          disabled={!canCall(selected, who) || !holding(selected) || quietBlocked}
                           onClick={() => replace(applyLeadAction(selected, 'call', stamp()))}
                         >
                           Call
@@ -402,6 +436,7 @@ export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead
                         Text
                       </button>
                     </div>
+                    {selected.persisted ? <p className="muted">Texting leads isn&rsquo;t live yet.</p> : null}
                     {now && textHeldUntilMorning(selected, now) ? <p className="muted">{HELD_UNTIL_MORNING}</p> : null}
                     <h3>Result</h3>
                     <div className="actions">
@@ -454,13 +489,6 @@ export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead
                         Save note
                       </button>
                     </div>
-                    {hasCall(selected) && (
-                      <Recording
-                        key={`${selected.id}:${selected.recording?.seconds ?? 0}:${selected.trail.length}`}
-                        seconds={selected.recording?.seconds ?? 8}
-                        label={selected.recording?.label ?? 'Dummy recording'}
-                      />
-                    )}
                     <h3>Comms</h3>
                     <ol className="trail">
                       {selected.trail.map((event, index) => (
@@ -468,6 +496,9 @@ export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead
                           <time dateTime={event.at}>{formatWhen(event.at)}</time>
                           <b>{event.label}</b>
                           <div className="muted">{event.detail}</div>
+                          {event.recording ? (
+                            <RecordingPlayer src={event.recording.src} seconds={event.recording.seconds} className="mt-1.5" />
+                          ) : null}
                         </li>
                       ))}
                     </ol>
@@ -480,6 +511,7 @@ export function CallCenter({ initialLeads, viewerId }: { initialLeads?: CallLead
                 )}
               </article>
             </div>
+            )}
           </main>
         </div>
       </div>

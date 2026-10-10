@@ -14,6 +14,8 @@ it('keeps final interface within its visible surfaces and two roles',()=>{
  expect(staffRouteAllowed('CLOSER','/clients/client-1/closeops')).toBe(false)
  expect(staffRouteAllowed('ADMIN','/board')).toBe(false)
  expect(staffRouteAllowed('CLOSER','/api/documents/doc-1/file')).toBe(true)
+ expect(staffRouteAllowed('CLOSER','/api/voice/recordings/x')).toBe(true)
+ expect(staffRouteAllowed('CLOSER','/api/voice/presence')).toBe(true)
 })
 it('turning off the flag restores the legacy admin route boundary',()=>{
  vi.stubEnv('PRODIGYFLO_FINAL_DESK','false')

@@ -2,8 +2,10 @@ import 'server-only'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { db } from '@/lib/db'
 import { normaliseEmail, normalisePhone } from '@/lib/dedupe'
-import { isStopMessage, type MessagingChannel } from './consent'
+import { isRevocationText, isStartMessage, isStopMessage, type MessagingChannel } from './consent'
 import { maskEmail, maskPhone } from './send'
+import { last4Of, phoneHashOrNull } from '@/lib/telephony/compliance-core'
+import { blockNumber, clearSmsStop } from '@/lib/telephony/suppressions'
 
 /**
  * Inbound message ingestion. A provider webhook (or the mock curl during
@@ -194,6 +196,9 @@ export async function processInboundMessage(
 
   if (!client) {
     const notified = await notifyUnmatched(channel, payload, orgHint)
+    // A STOP from a stranger still counts: it blocks texts in the LINE's
+    // organization (it used to be recorded nowhere).
+    if (channel === 'SMS') await applySmsKeywords(orgHint, payload)
     return { matched: false, duplicate: false, notified }
   }
 
@@ -247,6 +252,142 @@ export async function processInboundMessage(
       },
     })
   }
+  if (channel === 'SMS') await applySmsKeywords(client.organizationId, payload)
 
   return { matched: true, duplicate: false, clientId: client.id, communicationId: communication.id, optOut }
+}
+
+/**
+ * STOP, START and revocation words for one inbound text, in one organization
+ * (docs/TELEPHONY_LIVE.md §2.10):
+ *
+ *  - whole-message STOP (incl. Spanish) → SMS block (sms_stop) on the number,
+ *    and every Call Center lead with that number loses its consent
+ *  - a revocation word inside a longer message → SMS hold (sms_stop_review)
+ *    until an admin confirms or lifts it, and the admins are told
+ *  - START / UNSTOP → lifts only a STOP-made SMS block; consent stays gone
+ *  - any other text → a genuine inquiry: a lead whose consent came from an
+ *    earlier inquiry has it moved forward. STOP never counts as an inquiry.
+ *
+ * Never throws and never drops an opt-out silently: a save failure becomes an
+ * "Opt-out not saved — add it by hand" notification.
+ */
+async function applySmsKeywords(organizationId: string | null, payload: InboundPayload): Promise<void> {
+  const stop = isStopMessage(payload.body)
+  const start = !stop && isStartMessage(payload.body)
+  const review = !stop && !start && isRevocationText(payload.body)
+  const now = new Date()
+  const hash = phoneHashOrNull(payload.from)
+  const last4 = last4Of(payload.from)
+
+  try {
+    if (!organizationId || (!hash && (stop || review))) {
+      if (stop || review) throw new Error('No organization or number hash for this opt-out.')
+      return
+    }
+    if (stop) {
+      await blockNumber({ organizationId, numberHash: hash!, last4, sms: 'sms_stop', reason: 'Replied STOP' }, now)
+      await db.callCenterLead.updateMany({
+        where: { organizationId, phoneHash: hash!, consentRevokedAt: null },
+        data: { consentRevokedAt: now },
+      })
+      await auditSystem(organizationId, 'telephony.suppression_added', `Texts to the number ending ${last4 ?? '····'} stopped by a STOP reply`, {
+        source: 'sms_stop',
+        last4,
+      })
+      return
+    }
+    if (review) {
+      await blockNumber({ organizationId, numberHash: hash!, last4, sms: 'sms_stop_review', reason: 'Possible opt-out' }, now)
+      const snippet = payload.body.replace(/\s+/g, ' ').trim().slice(0, 80)
+      await notifyAdmins(organizationId, 'Possible opt-out', `Possible opt-out: '${snippet}'. Confirm or lift.`, '/call-center')
+      await auditSystem(organizationId, 'telephony.optout_review', `Texts to the number ending ${last4 ?? '····'} held for review`, {
+        source: 'sms_stop_review',
+        last4,
+      })
+      return
+    }
+    if (!hash) return
+    if (start) {
+      if (await clearSmsStop(organizationId, hash)) {
+        await auditSystem(organizationId, 'telephony.suppression_removed', `START lifted the STOP block on the number ending ${last4 ?? '····'}`, {
+          source: 'sms_start',
+          last4,
+        })
+      }
+      return
+    }
+    await db.callCenterLead.updateMany({
+      where: { organizationId, phoneHash: hash, consentSource: 'inbound_inquiry', consentRevokedAt: null },
+      data: { consentAt: now },
+    })
+  } catch {
+    if (stop || review) {
+      const target = organizationId ?? (await platformOwnerOrganization())
+      if (target) {
+        await notifyAdmins(
+          target,
+          'Opt-out not saved',
+          `A reply from ${maskPhone(payload.from)} looked like an opt-out but could not be saved. Opt-out not saved — add it by hand.`,
+          '/call-center',
+        ).catch(() => undefined)
+      }
+    }
+  }
+}
+
+/**
+ * A signed text to a number this app has no line for (released here, or never
+ * imported). It can't be filed against an account, but an opt-out must never
+ * vanish: a STOP or a possible opt-out tells the platform owner's admins to
+ * add it by hand. Any other text is ignored, as before.
+ */
+export async function recordUnroutedOptOut(payload: InboundPayload): Promise<void> {
+  if (!isStopMessage(payload.body) && !isRevocationText(payload.body)) return
+  try {
+    await applySmsKeywords(null, payload)
+  } catch {
+    // The carrier's own STOP handling still applies; the webhook answer must not fail.
+  }
+}
+
+/**
+ * Who hears about an opt-out that can't be tied to an account: the platform
+ * owner (TELEPHONY_PLATFORM_ORG_ID), who runs the carrier account the text
+ * came in on. Never "the first organization" — on the shared platform that
+ * could be another business entirely. Unset (or gone) means no notice; the
+ * carrier's own STOP handling still applies.
+ */
+async function platformOwnerOrganization(): Promise<string | null> {
+  const { platformOrgId } = await import('@/lib/telephony/tenancy')
+  const id = platformOrgId()
+  if (!id) return null
+  const org = await db.organization.findFirst({ where: { id, deletedAt: null }, select: { id: true } })
+  return org?.id ?? null
+}
+
+async function notifyAdmins(organizationId: string, title: string, body: string, href: string): Promise<void> {
+  const admins = await db.user.findMany({
+    where: {
+      organizationId,
+      isActive: true,
+      deletedAt: null,
+      role: { permissions: { some: { permission: { key: 'users:manage' } } } },
+    },
+    select: { id: true },
+  })
+  if (admins.length === 0) return
+  await db.notification.createMany({
+    data: admins.map((a) => ({ organizationId, userId: a.id, kind: 'MESSAGE' as const, title, body, href })),
+  })
+}
+
+async function auditSystem(organizationId: string, action: string, summary: string, after: Record<string, unknown>): Promise<void> {
+  try {
+    await db.auditEvent.create({
+      data: { organizationId, actorLabel: 'Inbound webhook', action, entityType: 'CallCenterSuppression', summary, after: after as never },
+    })
+  } catch {
+    // Logging never blocks an opt-out.
+  }
 }

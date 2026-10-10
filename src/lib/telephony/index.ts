@@ -2,7 +2,7 @@ import 'server-only'
 import type { NumberWebhooks, TelephonyCredentials, TelephonyProvider } from './provider'
 import { MockTelephonyProvider } from './mock'
 import { TwilioTelephonyProvider } from './twilio'
-import { vaultCredentials } from '@/lib/messaging/vault'
+import { vaultCredentialsDetailed } from '@/lib/messaging/vault'
 
 /**
  * Provider selection for number provisioning, mirroring
@@ -52,21 +52,68 @@ export function resetTelephonyProvider(): void {
   cached = null
 }
 
+export type DetailedCredentials =
+  | { creds: TelephonyCredentials; source: 'vault'; vaultOrgId: string }
+  | { creds: TelephonyCredentials; source: 'platform' }
+  | { creds: null; reason: 'unreadable' | 'none' }
+
+/** The platform subaccount ("ProdigyFlo Platform") from env, or null. */
+export function platformCredentials(): TelephonyCredentials | null {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() || ''
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() || ''
+  return accountSid && authToken ? { accountSid, authToken } : null
+}
+
+/** True when these are the platform subaccount's env credentials. */
+export function isPlatformAccount(creds: TelephonyCredentials | null | undefined): boolean {
+  const platform = platformCredentials()
+  return Boolean(creds && platform && creds.accountSid === platform.accountSid)
+}
+
 /**
- * The carrier credentials one account provisions with, in order: the account's
- * own vault entry, then its agency's (one agency, one Twilio account — the
- * operator pastes the token once, not once per client account), then the
- * server env. Returns null when none exist — callers surface that as a setup
+ * The carrier credentials one account uses, from exactly ONE source, in order:
+ * the account's own vault entry, then its agency's (one agency, one Twilio
+ * account — the operator pastes the token once), then the platform's env.
+ *
+ * The SID and the token always come from the same place. A vault row with only
+ * one of the two, or one that cannot be decrypted, refuses ('unreadable'): it
+ * never pairs a vault SID with the env token and never silently falls back to
+ * the platform account (audit 5j).
+ *
+ * A vault entry naming the PLATFORM's Account SID is not a tenant's own
+ * account, whatever token sits next to it: the SID is no secret (it is the
+ * `sub` of every voice token). Such an org rides the platform account like any
+ * other tenant, with the platform's own env token, so it can't claim the
+ * shared account's carrier state or sign webhooks with a token it chose.
+ */
+export async function telephonyCredentialsDetailed(organizationId: string): Promise<DetailedCredentials> {
+  const hasTwilioField = (c: Record<string, string>) => Boolean(c.accountSid?.trim() || c.authToken?.trim())
+  const vault = await vaultCredentialsDetailed(organizationId, 'TWILIO_SMS', {
+    inheritFromParent: true,
+    accept: hasTwilioField,
+  })
+  const platform = platformCredentials()
+  if (vault.state === 'unreadable') return { creds: null, reason: 'unreadable' }
+  if (vault.state === 'ok') {
+    const accountSid = vault.creds.accountSid?.trim() || ''
+    const authToken = vault.creds.authToken?.trim() || ''
+    if (platform && accountSid === platform.accountSid) return { creds: platform, source: 'platform' }
+    if (!accountSid || !authToken) return { creds: null, reason: 'unreadable' }
+    return { creds: { accountSid, authToken }, source: 'vault', vaultOrgId: vault.organizationId }
+  }
+  return platform ? { creds: platform, source: 'platform' } : { creds: null, reason: 'none' }
+}
+
+/**
+ * Thin wrapper kept for existing callers: the credentials, or null when there
+ * are none or the stored ones can't be trusted. Callers surface null as a setup
  * message, never as a crash.
  */
 export async function telephonyCredentials(
   organizationId: string,
 ): Promise<TelephonyCredentials | null> {
-  const vault = (await vaultCredentials(organizationId, 'TWILIO_SMS', { inheritFromParent: true })) ?? null
-  const accountSid = vault?.accountSid?.trim() || process.env.TWILIO_ACCOUNT_SID?.trim() || ''
-  const authToken = vault?.authToken?.trim() || process.env.TWILIO_AUTH_TOKEN?.trim() || ''
-  if (!accountSid || !authToken) return null
-  return { accountSid, authToken }
+  const detailed = await telephonyCredentialsDetailed(organizationId)
+  return detailed.creds
 }
 
 /** Public origin this app is reachable at — where the carrier posts webhooks. */
@@ -82,10 +129,12 @@ export function appOrigin(): string {
  */
 export function webhooksFor(): NumberWebhooks {
   const base = appOrigin()
+  const fallback = process.env.TWILIO_VOICE_FALLBACK_URL?.trim()
   return {
     voiceUrl: `${base}/api/telephony/voice`,
     voiceStatusUrl: `${base}/api/telephony/voice/status`,
     smsUrl: `${base}/api/telephony/sms`,
+    ...(fallback ? { voiceFallbackUrl: fallback } : {}),
   }
 }
 
