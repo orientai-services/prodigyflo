@@ -33,6 +33,9 @@ You are working in **ProdigyFlo (orientai-services/prodigyflo)**. Before you rea
 - **Hands off:** SunOff and DigitalOcean; webhooks/Twilio unless that's the task; Meta spend is on HOLD. (R-SCOPE-001, R-META-002..004)
 - **No client names** in code, docs, tests, fixtures, or branch names. (R-GOV-008)
 - **Machine outputs:** never write generated files to `~/Desktop` or `~/Documents` (iCloud-synced between MacBook Pro and devs-Mac-mini); put them in e.g. `~/<name>-macbook/` or `~/<name>-mini/`. (R-GOV-014)
+- **Live data:** never seed, delete, hide, reset, or rematerialize production clients/leads, or merge orgs, without Hector's typed go naming the scope. (R-GOV-015)
+- **No PII:** no client names or contact info in reports, PRs, logs, tests, or folder names; use the ProdigyFlo client id. (R-SEC-004)
+- **Report exactly:** after a merge, give the merge commit URL + "production Ready yes/no". Touch only the repo/files the task names. (R-GOV-016, R-GOV-017)
 - **Say where and who:** every step you hand Hector names the machine and who does it. (R-GOV-006)
 
 ## ProdigyFlo-only
