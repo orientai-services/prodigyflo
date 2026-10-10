@@ -2,6 +2,7 @@ import type { Prisma, StageKey } from '@prisma/client'
 import { db } from '@/lib/db'
 import { clientScope, getSessionUser } from '@/lib/rbac'
 import { recordAudit } from '@/lib/audit'
+import { visibleCampaignName } from '@/lib/meta/ads/where'
 
 const HEADERS = [
   'id', 'first_name', 'last_name', 'email', 'phone', 'status', 'stage',
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
       team: { select: { name: true } },
       region: { select: { name: true } },
       leadSource: { select: { name: true } },
-      campaign: { select: { name: true } },
+      campaign: { select: { name: true, channel: true, adAccountId: true } },
     },
   })
 
@@ -76,7 +77,7 @@ export async function GET(request: Request) {
       [
         r.id, r.firstName, r.lastName, r.email, r.phone, r.status,
         r.currentStage.name, r.owner?.name, r.team?.name, r.region?.name,
-        r.leadSource?.name, r.campaign?.name, r.estimatedValue, r.probability,
+        r.leadSource?.name, visibleCampaignName(user.organizationId, r.campaign), r.estimatedValue, r.probability,
         r.createdAt, r.stageEnteredAt, r.lastActivityAt, r.lostReason,
       ].map(csvCell).join(','),
     ),

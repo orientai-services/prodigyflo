@@ -23,7 +23,7 @@ const CTX_TTL_MS = 60_000
  * intake source (SCS in production), else the oldest org. Single-tenant assumption:
  * the first enabled source wins.
  */
-async function resolveMetaOrg(): Promise<{ id: string } | null> {
+export async function resolveMetaOrg(): Promise<{ id: string } | null> {
   const source = await db.intakeSource.findFirst({
     where: { kind: 'META_LEAD_ADS', isEnabled: true, organization: { deletedAt: null } },
     orderBy: { createdAt: 'asc' },

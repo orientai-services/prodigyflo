@@ -6,7 +6,9 @@
   --amber:#9a4b0f;--amberbg:#fde7c7;--green:#1b5e3b;--greenbg:#dceddc;
   --shadow:0 12px 32px rgba(18,32,44,.08);
 }
-.final-desk *{box-sizing:border-box;margin:0;padding:0}
+.final-desk *:not(.ads-panel,.ads-panel *){box-sizing:border-box;margin:0;padding:0}
+/* The Meta Ads dashboard inside Call Center keeps its own (Tailwind) spacing; the reset above skips it. */
+.final-desk .ads-panel{box-sizing:border-box}
 .final-desk,.final-desk{height:100%}
 .final-desk{font-family:var(--font-ibm-plex),system-ui,sans-serif;background:var(--cream);color:var(--ink)}
 .final-desk button,.final-desk input,.final-desk select,.final-desk textarea{font:inherit}

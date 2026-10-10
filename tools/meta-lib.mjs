@@ -83,6 +83,77 @@ export function summarizeSubscribedApps(body, appId) {
   }
 }
 
+/**
+ * 'act_123…' or '123…' (5 to 20 digits, URL-decoded until stable) → 'act_123…';
+ * anything else → null. Same rule as src/lib/meta/ads/allowlist.ts.
+ * @param {unknown} raw
+ */
+export function normalizeAdAccountId(raw) {
+  if (typeof raw !== 'string') return null
+  let cur = raw.trim()
+  for (let i = 0; i < 5; i++) {
+    let next
+    try { next = decodeURIComponent(cur) } catch { return null }
+    if (next === cur) break
+    cur = next
+    if (i === 4) return null
+  }
+  const m = /^(?:act_)?(\d{5,20})$/.exec(cur.trim())
+  return m ? `act_${m[1]}` : null
+}
+
+/**
+ * META_ALLOWED_AD_ACCOUNTS as a Set, or null when unset, empty or any entry is
+ * malformed (one bad entry fails the whole list closed, like the app).
+ * @param {Record<string, string | undefined>} [env]
+ */
+export function allowedAdAccounts(env = process.env) {
+  const parts = (env.META_ALLOWED_AD_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (parts.length === 0) return null
+  const out = new Set()
+  for (const p of parts) {
+    const n = normalizeAdAccountId(p)
+    if (!n) return null
+    out.add(n)
+  }
+  return out
+}
+
+/**
+ * The ad account the CLI may read: META_AD_ACCOUNT_ID, only when it is in
+ * META_ALLOWED_AD_ACCOUNTS. Never echoes a refused id.
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {{ ok: true, act: string } | { ok: false, error: string }}
+ */
+export function cliAdAccount(env = process.env) {
+  const act = normalizeAdAccountId(env.META_AD_ACCOUNT_ID ?? '')
+  if (!act) return { ok: false, error: 'META_AD_ACCOUNT_ID must be act_ followed by digits.' }
+  const allowed = allowedAdAccounts(env)
+  if (!allowed) return { ok: false, error: 'META_ALLOWED_AD_ACCOUNTS must be set (and valid) before reading any ad account.' }
+  if (!allowed.has(act)) return { ok: false, error: "META_AD_ACCOUNT_ID isn't in META_ALLOWED_AD_ACCOUNTS. Refusing to read it." }
+  return { ok: true, act }
+}
+
+/**
+ * Printable targets for one granular scope. Ad scopes show approved account
+ * ids only, plus a COUNT of any others (never their ids). Other scopes (pages)
+ * print as they are.
+ * @param {{ scope: string, targets: string[] }} g
+ * @param {Set<string> | null} allowed
+ */
+export function describeGranularTargets(g, allowed) {
+  if (!g.targets.length) return 'all'
+  if (!g.scope.startsWith('ads_')) return g.targets.join(', ')
+  const shown = []
+  let others = 0
+  for (const t of g.targets) {
+    const n = normalizeAdAccountId(t)
+    if (n && allowed?.has(n)) shown.push(n)
+    else others++
+  }
+  return `${shown.join(', ') || 'no approved account'}${others ? ` plus ${others} other account(s)` : ''}`
+}
+
 /** Plain-words summary of GET /debug_token (no token string in the output). */
 export function summarizeDebugToken(body) {
   const d = body?.data ?? {}

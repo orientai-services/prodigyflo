@@ -1,5 +1,6 @@
 import type { AttributionTouch, StageKey } from '@prisma/client'
 import { db } from '@/lib/db'
+import { allowedMetaCampaignWhere } from '@/lib/meta/ads/where'
 import { clientScope, type SessionUser } from '@/lib/rbac'
 import { DEFAULT_STAGES, stageLabel } from '@/lib/pipeline'
 import { rate } from '@/lib/format'
@@ -499,7 +500,7 @@ export async function getAttributionReport(user: SessionUser) {
   const [rows, campaigns, sources] = await Promise.all([
     loadRevopsClients(user),
     db.campaign.findMany({
-      where: { organizationId: user.organizationId },
+      where: allowedMetaCampaignWhere(user.organizationId),
       select: { id: true, name: true, channel: true, spend: true, leadSource: { select: { channel: true } } },
     }),
     db.leadSource.findMany({

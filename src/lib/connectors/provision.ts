@@ -13,6 +13,7 @@ import {
 } from '@/lib/connectors/credential-logic'
 import { generateIntakeSecret, hashIntakeSecret } from '@/lib/intake/hmac'
 import { checkTwilioConnectorSave } from '@/lib/connectors/twilio-account-check'
+import { auditRefusal, isAllowedAdAccount, isBoundOrg, refFor } from '@/lib/meta/ads/allowlist'
 import {
   applyMapping,
   missingRequiredFields,
@@ -389,6 +390,35 @@ const STEP_UP_REQUIRED = {
 
 type VaultDef = ConnectorDef & { backing: { model: 'connector'; kind: Connector['kind'] } }
 
+const META_ADS_GUARDED = new Set(['adAccountId', 'adsAppId', 'adsAppSecret', 'adsSystemUserToken'])
+
+/**
+ * Meta Ads reporting is bound to one workspace and one approved ad account
+ * (docs/META_ADS_SCS.md §2.2 rule 5). Any other workspace may not store the ad
+ * account id or the ads credentials; the bound one may store only an approved
+ * ad account id. Lead-intake fields are never affected.
+ */
+async function metaAdsFieldRefusal(
+  actor: SessionUser,
+  def: VaultDef,
+  entries: ReadonlyArray<readonly [string, string]>,
+): Promise<{ ok: false; error: string } | null> {
+  if (def.backing.kind !== 'META_ADS') return null
+  const guarded = entries.filter(([k]) => META_ADS_GUARDED.has(k))
+  if (guarded.length === 0) return null
+  if (!isBoundOrg(actor.organizationId)) {
+    const acct = guarded.find(([k]) => k === 'adAccountId')?.[1]
+    await auditRefusal(actor.organizationId, refFor(acct ?? ''), 'unbound_org', 'connector.credentials', actor)
+    return { ok: false, error: 'Ads reporting is connected to a different ProdigyFlo workspace.' }
+  }
+  const acct = guarded.find(([k]) => k === 'adAccountId')?.[1]
+  if (acct !== undefined && !isAllowedAdAccount(acct)) {
+    await auditRefusal(actor.organizationId, refFor(acct), 'not_allowlisted', 'connector.credentials', actor)
+    return { ok: false, error: "This ad account isn't approved for ProdigyFlo." }
+  }
+  return null
+}
+
 /** Resolve + validate a def that takes vault credentials. */
 function vaultDef(defId: string): VaultDef | null {
   const def = connectorDef(defId)
@@ -451,6 +481,8 @@ export async function saveConnectorCredentials(
     .map(([k, v]) => [k, typeof v === 'string' ? v.trim() : ''] as const)
     .filter(([k, v]) => allowed.has(k) && v.length > 0)
   if (entries.length === 0) return { ok: false, error: 'Nothing to save — all fields were blank.' }
+  const metaRefusal = await metaAdsFieldRefusal(actor, def, entries)
+  if (metaRefusal) return metaRefusal
 
   // Twilio: never the platform's Account SID, and a pair Twilio itself accepts.
   const twilio = await checkTwilioConnectorSave(actor.organizationId, def.backing.kind, Object.fromEntries(entries))
@@ -521,6 +553,8 @@ export async function rotateConnectorCredential(
   if (!value) return { ok: false, error: 'Enter the new value to rotate to.' }
   const twilio = await checkTwilioConnectorSave(actor.organizationId, def.backing.kind, { [field.key]: value })
   if (!twilio.ok) return { ok: false, error: twilio.error }
+  const metaRefusal = await metaAdsFieldRefusal(actor, def, [[field.key, value]])
+  if (metaRefusal) return metaRefusal
 
   const connector = await db.connector.findUnique({
     where: { organizationId_kind: { organizationId: actor.organizationId, kind: def.backing.kind } },

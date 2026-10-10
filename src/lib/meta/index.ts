@@ -5,6 +5,9 @@ import { hashValue } from '@/lib/crypto'
 import { processInbound } from '@/lib/intake/apply'
 import { MockMetaAdsProvider } from './mock'
 import { GraphMetaAdsProvider } from './graph'
+import { DisconnectedMetaAdsProvider } from './disconnected'
+import { adsMockAllowed } from './ads/allowlist'
+import { allowedMetaDailyStatWhere, allowedMetaOnlyCampaignWhere } from './ads/where'
 import { leadArea, storedAttribution, withWebhookIds } from './attribution'
 import {
   credentialsConfigured, metaConfigured, metaCredentialsFor,
@@ -14,23 +17,48 @@ import {
 let cached: MetaAdsProvider | null = null
 
 /**
- * Mock unless real ENV credentials exist — same selection pattern as the AI
- * provider. The webhook/lead path uses this sync form; ads-management surfaces
- * should prefer getMetaProviderFor, which also consults the credential vault.
+ * Graph when real ENV credentials exist. Otherwise the mock, but ONLY where mock
+ * mode is allowed (dev, test, preview: never production); everywhere else a
+ * disconnected provider that reads empty and refuses every write.
  */
 export function getMetaProvider(): MetaAdsProvider {
-  if (cached && (cached.kind === 'graph') === metaConfigured()) return cached
-  cached = metaConfigured() ? new GraphMetaAdsProvider() : new MockMetaAdsProvider()
+  const kind = metaConfigured() ? 'graph' : adsMockAllowed() ? 'mock' : 'disconnected'
+  if (cached && cached.kind === kind) return cached
+  cached = kind === 'graph' ? new GraphMetaAdsProvider() : kind === 'mock' ? new MockMetaAdsProvider() : new DisconnectedMetaAdsProvider()
   return cached
 }
 
 /**
  * Org-aware selection: vault credentials first (when the connector vault has
- * META_ADS fields for this org), env fallback, mock when neither is complete.
+ * META_ADS fields for this org), env fallback. When neither is complete: the
+ * mock where adsMockAllowed(), else the disconnected provider (never a silent
+ * mock in production).
  */
 export async function getMetaProviderFor(organizationId: string): Promise<MetaAdsProvider> {
   const creds = await metaCredentialsFor(organizationId)
-  return credentialsConfigured(creds) ? new GraphMetaAdsProvider(creds) : new MockMetaAdsProvider()
+  if (credentialsConfigured(creds)) return new GraphMetaAdsProvider(creds, organizationId)
+  return adsMockAllowed() ? new MockMetaAdsProvider() : new DisconnectedMetaAdsProvider()
+}
+
+/**
+ * The provider for ads WRITES (pause, resume, budgets, caps, new campaigns).
+ * Built from the ads credential set and the approved ad account
+ * (resolveAdsConfig), never from the lead-intake fields, so it matches what
+ * the dashboard reports as connected. Live only for the bound workspace; the
+ * mock where sample mode is allowed; otherwise disconnected (every write
+ * refused). Writes still pass assertWritableObject and META_ADS_WRITES_ENABLED.
+ */
+export async function getMetaAdsWriteProviderFor(organizationId: string): Promise<MetaAdsProvider> {
+  const { resolveAdsConfig } = await import('./ads/config')
+  const config = await resolveAdsConfig(organizationId)
+  if (config.mode === 'live' && config.creds && config.adAccountId) {
+    return new GraphMetaAdsProvider(
+      { appId: config.creds.appId, appSecret: config.creds.appSecret, systemUserToken: config.creds.token, adAccountId: config.adAccountId },
+      organizationId,
+    )
+  }
+  if (config.mode === 'mock') return new MockMetaAdsProvider()
+  return new DisconnectedMetaAdsProvider()
 }
 
 /**
@@ -41,7 +69,7 @@ export async function getMetaProviderFor(organizationId: string): Promise<MetaAd
 export async function campaignTrends(organizationId: string, days = 7): Promise<Map<string, number[]>> {
   const since = new Date(Date.now() - (days - 1) * 86_400_000)
   const rows = await db.campaignDailyStat.findMany({
-    where: { campaign: { organizationId, channel: 'meta' }, date: { gte: new Date(since.toISOString().slice(0, 10)) } },
+    where: { ...allowedMetaDailyStatWhere(organizationId), date: { gte: new Date(since.toISOString().slice(0, 10)) } },
     select: { campaignId: true, date: true, spend: true },
     orderBy: { date: 'asc' },
   })
@@ -64,7 +92,7 @@ export async function monthSpend(organizationId: string): Promise<number> {
   const now = new Date()
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
   const totals = await db.campaignDailyStat.aggregate({
-    where: { campaign: { organizationId, channel: 'meta' }, date: { gte: monthStart } },
+    where: { ...allowedMetaDailyStatWhere(organizationId), date: { gte: monthStart } },
     _sum: { spend: true },
   })
   return Number(totals._sum.spend ?? 0)
@@ -117,7 +145,9 @@ export async function ingestMetaLead(
   // Meta's leadgen webhook carries ad_id + adgroup_id (the ad SET id), never a
   // campaign_id. Resolve the campaign through the locally-synced ad set when we
   // have one; lead capture works fine unattributed when ad sets aren't synced
-  // (e.g. a lead-capture-only install with no ad account connected).
+  // (e.g. a lead-capture-only install with no ad account connected). The lead
+  // is linked, and utm_campaign set, only when that campaign belongs to an
+  // approved ad account (src/lib/meta/ads/where.ts).
   let campaign: { id: string; name: string; utmCampaign: string | null } | null = null
   if (attribution.adSetExternalId) {
     const adSet = await db.adSet.findFirst({
@@ -126,7 +156,7 @@ export async function ingestMetaLead(
     })
     if (adSet?.campaignId) {
       campaign = await db.campaign.findFirst({
-        where: { id: adSet.campaignId, organizationId },
+        where: { ...allowedMetaOnlyCampaignWhere(organizationId), id: adSet.campaignId },
         select: { id: true, name: true, utmCampaign: true },
       })
     }
@@ -137,7 +167,8 @@ export async function ingestMetaLead(
     first_name: lead.fields.first_name ?? first ?? '',
     last_name: lead.fields.last_name ?? rest.join(' '),
     utm_source: 'meta',
-    utm_campaign: campaign?.utmCampaign ?? campaign?.name ?? lead.attribution?.campaignName ?? undefined,
+    // Never Graph's campaign name: it can belong to another ad account (P0-A).
+    utm_campaign: campaign?.utmCampaign ?? campaign?.name ?? undefined,
     leadgen_id: lead.leadgenId,
   }
 

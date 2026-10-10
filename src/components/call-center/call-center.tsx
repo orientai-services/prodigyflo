@@ -90,7 +90,7 @@ const TABS: { id: LeadTab; label: string }[] = [
   { id: 'dnc', label: 'Do not call' },
 ]
 
-type DeskView = 'today' | 'list' | 'missed'
+type DeskView = 'today' | 'list' | 'missed' | 'ads'
 
 /** Below this width the lead opens as a full-screen panel instead of the split view. */
 const PHONE_QUERY = '(max-width: 767.98px)'
@@ -135,18 +135,32 @@ export function CallCenter({
   viewerId,
   phone = {},
   renderedAt,
+  adsAllowed = false,
+  ads = null,
 }: {
   initialLeads?: CallLead[]
   viewerId?: string
   phone?: CallCenterPhone
   /** The server's clock when it rendered, so the first Today ranking matches on both sides. */
   renderedAt?: string
+  /** Holds connectors:read, so the Ads tab shows. */
+  adsAllowed?: boolean
+  /** The Meta Ads dashboard, server-rendered when the page opened on `?tab=ads`. */
+  ads?: React.ReactNode
 }) {
   const router = useRouter()
   const voice = useVoice()
   const [draft, setDraft] = useState<{ source: CallLead[] | undefined; leads: CallLead[] } | null>(null)
   const [tab, setTab] = useState<LeadTab>('all')
-  const [view, setView] = useState<DeskView>(phone.openMissedId ? 'missed' : 'today')
+  const [view, setView] = useState<DeskView>(ads ? 'ads' : phone.openMissedId ? 'missed' : 'today')
+  // The Ads tab's first open is a soft navigation to ?tab=ads, so the dashboard
+  // arrives as a new prop on this mounted screen: switch to it when it lands.
+  const adsOpen = ads !== null && ads !== undefined
+  const [adsSeen, setAdsSeen] = useState(adsOpen)
+  if (adsOpen !== adsSeen) {
+    setAdsSeen(adsOpen)
+    if (adsOpen) setView('ads')
+  }
   const missedView = view === 'missed'
   const [openMissedId, setOpenMissedId] = useState<string | null>(phone.openMissedId ?? null)
   const [language, setLanguage] = useState<LanguageFilter>('all')
@@ -581,8 +595,26 @@ export function CallCenter({
               >
                 Missed{missed.length ? ` (${missed.length})` : ''}
               </button>
+              {adsAllowed && ads ? (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={view === 'ads'}
+                  className={view === 'ads' ? 'on' : ''}
+                  onClick={() => setView('ads')}
+                >
+                  Ads
+                </button>
+              ) : adsAllowed ? (
+                // The dashboard renders on the server, so the first open is a navigation.
+                <Link role="tab" aria-selected={false} href="/call-center?tab=ads">
+                  Ads
+                </Link>
+              ) : null}
             </div>
-            {missedView ? (
+            {view === 'ads' && ads ? (
+              <div className="ads-panel">{ads}</div>
+            ) : missedView ? (
               <div className="card">
                 <MissedCalls calls={missed} openId={openMissedId} canOverrideHours={phone.canOverrideHours} />
               </div>

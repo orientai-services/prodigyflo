@@ -3,7 +3,8 @@ import { db } from '@/lib/db'
 import { recordAudit } from '@/lib/audit'
 import type { SessionUser } from '@/lib/rbac'
 import { currency } from '@/lib/format'
-import { getMetaProviderFor } from './index'
+import { getMetaAdsWriteProviderFor } from './index'
+import { allowedMetaAdSetWhere, allowedMetaDailyStatWhere, allowedMetaOnlyCampaignWhere } from './ads/where'
 import type { ConsoleCommand } from './console'
 import { CONSOLE_COMMANDS } from './console'
 
@@ -27,22 +28,25 @@ type Target =
  * never a guess: this console moves money.
  */
 export async function resolveTarget(organizationId: string, ref: string): Promise<Target | { error: string }> {
+  // Only campaigns and ad sets of an approved ad account can be targeted.
+  const campaignScope = allowedMetaOnlyCampaignWhere(organizationId)
+  const adSetScope = { ...allowedMetaAdSetWhere(organizationId), campaign: campaignScope }
   const byId = await db.campaign.findFirst({
-    where: { organizationId, channel: 'meta', OR: [{ id: ref }, { externalId: ref }] },
+    where: { ...campaignScope, OR: [{ id: ref }, { externalId: ref }] },
   })
   if (byId) return { type: 'campaign', id: byId.id, name: byId.name }
 
   const adById = await db.adSet.findFirst({
-    where: { organizationId, OR: [{ id: ref }, { externalId: ref }] },
+    where: { ...adSetScope, OR: [{ id: ref }, { externalId: ref }] },
   })
   if (adById) return { type: 'adset', id: adById.id, name: adById.name }
 
   const campaigns = await db.campaign.findMany({
-    where: { organizationId, channel: 'meta', name: { contains: ref, mode: 'insensitive' } },
+    where: { ...campaignScope, name: { contains: ref, mode: 'insensitive' } },
     take: 3,
   })
   const adSets = await db.adSet.findMany({
-    where: { organizationId, name: { contains: ref, mode: 'insensitive' }, campaign: { channel: 'meta' } },
+    where: { ...adSetScope, name: { contains: ref, mode: 'insensitive' } },
     take: 3,
   })
   const matches: Target[] = [
@@ -57,7 +61,7 @@ export async function resolveTarget(organizationId: string, ref: string): Promis
 }
 
 export async function opSetCampaignStatus(user: SessionUser, campaignId: string, status: 'ACTIVE' | 'PAUSED'): Promise<OpResult> {
-  const provider = await getMetaProviderFor(user.organizationId)
+  const provider = await getMetaAdsWriteProviderFor(user.organizationId)
   try {
     await provider.setCampaignStatus(user.organizationId, campaignId, status)
   } catch (e) {
@@ -72,7 +76,7 @@ export async function opSetCampaignStatus(user: SessionUser, campaignId: string,
 }
 
 export async function opSetAdSetStatus(user: SessionUser, adSetId: string, status: 'ACTIVE' | 'PAUSED'): Promise<OpResult> {
-  const provider = await getMetaProviderFor(user.organizationId)
+  const provider = await getMetaAdsWriteProviderFor(user.organizationId)
   try {
     await provider.setAdSetStatus(user.organizationId, adSetId, status)
   } catch (e) {
@@ -87,7 +91,7 @@ export async function opSetAdSetStatus(user: SessionUser, adSetId: string, statu
 }
 
 export async function opSetBudget(user: SessionUser, target: { type: 'campaign' | 'adset'; id: string }, usd: number): Promise<OpResult> {
-  const provider = await getMetaProviderFor(user.organizationId)
+  const provider = await getMetaAdsWriteProviderFor(user.organizationId)
   try {
     if (target.type === 'campaign') await provider.updateDailyBudget(user.organizationId, target.id, usd)
     else await provider.updateAdSetBudget(user.organizationId, target.id, usd)
@@ -104,7 +108,7 @@ export async function opSetBudget(user: SessionUser, target: { type: 'campaign' 
 }
 
 export async function opSetSpendCap(user: SessionUser, campaignId: string, usd: number): Promise<OpResult> {
-  const provider = await getMetaProviderFor(user.organizationId)
+  const provider = await getMetaAdsWriteProviderFor(user.organizationId)
   try {
     await provider.setCampaignSpendCap(user.organizationId, campaignId, usd)
   } catch (e) {
@@ -119,25 +123,11 @@ export async function opSetSpendCap(user: SessionUser, campaignId: string, usd: 
   return { ok: true, message: `Lifetime spend cap set to ${currency(usd)}. This is a lifetime ceiling, not a daily budget.` }
 }
 
+/** Ad accounts are never created from ProdigyFlo (docs/META_ADS_SCS.md §2.2 rule 10). */
 export async function opCreateAdAccount(user: SessionUser, input: { name: string; currency: string; timezone: string }): Promise<OpResult> {
-  const provider = await getMetaProviderFor(user.organizationId)
-  let created: { id: string; mode: 'mock' | 'live' }
-  try {
-    created = await provider.createAdAccount(user.organizationId, input)
-  } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : 'Ad account creation failed.' }
-  }
-  await recordAudit(user, {
-    action: 'meta.ad_account_created',
-    entityType: 'Connector',
-    summary: `Created Meta ad account "${input.name}" (${input.currency}, ${created.mode})`,
-  })
-  return {
-    ok: true,
-    message: created.mode === 'mock'
-      ? `Mock ad account ${created.id} "created" — nothing real exists until Meta credentials are configured.`
-      : `Ad account ${created.id} created. Point META_AD_ACCOUNT_ID at it to manage its campaigns here.`,
-  }
+  void user
+  void input
+  return { ok: false, message: 'Creating ad accounts is turned off in ProdigyFlo.' }
 }
 
 /**
@@ -147,7 +137,6 @@ export async function opCreateAdAccount(user: SessionUser, input: { name: string
  */
 export async function runConsoleCommand(user: SessionUser, command: ConsoleCommand): Promise<{ lines: string[]; mutated: boolean }> {
   const orgId = user.organizationId
-  const provider = await getMetaProviderFor(orgId)
 
   switch (command.kind) {
     case 'help':
@@ -157,24 +146,39 @@ export async function runConsoleCommand(user: SessionUser, command: ConsoleComma
       }
 
     case 'list': {
+      // Synced rows of approved ad accounts only; never a Graph read.
       const [campaigns, adSets] = await Promise.all([
-        provider.listCampaigns(orgId),
-        provider.listAdSets(orgId),
+        db.campaign.findMany({
+          where: allowedMetaOnlyCampaignWhere(orgId),
+          orderBy: { createdAt: 'desc' },
+          include: { _count: { select: { clients: true } } },
+        }),
+        db.adSet.findMany({ where: { ...allowedMetaAdSetWhere(orgId), campaign: allowedMetaOnlyCampaignWhere(orgId) } }),
       ])
-      if (campaigns.length === 0) return { mutated: false, lines: ['No Meta campaigns yet — `create-account` or the New campaign button starts one.'] }
+      if (campaigns.length === 0) return { mutated: false, lines: ['No Meta campaigns synced yet.'] }
       const lines: string[] = []
       for (const c of campaigns) {
-        const cap = c.spendCap !== null ? ` cap ${currency(c.spendCap)}` : ''
-        lines.push(`${c.status === 'ACTIVE' ? '●' : '○'} ${c.id}  ${c.name}  [${c.status.toLowerCase()}]  ${currency(c.dailyBudget)}/day${cap}  spent ${currency(c.spend)}  leads ${c.leads}`)
+        const cap = c.spendCap !== null ? ` cap ${currency(Number(c.spendCap))}` : ''
+        const status = c.status === 'active' ? 'ACTIVE' : 'PAUSED'
+        lines.push(`${status === 'ACTIVE' ? '●' : '○'} ${c.id}  ${c.name}  [${status.toLowerCase()}]  ${currency(Number(c.budget ?? 0))}/day${cap}  spent ${currency(Number(c.spend))}  leads ${c._count.clients}`)
         for (const a of adSets.filter((a) => a.campaignId === c.id)) {
-          lines.push(`    ${a.status === 'ACTIVE' ? '●' : '○'} ${a.id}  ${a.name}  [${a.status.toLowerCase()}]  ${currency(a.dailyBudget)}/day  spent ${currency(a.spend)}`)
+          const st = a.status === 'active' ? 'ACTIVE' : 'PAUSED'
+          lines.push(`    ${st === 'ACTIVE' ? '●' : '○'} ${a.id}  ${a.name}  [${st.toLowerCase()}]  ${currency(Number(a.dailyBudget ?? 0))}/day  spent ${currency(Number(a.spend))}`)
         }
       }
       return { mutated: false, lines }
     }
 
     case 'spend': {
-      const stats = await provider.dailyStats(orgId, command.days)
+      const since = new Date(new Date().toISOString().slice(0, 10))
+      since.setUTCDate(since.getUTCDate() - (command.days - 1))
+      const rows = await db.campaignDailyStat.groupBy({
+        by: ['date'],
+        where: { ...allowedMetaDailyStatWhere(orgId), date: { gte: since } },
+        _sum: { spend: true, leads: true },
+        orderBy: { date: 'asc' },
+      })
+      const stats = rows.map((r) => ({ date: r.date.toISOString().slice(0, 10), spend: Number(r._sum.spend ?? 0), leads: r._sum.leads ?? 0 }))
       if (stats.length === 0) return { mutated: false, lines: [`No spend recorded in the last ${command.days} days.`] }
       const lines = stats.map((s) => `${s.date}  ${currency(s.spend).padStart(12)}  ${s.leads} leads`)
       const total = stats.reduce((a, s) => a + s.spend, 0)

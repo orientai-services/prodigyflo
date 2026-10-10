@@ -71,7 +71,7 @@ export type MetaLead = {
 }
 
 export interface MetaAdsProvider {
-  readonly kind: 'mock' | 'graph'
+  readonly kind: 'mock' | 'graph' | 'disconnected'
   listCampaigns(organizationId: string): Promise<MetaCampaign[]>
   createCampaign(organizationId: string, input: MetaCampaignInput): Promise<MetaCampaign>
   setCampaignStatus(organizationId: string, campaignId: string, status: 'ACTIVE' | 'PAUSED'): Promise<void>
@@ -120,7 +120,7 @@ export function metaCredentials(): MetaCredentials {
  * import so this module keeps working (env-only) while the vault ships — and
  * any vault failure (missing VAULT_KEY, absent helper) degrades silently to env.
  */
-export async function metaCredentialsFor(organizationId: string): Promise<MetaCredentials> {
+async function vaultOrEnvCredentials(organizationId: string): Promise<MetaCredentials> {
   const env = metaCredentials()
   try {
     const mod = (await import('@/lib/connectors/credentials')) as unknown as {
@@ -143,6 +143,24 @@ export async function metaCredentialsFor(organizationId: string): Promise<MetaCr
     // Vault unavailable — env-only is the documented degradation.
   }
   return env
+}
+
+/**
+ * The credentials an org may use (docs/META_ADS_SCS.md §2.2 rule 6). Same
+ * vault-first resolution as before, then the ad account id is dropped (and the
+ * drop audited by hash) unless it is allowlisted AND this org is the bound
+ * workspace. Lead intake fields pass through untouched.
+ */
+export async function metaCredentialsFor(organizationId: string): Promise<MetaCredentials> {
+  const creds = await vaultOrEnvCredentials(organizationId)
+  if (!creds.adAccountId) return creds
+  const { auditRefusal, isAllowedAdAccount, isBoundOrg, refFor } = await import('./ads/allowlist')
+  const allowed = isAllowedAdAccount(creds.adAccountId)
+  if (allowed && isBoundOrg(organizationId)) return creds
+  // An approved id used from a workspace that isn't the bound one is an
+  // unbound_org refusal, not a not-allowlisted one. Logged in this workspace.
+  await auditRefusal(organizationId, refFor(creds.adAccountId), allowed ? 'unbound_org' : 'not_allowlisted', 'credentials.adAccountId')
+  return { ...creds, adAccountId: undefined }
 }
 
 export function credentialsConfigured(c: MetaCredentials): boolean {

@@ -50,6 +50,7 @@ export const UI_COPY_ES = {
     documents: 'Laboratorio de documentos',
     submissions: 'CYS',
     desk: 'Escritorio',
+    ads: 'Anuncios',
     more: 'Más',
   },
   week: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],

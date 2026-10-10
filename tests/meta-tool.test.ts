@@ -119,3 +119,27 @@ describe('signed sample webhook payloads', () => {
     expect(fx.fixture_lead).toEqual({ id: 'lg_1', campaign_name: 'C' })
   })
 })
+
+describe('ad account allowlist in the CLI (campaigns, spend, check-token)', () => {
+  const env = { META_ALLOWED_AD_ACCOUNTS: 'act_1742876583597558' }
+  it('campaigns/spend read only an allowlisted META_AD_ACCOUNT_ID', async () => {
+    const { cliAdAccount } = await import('../tools/meta-lib.mjs')
+    expect(cliAdAccount({ ...env, META_AD_ACCOUNT_ID: '1742876583597558' })).toEqual({ ok: true, act: 'act_1742876583597558' })
+    const refused = cliAdAccount({ ...env, META_AD_ACCOUNT_ID: 'act_999000111222333' })
+    expect(refused.ok).toBe(false)
+    expect(JSON.stringify(refused)).not.toContain('999000111222333')
+    expect(cliAdAccount({ META_AD_ACCOUNT_ID: 'act_1742876583597558' }).ok).toBe(false) // no allowlist: fail closed
+    expect(cliAdAccount({ META_ALLOWED_AD_ACCOUNTS: 'act_1742876583597558,bad', META_AD_ACCOUNT_ID: 'act_1742876583597558' }).ok).toBe(false)
+    expect(cliAdAccount({ ...env, META_AD_ACCOUNT_ID: 'act%5F999000111222333' }).ok).toBe(false)
+  })
+  it('check-token prints approved ad account ids plus a count of the others', async () => {
+    const { allowedAdAccounts, describeGranularTargets } = await import('../tools/meta-lib.mjs')
+    const allowed = allowedAdAccounts(env)
+    const line = describeGranularTargets({ scope: 'ads_read', targets: ['1742876583597558', '999000111222333', '77777'] }, allowed)
+    expect(line).toBe('act_1742876583597558 plus 2 other account(s)')
+    expect(line).not.toContain('999000111222333')
+    expect(describeGranularTargets({ scope: 'ads_read', targets: ['999000111222333'] }, null)).toBe('no approved account plus 1 other account(s)')
+    expect(describeGranularTargets({ scope: 'pages_show_list', targets: ['1333173556539688'] }, allowed)).toBe('1333173556539688')
+    expect(describeGranularTargets({ scope: 'ads_read', targets: [] }, allowed)).toBe('all')
+  })
+})
