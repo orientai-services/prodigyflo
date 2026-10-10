@@ -130,7 +130,7 @@ export function DefinitionEditor({ definition }: { definition?: EditableDefiniti
         </DialogHeader>
 
         <form
-          className="grid gap-3 sm:grid-cols-2"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault()
             submit()
@@ -183,7 +183,7 @@ export function DefinitionEditor({ definition }: { definition?: EditableDefiniti
               id="cys-source-type"
               value={form.sourceType}
               onChange={(e) => set('sourceType', e.target.value as (typeof CYS_SOURCE_TYPES)[number])}
-              className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none"
+              className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none max-md:text-base"
             >
               {CYS_SOURCE_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -198,7 +198,7 @@ export function DefinitionEditor({ definition }: { definition?: EditableDefiniti
               id="cys-data-type"
               value={form.dataType}
               onChange={(e) => set('dataType', e.target.value)}
-              className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none"
+              className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none max-md:text-base"
             >
               {CYS_DATA_TYPES.map((t) => (
                 <option key={t} value={t}>

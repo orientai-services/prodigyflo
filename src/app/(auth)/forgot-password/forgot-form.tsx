@@ -11,7 +11,7 @@ import { requestPasswordResetAction, type AuthRequestState } from '../actions'
 function SubmitButton() {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" className="w-full" disabled={pending}>
+    <Button type="submit" className="w-full max-md:h-11 max-md:text-base" disabled={pending}>
       {pending && <Loader2 className="size-4 animate-spin" />}
       {pending ? 'Sending…' : 'Send reset link'}
     </Button>
@@ -64,7 +64,7 @@ export function ForgotPasswordForm() {
 
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" autoFocus required />
+        <Input className="max-md:h-11" id="email" name="email" type="email" autoComplete="email" autoFocus required />
       </div>
 
       <SubmitButton />

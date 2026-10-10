@@ -22,6 +22,8 @@ import { EmptyState } from '@/components/empty-state'
 import { relativeTime } from '@/lib/format'
 import { CRM_FIELDS } from '@/lib/intake/mapping'
 import { fixSubmissionMapping, retryIntakeSubmission } from './actions'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export type SubmissionRow = {
   id: string
@@ -182,7 +184,7 @@ export function SubmissionsTable({ rows, canManage }: { rows: SubmissionRow[]; c
 
   return (
     <>
-      <div className="scroll-x">
+      <div className={cn('scroll-x', STICKY_FIRST_COL)}>
         <table className="w-full min-w-[52rem] text-sm tabular-nums">
           <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
             <tr className="border-b">

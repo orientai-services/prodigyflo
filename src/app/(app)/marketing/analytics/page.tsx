@@ -7,6 +7,8 @@ import { BarCompare } from '@/components/charts/bar-compare'
 import { Badge } from '@/components/ui/badge'
 import { currency, number } from '@/lib/format'
 import { RevopsTabs } from './revops-tabs'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Revenue attribution' }
 
@@ -26,7 +28,7 @@ export default async function AttributionPage() {
       </PageHeader>
 
       <div className="space-y-6 p-4 sm:p-6">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatTile
             label="Closed-won revenue"
             value={currency(totals.revenue)}
@@ -75,7 +77,7 @@ export default async function AttributionPage() {
 
             <section>
               <h2 className="mb-3 text-sm font-semibold">By campaign and source</h2>
-              <div className="scroll-x rounded-lg border">
+              <div className={cn('scroll-x rounded-lg border', STICKY_FIRST_COL)}>
                 <table className="w-full min-w-[64rem] text-sm tabular-nums">
                   <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                     <tr>

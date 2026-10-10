@@ -196,7 +196,7 @@ export default async function AgencyPage() {
       <div className="space-y-4 p-4 sm:p-6">
         <section>
           <h2 className="mb-3 text-sm font-semibold">Agency</h2>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <AccountCard account={homeView} isHome isActive={user.organizationId === homeView.id} />
           </div>
         </section>
@@ -217,7 +217,7 @@ export default async function AgencyPage() {
               />
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {childViews.map((account) => (
                 <AccountCard
                   key={account.id}

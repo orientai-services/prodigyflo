@@ -243,7 +243,7 @@ export function SequencesManager({
           }
         />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {sequences.map((s) => (
             <div key={s.id} className="bg-surface-raised shadow-e1 flex flex-col rounded-lg border p-4">
               <div className="flex items-start justify-between gap-2">
@@ -338,7 +338,7 @@ export function SequencesManager({
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="seq-name">Name</label>
                 <Input

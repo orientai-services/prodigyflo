@@ -93,7 +93,10 @@ export default async function MetaAdsPage({
       >
         <MarketingTabs active="meta" />
         {provider.kind === 'mock' && (
-          <Badge variant="outline" className="text-warning border-warning/40 mt-3">
+          <Badge
+            variant="outline"
+            className="text-warning border-warning/40 mt-3 max-md:h-auto max-md:w-auto max-md:shrink max-md:py-1 max-md:whitespace-normal"
+          >
             Mock mode — no money moves and no real ads run until Meta credentials are configured below
           </Badge>
         )}
@@ -254,7 +257,7 @@ export default async function MetaAdsPage({
 
         {canManage && <MetaConsole mode={provider.kind === 'mock' ? 'mock' : 'live'} />}
 
-        <section className="grid gap-4 lg:grid-cols-2">
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card><CardContent className="space-y-3">
             <h2 className="text-sm font-semibold">Connection</h2>
             <ul className="space-y-1.5 text-sm">

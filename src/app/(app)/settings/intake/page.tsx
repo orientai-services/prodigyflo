@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { NewSourceDialog } from './new-source-dialog'
 import { SubmissionsTable, type SubmissionRow } from './submissions-table'
+import { cn } from '@/lib/utils'
+import { STICKY_FIRST_COL } from '@/components/charts/table-scroll'
 
 export const metadata = { title: 'Lead intake' }
 
@@ -100,7 +102,7 @@ export default async function IntakeSettingsPage({ searchParams }: PageProps<'/s
               }
             />
           ) : (
-            <div className="scroll-x">
+            <div className={cn('scroll-x', STICKY_FIRST_COL)}>
               <table className="w-full min-w-[44rem] text-sm tabular-nums">
                 <thead className="text-muted-foreground bg-surface-sunk/80 border-b text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
                   <tr className="border-b">

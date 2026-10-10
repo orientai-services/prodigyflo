@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
   const signupEnabled = false
 
   return (
-    <main className="relative grid min-h-dvh lg:grid-cols-2">
+    <main className="relative grid grid-cols-1 min-h-dvh lg:grid-cols-2">
       {/* Soft brand wash behind the form — pure token color, purely decorative. */}
       <div
         aria-hidden

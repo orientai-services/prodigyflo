@@ -87,7 +87,7 @@ export default async function ReportsIndexPage() {
         description={`Everything is scoped to the ${LEVEL_LABEL[level]} you can see`}
       />
 
-      <div className="grid gap-4 p-4 sm:p-6 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:p-6 md:grid-cols-2 xl:grid-cols-3">
         {REPORTS.map((report) => (
           <Link
             key={report.href}

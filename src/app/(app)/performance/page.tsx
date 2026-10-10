@@ -143,7 +143,7 @@ export default async function PerformancePage({
                   key={r.key}
                   href={hrefFor({ range: r.key })}
                   className={cn(
-                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors max-md:inline-flex max-md:min-h-10 max-md:items-center',
                     range.key === r.key
                       ? 'bg-surface-raised shadow-e1'
                       : 'text-muted-foreground hover:text-foreground',
@@ -262,7 +262,16 @@ export default async function PerformancePage({
               description="When active closers own clients you can see, the scoreboard fills in here."
             />
           ) : (
-            <div className="scroll-x">
+            <div
+              className={cn(
+                'scroll-x',
+                // Phones: rank + closer stay pinned while the stats scroll.
+                'max-md:[&_:is(th,td):nth-child(-n+2)]:sticky max-md:[&_:is(th,td):nth-child(-n+2)]:z-10',
+                'max-md:[&_:is(th,td):first-child]:left-0 max-md:[&_:is(th,td):first-child]:w-16 max-md:[&_:is(th,td):first-child]:min-w-16 max-md:[&_:is(th,td):first-child]:max-w-16',
+                'max-md:[&_:is(th,td):nth-child(2)]:left-16 max-md:[&_:is(th,td):nth-child(2)]:shadow-[inset_-1px_0_0_var(--border)]',
+                'max-md:[&_td:nth-child(-n+2)]:bg-card max-md:[&_th:nth-child(-n+2)]:bg-surface-sunk',
+              )}
+            >
               <table
                 className={cn(
                   'w-full text-sm tabular-nums',
@@ -427,7 +436,7 @@ export default async function PerformancePage({
           summary={`${POINT_RULES.length} rules`}
         >
           <div className="px-4 py-3">
-            <ul className="text-muted-foreground grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="text-muted-foreground grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
               {POINT_RULES.map((rule) => (
                 <li key={rule.key} className="flex items-baseline gap-1.5">
                   <span
@@ -499,7 +508,7 @@ function CloserDetail({
         </Link>
       }
     >
-      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(20rem,2fr)_3fr]">
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(20rem,2fr)_3fr]">
         <div className="bg-surface-sunk/50 rounded-lg border">
           <p className="text-muted-foreground border-b px-3 py-2 text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
             Points breakdown

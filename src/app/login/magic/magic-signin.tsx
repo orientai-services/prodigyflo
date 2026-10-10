@@ -10,7 +10,7 @@ import { completeMagicSignInAction, type MagicSignInState } from './actions'
 function FallbackButton() {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" className="w-full" disabled={pending}>
+    <Button type="submit" className="w-full max-md:h-11 max-md:text-base" disabled={pending}>
       {pending && <Loader2 className="size-4 animate-spin" />}
       {pending ? 'Signing you in…' : 'Sign in'}
     </Button>
@@ -45,7 +45,7 @@ export function MagicSignIn({ token }: { token: string }) {
           <p className="text-destructive">{state.error}</p>
         </div>
         <div className="mt-4 flex flex-col gap-2">
-          <Button className="w-full" render={<Link href="/login" />}>
+          <Button className="w-full max-md:h-11 max-md:text-base" render={<Link href="/login" />}>
             Back to sign in
           </Button>
         </div>

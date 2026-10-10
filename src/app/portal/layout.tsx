@@ -26,7 +26,13 @@ export default async function PortalLayout({ children }: { children: React.React
               {client.firstName} {client.lastName}
             </span>
             <form action="/api/signout" method="post">
-              <Button type="submit" variant="ghost" size="sm">
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                aria-label={PORTAL_COPY.signOut}
+                className="max-sm:size-11"
+              >
                 <LogOut data-icon="inline-start" />
                 <span className="hidden sm:inline">{PORTAL_COPY.signOut}</span>
               </Button>

@@ -133,7 +133,7 @@ export function SourceSettings({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
@@ -227,7 +227,7 @@ export function SourceSettings({
               ))}
           </div>
 
-          <div className="grid gap-3 border-t pt-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="src-owner" className="text-xs">
                 Default owner
@@ -237,7 +237,7 @@ export function SourceSettings({
                 value={source.defaultOwnerId ?? ''}
                 disabled={!canManage || pending}
                 onChange={(e) => save({ sourceId: source.id, defaultOwnerId: e.target.value || null }, 'Default owner saved.')}
-                className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none disabled:opacity-50"
+                className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none disabled:opacity-50 max-md:text-base"
               >
                 <option value="">Unassigned</option>
                 {owners.map((o) => (
@@ -258,7 +258,7 @@ export function SourceSettings({
                 onChange={(e) =>
                   save({ sourceId: source.id, defaultLeadSourceId: e.target.value || null }, 'Default lead source saved.')
                 }
-                className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none disabled:opacity-50"
+                className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm outline-none disabled:opacity-50 max-md:text-base"
               >
                 <option value="">None</option>
                 {leadSources.map((o) => (
@@ -276,7 +276,7 @@ export function SourceSettings({
                 <Label className="text-xs">Google Sheet sync</Label>
                 {sheetsMock && <Badge variant="secondary">Mock provider — synthetic rows</Badge>}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="src-sheetid" className="text-xs">
                     Sheet ID
@@ -338,7 +338,7 @@ export function SourceSettings({
               value={sample}
               onChange={(e) => setSample(e.target.value)}
               placeholder='{"first_name": "Ada", "contact": {"email": "ada@example.test"}}'
-              className="h-20 font-mono text-xs"
+              className="h-20 font-mono text-xs max-md:text-base"
             />
             {sampleKeys === null && <p className="text-destructive text-xs">Not valid JSON.</p>}
             {sampleKeys && sampleKeys.length > 0 && (
@@ -363,7 +363,7 @@ export function SourceSettings({
                   placeholder="incoming key"
                   list="sample-keys"
                   disabled={!canManage}
-                  className="h-8 font-mono text-xs"
+                  className="h-8 font-mono text-xs max-md:text-base"
                 />
               </div>
             ))}

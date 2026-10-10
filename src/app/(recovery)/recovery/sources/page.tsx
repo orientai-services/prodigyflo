@@ -72,23 +72,23 @@ export default async function RecoverySourcesPage() {
         </Link>
       </RecCard>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {connectors.map((c) => {
           const meta = STATE_META[c.state]
           const connectable = c.state !== 'coming-soon'
           return (
             <RecCard key={c.def.id} className="flex flex-col gap-3 p-5">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <span
                     aria-hidden
-                    className="inline-flex size-10 items-center justify-center rounded-xl text-lg"
+                    className="inline-flex size-10 items-center justify-center rounded-xl text-lg max-md:shrink-0"
                     style={{ backgroundColor: `${c.def.accent}1a` }}
                   >
                     {c.def.glyph}
                   </span>
-                  <div>
-                    <div className="flex items-center gap-1.5 font-medium text-[var(--rec-text)]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5 font-medium text-[var(--rec-text)]">
                       {c.def.name}
                       {c.def.id === 'gohighlevel' && (
                         <span className="rounded-full bg-[var(--rec-primary-soft)] px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--rec-primary-ink)] uppercase">

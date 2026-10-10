@@ -32,7 +32,7 @@ export function OpsSettings({
           Org-wide levers — every dashboard, queue, and leakage number follows them
         </p>
       </div>
-      <div className="grid gap-4 p-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
         <PhaseSwitcher config={config} phases={phases} />
         <TuningForm
           title="Hot-lead threshold"
