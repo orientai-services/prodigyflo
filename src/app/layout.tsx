@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Fraunces, Geist, Geist_Mono, IBM_Plex_Sans } from 'next/font/google'
+import { DEFAULT_BRAND } from '@/components/brand/org-brand'
 import { GoogleTagManagerNoScript, GoogleTagManagerScript } from '@/components/analytics/google-tag-manager'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -18,9 +19,20 @@ const fraunces = Fraunces({
   weight: ['500', '600'],
 })
 
+// The agency's icons and manifest ride on every page, including sign-in and
+// /forbidden, which sit outside the (app) layout. Without them, "Add to Home
+// Screen" from those pages gave iOS a page screenshot instead of the mark.
+// The (app) layout swaps in the active account's own set once signed in.
 export const metadata: Metadata = {
   title: { default: 'ProdigyFlo', template: '%s · ProdigyFlo' },
   description: 'Sales Client Overview — survey to submission, in one system.',
+  applicationName: DEFAULT_BRAND.name,
+  manifest: `/manifest/${DEFAULT_BRAND.iconDir}`,
+  appleWebApp: { capable: true, title: DEFAULT_BRAND.shortName, statusBarStyle: 'default' },
+  icons: {
+    apple: [{ url: `/brand/${DEFAULT_BRAND.iconDir}/apple-touch-icon.png`, sizes: '180x180' }],
+    icon: [{ url: `/brand/${DEFAULT_BRAND.iconDir}/icon-192.png`, sizes: '192x192', type: 'image/png' }],
+  },
 }
 
 // Applies the stored theme and desktop-sidebar state before first paint so
