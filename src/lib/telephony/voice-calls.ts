@@ -5,7 +5,7 @@ import { encryptSecret } from '@/lib/crypto'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
 import { inquiryAttested, last4Of, phoneHashOrNull } from './compliance-core'
 import { toE164 } from './provider'
-import type { MissedCallVM } from './voice-contract'
+import { MISSED_DISPOSITIONS, type MissedCallVM, type MissedDisposition } from './voice-contract'
 
 /**
  * The VoiceCall ledger — one row per ROOT carrier call, inbound or outbound.
@@ -334,6 +334,63 @@ export async function applyRecording(
   return db.voiceCall.update({ where: { id: row.id }, data })
 }
 
+// ── Press 1 for a callback, and voicemail transcripts ──────────────────────
+
+/**
+ * The caller pressed 1 instead of leaving a voicemail. The call waits on the
+ * Missed list, sorted first. Idempotent: a replayed Gather changes nothing.
+ * A call somebody already handled is not reopened.
+ */
+export async function requestCallback(callSid: string): Promise<VoiceCall | null> {
+  const row = await db.voiceCall.findUnique({ where: { callSid } })
+  if (!row || row.direction !== 'INBOUND') return row
+  if (row.callbackRequested) return row
+  return db.voiceCall.update({
+    where: { id: row.id },
+    data: {
+      callbackRequested: true,
+      stage: 'callback',
+      ...(row.handledAt ? {} : { needsAction: true }),
+      ...(row.outcome ? {} : { outcome: 'NO_ANSWER' as const }),
+    },
+  })
+}
+
+/** Longest transcript kept. Twilio only transcribes two-minute recordings, so this rarely bites. */
+export const TRANSCRIPT_MAX_CHARS = 2000
+
+/** Collapse whitespace and cut at a word boundary with an ellipsis. Pure. */
+export function cleanTranscript(text: string | null | undefined, max = TRANSCRIPT_MAX_CHARS): string | null {
+  const flat = (text ?? '').replace(/\s+/g, ' ').trim()
+  if (!flat) return null
+  if (flat.length <= max) return flat
+  const cut = flat.slice(0, max - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > max * 0.8 ? cut.slice(0, space) : cut).trimEnd()}…`
+}
+
+/**
+ * Twilio's transcription of a voicemail. Written once: a replay, or a second
+ * transcription of the same call, never replaces the first. A transcription of
+ * a recording other than the call's voicemail is ignored, and so is one Twilio
+ * marks failed (the voicemail itself is still there to play).
+ */
+export async function applyTranscript(
+  callSid: string,
+  input: { text: string | null | undefined; status: string | null | undefined; recordingSid?: string | null },
+): Promise<{ stored: boolean; row: VoiceCall | null }> {
+  const row = await db.voiceCall.findUnique({ where: { callSid } })
+  if (!row) return { stored: false, row: null }
+  if ((input.status ?? '').toLowerCase() !== 'completed') return { stored: false, row }
+  const text = cleanTranscript(input.text)
+  if (!text) return { stored: false, row }
+  const sid = input.recordingSid ?? ''
+  if (sid && (!RECORDING_SID.test(sid) || (row.recordingSid && row.recordingSid !== sid))) return { stored: false, row }
+  // Conditional write: two deliveries racing on separate instances store one.
+  const res = await db.voiceCall.updateMany({ where: { id: row.id, transcript: null }, data: { transcript: text } })
+  return { stored: res.count === 1, row: res.count === 1 ? { ...row, transcript: text } : row }
+}
+
 // ── Finalize ───────────────────────────────────────────────────────────────
 
 function clock(seconds: number | null | undefined): string {
@@ -342,12 +399,15 @@ function clock(seconds: number | null | undefined): string {
 }
 
 /** The lead-trail line for an inbound call, in plain words. */
-export function inboundTrailCopy(vc: Pick<VoiceCall, 'outcome' | 'stage' | 'talkSeconds' | 'recordingDurationSeconds'>): {
+export function inboundTrailCopy(
+  vc: Pick<VoiceCall, 'outcome' | 'stage' | 'talkSeconds' | 'recordingDurationSeconds'> & { callbackRequested?: boolean },
+): {
   label: string
   detail: string
 } {
   if (vc.outcome === 'CONNECTED') return { label: 'Inbound call', detail: `Answered · ${clock(vc.talkSeconds)}` }
   if (vc.outcome === 'VOICEMAIL') return { label: 'Voicemail', detail: `Voicemail left · ${clock(vc.recordingDurationSeconds)}` }
+  if (vc.callbackRequested) return { label: 'Missed call', detail: 'Asked for a callback (pressed 1)' }
   if (vc.stage === 'hung-up') return { label: 'Missed call', detail: 'Hung up while it rang' }
   if (vc.outcome === 'BUSY') return { label: 'Missed call', detail: 'Line was busy' }
   if (vc.outcome === 'FAILED') return { label: 'Missed call', detail: 'The call failed' }
@@ -444,6 +504,8 @@ export async function finalizeCall(voiceCallId: string, now = new Date()): Promi
     })
   }
 
+  if (vc.direction === 'OUTBOUND') await clearMissedByCallback(vc, now)
+
   if (vc.callCenterLeadId && vc.direction === 'OUTBOUND') {
     // Lazy import: the desk module imports this one.
     const { recordCarrierCallFor } = await import('@/lib/call-center/desk')
@@ -528,7 +590,10 @@ export function missedReason(vc: Pick<VoiceCall, 'outcome' | 'stage' | 'recordin
   return 'no-answer'
 }
 
-/** Unanswered inbound calls still waiting for someone, newest first, in the viewer's scope. */
+/**
+ * Unanswered inbound calls still waiting for someone, in the viewer's scope.
+ * Callback requests (the caller pressed 1) come first, then newest first.
+ */
 export async function listMissed(user: SessionUser, limit = 100): Promise<MissedCallVM[]> {
   const manage = can(user, 'telephony:manage')
   const [held, scoped] = manage
@@ -544,7 +609,7 @@ export async function listMissed(user: SessionUser, limit = 100): Promise<Missed
         { direction: 'INBOUND', needsAction: true, handledAt: null },
       ],
     },
-    orderBy: { startedAt: 'desc' },
+    orderBy: [{ callbackRequested: 'desc' }, { startedAt: 'desc' }],
     take: limit,
   })
   if (rows.length === 0) return []
@@ -563,6 +628,7 @@ export async function listMissed(user: SessionUser, limit = 100): Promise<Missed
 
   return rows.map((vc) => {
     const visibleClient = vc.clientId && clientName.has(vc.clientId) ? vc.clientId : null
+    const isVoicemail = Boolean(vc.recordingSid && vc.recordingKind === 'voicemail')
     return {
       id: vc.id,
       at: vc.startedAt.toISOString(),
@@ -570,26 +636,127 @@ export async function listMissed(user: SessionUser, limit = 100): Promise<Missed
       caller: visibleClient ? clientName.get(visibleClient)! : vc.remoteLast4 ? `•••-•••-${vc.remoteLast4}` : 'Unknown caller',
       target: visibleClient ? { kind: 'client', id: visibleClient } : vc.remoteSecret ? { kind: 'missed', id: vc.id } : null,
       reason: missedReason(vc),
-      voicemail:
-        vc.recordingSid && vc.recordingKind === 'voicemail'
-          ? { src: recordingPath(vc.id), seconds: vc.recordingDurationSeconds ?? 0 }
-          : null,
+      voicemail: isVoicemail ? { src: recordingPath(vc.id), seconds: vc.recordingDurationSeconds ?? 0 } : null,
+      callbackRequested: vc.callbackRequested,
+      transcript: isVoicemail ? vc.transcript : null,
     }
   })
 }
 
+/**
+ * How many missed calls wait for this viewer: the nav badge. One count query
+ * for telephony:manage holders (the whole org); everyone else is counted by
+ * the same visibility rule as the list. Never throws: a badge is not worth an
+ * error page, so a failure (or an unmigrated column) reads as zero.
+ */
+export async function pendingMissedCount(user: SessionUser): Promise<number> {
+  try {
+    const pending: Prisma.VoiceCallWhereInput = { direction: 'INBOUND', needsAction: true, handledAt: null }
+    if (can(user, 'telephony:manage')) {
+      return await db.voiceCall.count({ where: { organizationId: user.organizationId, ...pending } })
+    }
+    const [held, scoped] = await Promise.all([
+      db.callCenterLead.findMany({ where: { organizationId: user.organizationId, lockedBy: user.id }, select: { id: true } }),
+      db.client.findMany({ where: clientScope(user), select: { id: true }, take: 5000 }),
+    ])
+    return await db.voiceCall.count({
+      where: { AND: [visibleCallsWhere(user, held.map((r) => r.id), scoped.map((r) => r.id)), pending] },
+    })
+  } catch {
+    return 0
+  }
+}
+
+export function isMissedDisposition(value: unknown): value is MissedDisposition {
+  return typeof value === 'string' && (MISSED_DISPOSITIONS as readonly string[]).includes(value)
+}
+
+type HandledData = {
+  handledAt: Date
+  handledById: string | null
+  handledNote: string | null
+  handledDisposition: MissedDisposition
+}
+
+/**
+ * Close every pending missed call from this caller (same remoteHash, same
+ * org) that started at or before `upTo`. One callback, or one "spam", answers
+ * all of that caller's earlier rings; a call that comes in AFTER stays open,
+ * because it is a new reason to call. Returns how many rows it closed.
+ */
+async function clearPendingFromCaller(
+  organizationId: string,
+  remoteHash: string,
+  upTo: Date,
+  data: HandledData,
+  exceptId?: string,
+): Promise<number> {
+  const res = await db.voiceCall.updateMany({
+    where: {
+      organizationId,
+      remoteHash,
+      direction: 'INBOUND',
+      needsAction: true,
+      handledAt: null,
+      startedAt: { lte: upTo },
+      ...(exceptId ? { NOT: { id: exceptId } } : {}),
+    },
+    data: { ...data, needsAction: false },
+  })
+  return res.count
+}
+
+/**
+ * An outbound call to a caller who is waiting on the Missed list, answered and
+ * talked for 20 s or more (FIRST_CONTACT_SECONDS = CONNECTED_SECONDS), IS the
+ * callback: their earlier missed calls close as 'called_back'. A shorter or
+ * unanswered call handles nothing. Idempotent: a second finalize finds
+ * nothing pending.
+ */
+export async function clearMissedByCallback(
+  vc: Pick<VoiceCall, 'direction' | 'outcome' | 'talkSeconds' | 'remoteHash' | 'organizationId' | 'userId' | 'startedAt'>,
+  now = new Date(),
+): Promise<number> {
+  if (vc.direction !== 'OUTBOUND' || vc.outcome !== 'CONNECTED' || !vc.remoteHash) return 0
+  if ((vc.talkSeconds ?? 0) < FIRST_CONTACT_SECONDS) return 0
+  return clearPendingFromCaller(vc.organizationId, vc.remoteHash, vc.startedAt, {
+    handledAt: now,
+    handledById: vc.userId ?? null,
+    handledNote: 'called back',
+    handledDisposition: 'called_back',
+  })
+}
+
+export type HandleInput = { disposition?: MissedDisposition | null; note?: string | null }
+
+/**
+ * Close one missed call with a disposition (default 'handled'), and with it
+ * every earlier pending missed call from the same number in the org. A plain
+ * string is still accepted as the note (the older call shape).
+ */
 export async function markHandled(
   user: SessionUser,
   voiceCallId: string,
-  note: string | null | undefined,
+  input: HandleInput | string | null | undefined,
   now = new Date(),
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; cleared: number } | { ok: false; error: string }> {
+  const opts: HandleInput = typeof input === 'string' || input == null ? { note: input ?? null } : input
+  if (opts.disposition != null && !isMissedDisposition(opts.disposition)) {
+    return { ok: false, error: 'Pick how the call was handled.' }
+  }
+  const disposition: MissedDisposition = opts.disposition ?? 'handled'
   const vc = await db.voiceCall.findUnique({ where: { id: voiceCallId } })
   if (!vc || !(await canSeeCall(user, vc))) return { ok: false, error: 'That call is not on your list.' }
-  if (vc.handledAt) return { ok: true }
-  await db.voiceCall.update({
-    where: { id: vc.id },
-    data: { handledAt: now, handledById: user.id, handledNote: note?.trim().slice(0, 500) || null, needsAction: false },
-  })
-  return { ok: true }
+  if (vc.handledAt) return { ok: true, cleared: 0 }
+  const data: HandledData = {
+    handledAt: now,
+    handledById: user.id,
+    handledNote: typeof opts.note === 'string' ? opts.note.trim().slice(0, 500) || null : null,
+    handledDisposition: disposition,
+  }
+  // Conditional: two people pressing at once close it once.
+  const res = await db.voiceCall.updateMany({ where: { id: vc.id, handledAt: null }, data: { ...data, needsAction: false } })
+  if (res.count === 0) return { ok: true, cleared: 0 }
+  const cleared = vc.remoteHash ? await clearPendingFromCaller(vc.organizationId, vc.remoteHash, vc.startedAt, data, vc.id) : 0
+  return { ok: true, cleared }
 }

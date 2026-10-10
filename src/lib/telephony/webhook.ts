@@ -313,9 +313,19 @@ function query(callSid: string, extra: CallbackExtras = {}): string {
 export function callbackUrls(
   callSid: string,
   extra: CallbackExtras = {},
-): { dial: string; recording: string; voicemail: string; callRecording: string; childStatus: string } {
+): {
+  dial: string
+  recording: string
+  voicemail: string
+  callRecording: string
+  childStatus: string
+  callback: string
+  transcription: string
+} {
   const base = appOrigin()
   return {
+    callback: `${base}/api/telephony/voice/callback${query(callSid)}`,
+    transcription: `${base}/api/telephony/voice/transcription${query(callSid)}`,
     dial: `${base}/api/telephony/voice/dial${query(callSid, { stage: extra.stage, i: extra.i })}`,
     recording: `${base}/api/telephony/voice/recording${query(callSid, { kind: extra.kind ?? 'voicemail' })}`,
     voicemail: `${base}/api/telephony/voice/recording${query(callSid, { kind: 'voicemail' })}`,

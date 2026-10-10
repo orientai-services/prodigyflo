@@ -6,6 +6,7 @@ import {
   recordCallCenterNoteFor,
   recordCallCenterOutcomeFor,
   recordCallCenterTextFor,
+  recordCarrierCallFor,
   revealCallCenterContactFor,
   sendCallCenterIntakeFor,
   skipCallCenterLeadFor,
@@ -84,7 +85,9 @@ describe('call center desk persistence', () => {
     const reloaded = await loadCallCenterLeadsFor(orgId, repB.id)
     const lead = reloaded.find((row) => row.id === leadId)
     expect(lead?.tries).toBe(1)
-    expect(lead?.nextAttemptAt).toBe('2026-10-04T17:00:00.000Z')
+    // Cadence step 1: five minutes after the 10:00 (Los Angeles) attempt.
+    expect(lead?.nextAttemptAt).toBe('2026-10-03T17:05:00.000Z')
+    expect(lead?.followUp).toBe('cadence')
     expect(lead?.status).toBe('retry')
     expect(lead?.lockedBy).toBe(repA.id)
     expect(lead?.lockName).toBe('Rep A')
@@ -152,5 +155,103 @@ describe('call center desk persistence', () => {
     expect(lead?.dnc).toBe(true)
     expect(lead?.status).toBe('dnc')
     hidden(lead)
+  })
+})
+
+describe('call center callbacks and the carrier cadence', () => {
+  const run2 = `${run}-cad`
+  let orgId = ''
+  const rep = { id: '', name: 'Rep C' }
+
+  async function newLead(): Promise<string> {
+    const lead = await db.callCenterLead.create({
+      data: { organizationId: orgId, source: 'FORM', language: 'EN', status: 'WAITING', lockedBy: rep.id },
+    })
+    return lead.id
+  }
+
+  async function carrierCall(leadId: string, data: { outcome: 'NO_ANSWER' | 'CONNECTED'; talkSeconds?: number; startedAt: Date; endedAt: Date }) {
+    return db.voiceCall.create({
+      data: {
+        organizationId: orgId,
+        callSid: `CA${run2}${Math.random().toString(36).slice(2, 10)}`,
+        accountSid: 'AC_test_cadence',
+        direction: 'OUTBOUND',
+        status: 'completed',
+        callCenterLeadId: leadId,
+        ...data,
+      },
+    })
+  }
+
+  beforeAll(async () => {
+    const org = await db.organization.create({ data: { name: `Desk ${run2}`, slug: run2 } })
+    orgId = org.id
+    const role = await db.role.create({ data: { organizationId: orgId, key: 'CLOSER', name: 'Closer' } })
+    const user = await db.user.create({
+      data: { organizationId: orgId, roleId: role.id, name: 'Rep C', email: `c-${run2}@example.test`, passwordHash: 'x' },
+    })
+    rep.id = user.id
+  })
+
+  afterAll(async () => {
+    if (orgId) await db.organization.delete({ where: { id: orgId } })
+  })
+
+  it('stores an agreed callback time and refuses a past or far-off one', async () => {
+    const leadId = await newLead()
+    const past = await recordCallCenterOutcomeFor(orgId, rep, leadId, 'callback', when, { callbackAt: '2026-10-03T16:00:00.000Z' })
+    expect(past).toEqual({ ok: false, error: 'The call back time has already passed.' })
+    const far = await recordCallCenterOutcomeFor(orgId, rep, leadId, 'callback', when, { callbackAt: '2026-12-31T17:00:00.000Z' })
+    expect(far.ok).toBe(false)
+    const wrong = await recordCallCenterOutcomeFor(orgId, rep, leadId, 'talked', when, { callbackAt: '2026-10-04T17:00:00.000Z' })
+    expect(wrong.ok).toBe(false)
+    const saved = await recordCallCenterOutcomeFor(orgId, rep, leadId, 'callback', when, { callbackAt: '2026-10-04T21:30:00.000Z' })
+    expect(saved.ok).toBe(true)
+    const lead = (await loadCallCenterLeadsFor(orgId, rep.id)).find((row) => row.id === leadId)
+    expect(lead?.nextAttemptAt).toBe('2026-10-04T21:30:00.000Z')
+    expect(lead?.followUp).toBe('callback')
+    expect(lead?.tries).toBe(0)
+  })
+
+  it('advances the cadence once per carrier call, and not again for the rep result', async () => {
+    const leadId = await newLead()
+    const vc = await carrierCall(leadId, { outcome: 'NO_ANSWER', startedAt: new Date('2026-10-03T16:59:00.000Z'), endedAt: when })
+    await Promise.all([recordCarrierCallFor(orgId, leadId, vc, when), recordCarrierCallFor(orgId, leadId, vc, when)])
+    await recordCarrierCallFor(orgId, leadId, vc, when)
+    let row = await db.callCenterLead.findUniqueOrThrow({ where: { id: leadId } })
+    expect(row.tries).toBe(1)
+    expect(row.nextAttemptAt?.toISOString()).toBe('2026-10-03T17:05:00.000Z')
+    expect(await db.callCenterEvent.count({ where: { leadId, type: 'CALL' } })).toBe(1)
+    // The wrap-up result for the same call records the label but not a second try.
+    const result = await recordCallCenterOutcomeFor(orgId, rep, leadId, 'no_answer', new Date('2026-10-03T17:01:00.000Z'))
+    expect(result.ok).toBe(true)
+    row = await db.callCenterLead.findUniqueOrThrow({ where: { id: leadId } })
+    expect(row.tries).toBe(1)
+  })
+
+  it('does not count a call the rep already counted, and clears a cadence follow-up when reached', async () => {
+    const leadId = await newLead()
+    const first = await recordCallCenterOutcomeFor(orgId, rep, leadId, 'no_answer', new Date('2026-10-03T17:00:30.000Z'))
+    expect(first.ok).toBe(true)
+    const vc = await carrierCall(leadId, { outcome: 'NO_ANSWER', startedAt: new Date('2026-10-03T16:59:00.000Z'), endedAt: when })
+    await recordCarrierCallFor(orgId, leadId, vc, when)
+    let row = await db.callCenterLead.findUniqueOrThrow({ where: { id: leadId } })
+    expect(row.tries).toBe(1)
+
+    const reached = await carrierCall(leadId, {
+      outcome: 'CONNECTED',
+      talkSeconds: 45,
+      startedAt: new Date('2026-10-03T17:10:00.000Z'),
+      endedAt: new Date('2026-10-03T17:11:00.000Z'),
+    })
+    await recordCarrierCallFor(orgId, leadId, reached, new Date('2026-10-03T17:11:00.000Z'))
+    row = await db.callCenterLead.findUniqueOrThrow({ where: { id: leadId } })
+    expect(row.tries).toBe(1)
+    expect(row.nextAttemptAt).toBeNull()
+    expect(row.status).toBe('WAITING')
+    const lead = (await loadCallCenterLeadsFor(orgId, rep.id)).find((r) => r.id === leadId)
+    expect(lead?.contacted).toBe(true)
+    expect(lead?.trail.some((event) => event.kind === 'call' && event.connected)).toBe(true)
   })
 })

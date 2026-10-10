@@ -5,11 +5,13 @@ import { isUniqueViolation, recordingPath } from '@/lib/telephony/voice-calls'
 import { last4Of, phoneHashOrNull } from '@/lib/telephony/compliance-core'
 import { readSecret } from './contact'
 import { callLeadsForDesk, type StoredCallCenterLead } from './from-rows'
+import { validateCallbackAt } from './cadence'
+import { CALL_RESULT_UNKNOWN, planCarrierCall } from './carrier'
 import {
   PREVIEW_BANNER,
   applyLeadAction,
   applyOutcome,
-  nextRetryAt,
+  isOutcome,
   saveNote,
   sendIntakeLink,
   type CallLead,
@@ -56,6 +58,8 @@ function eventBody(event: TrailEvent): string {
   return JSON.stringify({
     label: event.label.replace(/\d{5,}/g, '····'),
     detail: event.detail.replace(/\d{5,}/g, '····'),
+    // The follow-up marker is what tells a callback from a cadence retry later.
+    ...(event.followUp ? { followUp: event.followUp } : {}),
   })
 }
 
@@ -93,9 +97,11 @@ function toStored(row: {
  * the playback route checks access again on every request.
  */
 async function deskCallExtras(organizationId: string, leadIds: string[]) {
-  const recordings = new Map<string, { src: string; seconds: number }>()
+  const recordings = new Map<string, { src: string; seconds: number; transcript?: string | null }>()
   const missedByLead = new Map<string, string>()
-  if (leadIds.length === 0) return { recordings, missedByLead }
+  const missedAtByLead = new Map<string, string>()
+  const callbackByLead = new Set<string>()
+  if (leadIds.length === 0) return { recordings, missedByLead, missedAtByLead, callbackByLead }
   const calls = await db.voiceCall.findMany({
     where: { organizationId, callCenterLeadId: { in: leadIds } },
     orderBy: { startedAt: 'desc' },
@@ -106,15 +112,21 @@ async function deskCallExtras(organizationId: string, leadIds: string[]) {
       recordingDurationSeconds: true,
       needsAction: true,
       handledAt: true,
+      startedAt: true,
+      transcript: true,
+      callbackRequested: true,
     },
   })
   for (const vc of calls) {
-    if (vc.recordingSid) recordings.set(vc.id, { src: recordingPath(vc.id), seconds: vc.recordingDurationSeconds ?? 0 })
+    if (vc.recordingSid) recordings.set(vc.id, { src: recordingPath(vc.id), seconds: vc.recordingDurationSeconds ?? 0, transcript: vc.transcript })
     if (vc.needsAction && !vc.handledAt && vc.callCenterLeadId && !missedByLead.has(vc.callCenterLeadId)) {
       missedByLead.set(vc.callCenterLeadId, vc.id)
+      missedAtByLead.set(vc.callCenterLeadId, vc.startedAt.toISOString())
     }
+    // Any open press-1 request from this lead puts them at the top of Today.
+    if (vc.callbackRequested && vc.needsAction && !vc.handledAt && vc.callCenterLeadId) callbackByLead.add(vc.callCenterLeadId)
   }
-  return { recordings, missedByLead }
+  return { recordings, missedByLead, missedAtByLead, callbackByLead }
 }
 
 /** Desk list for one org. Secrets stay on the server. */
@@ -249,6 +261,7 @@ type HeldRow = {
   phoneLast4: string | null
   createdAt: Date
   intakeLinkSentAt: Date | null
+  timeZone: string | null
   events: { type: string; body: string; createdAt: Date }[]
 }
 
@@ -272,6 +285,8 @@ async function heldLead(organizationId: string, actor: DeskActor, leadId: string
       phoneLast4: true,
       createdAt: true,
       intakeLinkSentAt: true,
+      // The cadence and the callback picker work in the lead's own zone.
+      timeZone: true,
       events: { orderBy: { createdAt: 'asc' as const }, select: { type: true, body: true, createdAt: true } },
     },
   })
@@ -346,12 +361,21 @@ export async function recordCallCenterOutcomeFor(
   leadId: string,
   outcome: DeskOutcome,
   at = new Date(),
+  options: { callbackAt?: string | null } = {},
 ): Promise<DeskResult> {
+  if (!isOutcome(outcome)) return { ok: false, error: 'Not allowed' }
+  let callbackAt: string | null = null
+  if (options.callbackAt != null) {
+    if (outcome !== 'callback') return { ok: false, error: 'Not allowed' }
+    const checked = validateCallbackAt(options.callbackAt, at)
+    if (!checked.ok) return { ok: false, error: checked.error }
+    callbackAt = checked.at.toISOString()
+  }
   const held = await heldLead(organizationId, actor, leadId)
   if (!held.ok) return { ok: false, error: held.error }
   if (held.row.doNotCallAt) return { ok: false, error: 'Do not call' }
   const stamp = at.toISOString()
-  const after = applyOutcome(held.lead, outcome, stamp, actor.id)
+  const after = applyOutcome(held.lead, outcome, stamp, actor.id, { callbackAt })
   if (after === held.lead) return { ok: false, error: 'Not allowed' }
   const result = await writeTrail(organizationId, actor, leadId, held.lead, after, at, {
     doNotCallAt: after.dnc ? held.row.doNotCallAt ?? at : null,
@@ -475,23 +499,26 @@ export async function recordCallCenterAttemptFor(
 /**
  * A real carrier call to a lead (P0b browser calls). System write — the
  * webhook has no session — of a CALL event with what actually happened, plus
- * the same tries rule the desk uses for an unanswered attempt.
+ * the cadence rule in carrier.ts: an unanswered call (or one answered for
+ * under 20 s) advances the no-answer cadence; a longer one marks the lead
+ * reached and clears a cadence-only follow-up.
  *
  * Once per call: the event carries the call's id under a unique
- * (voiceCallId, type) key, so when two callbacks finish the same call at once
- * the second insert fails and its whole transaction (the tries update too)
- * rolls back.
+ * (voiceCallId, type) key and the lead update rides in the same transaction,
+ * so when two callbacks finish the same call at once the second insert fails
+ * and its whole transaction (the cadence step too) rolls back.
  *
  * A call whose result never arrived (the sweep's give-up: status 'unknown',
  * no outcome) is not guessed at: the trail says "Call result unknown" and the
  * lead's tries, next attempt and status stay as they were, for a rep to set.
  */
-export const CALL_RESULT_UNKNOWN = 'Call result unknown'
+export { CALL_RESULT_UNKNOWN }
 
 export async function recordCarrierCallFor(
   organizationId: string,
   leadId: string,
-  voiceCall: Pick<VoiceCall, 'id' | 'outcome' | 'status' | 'talkSeconds' | 'endedAt' | 'userId'>,
+  voiceCall: Pick<VoiceCall, 'id' | 'outcome' | 'status' | 'talkSeconds' | 'endedAt' | 'userId'> &
+    Partial<Pick<VoiceCall, 'startedAt'>>,
   at = new Date(),
 ): Promise<void> {
   const marker = `"voiceCallId":"${voiceCall.id}"`
@@ -500,55 +527,63 @@ export async function recordCarrierCallFor(
     select: { id: true },
   })
   if (already) return
-  const lead = await db.callCenterLead.findFirst({
+  const row = await db.callCenterLead.findFirst({
     where: { id: leadId, organizationId },
-    select: { tries: true, status: true, doNotCallAt: true },
+    select: {
+      id: true,
+      pageId: true,
+      source: true,
+      language: true,
+      status: true,
+      tries: true,
+      nextAttemptAt: true,
+      lockedBy: true,
+      doNotCallAt: true,
+      phoneLast4: true,
+      createdAt: true,
+      timeZone: true,
+      events: { orderBy: { createdAt: 'asc' as const }, select: { type: true, body: true, createdAt: true } },
+    },
   })
+  if (!row) return
+  // The trail says whether the follow-up is a callback and whether the rep
+  // already counted this call; the plan reads both from the desk's own lead.
+  const lead = callLeadsForDesk([toStored(row)], null)[0]
   if (!lead) return
-  const event = (detail: string) =>
-    db.callCenterEvent.create({
-      data: {
-        leadId,
-        type: 'CALL',
+  const plan = planCarrierCall(
+    lead,
+    row,
+    {
+      outcome: voiceCall.outcome,
+      status: voiceCall.status,
+      talkSeconds: voiceCall.talkSeconds,
+      startedAt: voiceCall.startedAt ?? null,
+      endedAt: voiceCall.endedAt,
+    },
+    at,
+  )
+  const event = db.callCenterEvent.create({
+    data: {
+      leadId,
+      type: 'CALL',
+      voiceCallId: voiceCall.id,
+      createdAt: voiceCall.endedAt ?? at,
+      body: JSON.stringify({
+        label: 'Call',
+        detail: plan.detail,
         voiceCallId: voiceCall.id,
-        createdAt: voiceCall.endedAt ?? at,
-        body: JSON.stringify({ label: 'Call', detail, voiceCallId: voiceCall.id, userId: voiceCall.userId ?? undefined }),
-      },
-    })
-  const unknown = !voiceCall.outcome || (voiceCall.status === 'unknown' && voiceCall.outcome !== 'CONNECTED')
-  if (unknown) {
-    try {
-      await event(CALL_RESULT_UNKNOWN)
-    } catch (err) {
-      if (!isUniqueViolation(err)) throw err
-    }
-    return
-  }
-  const talk = Math.max(0, voiceCall.talkSeconds ?? 0)
-  const clock = `${Math.floor(talk / 60)}:${String(talk % 60).padStart(2, '0')}`
-  const detail =
-    voiceCall.outcome === 'CONNECTED'
-      ? `Connected · ${clock}`
-      : voiceCall.outcome === 'BUSY'
-        ? 'Busy'
-        : voiceCall.outcome === 'FAILED'
-          ? 'The call failed'
-          : 'No answer'
-  const answered = voiceCall.outcome === 'CONNECTED'
-  const tries = answered ? lead.tries : lead.tries + 1
-  const nextAttemptAt = answered ? null : nextRetryAt(tries, (voiceCall.endedAt ?? at).toISOString())
-  try {
-    await db.$transaction([
-      event(detail),
-      db.callCenterLead.update({
-        where: { id: leadId },
-        data: {
-          tries,
-          nextAttemptAt: nextAttemptAt ? new Date(nextAttemptAt) : null,
-          ...(answered || lead.status === 'BOOKED' ? {} : { status: 'MISSED' as const }),
-        },
+        userId: voiceCall.userId ?? undefined,
+        ...(plan.followUp ? { followUp: plan.followUp } : {}),
+        ...(plan.connected ? { connected: true } : {}),
       }),
-    ])
+    },
+  })
+  try {
+    if (plan.update) {
+      await db.$transaction([event, db.callCenterLead.update({ where: { id: leadId }, data: plan.update })])
+    } else {
+      await event
+    }
   } catch (err) {
     // Another callback already recorded this call: nothing more to write.
     if (!isUniqueViolation(err)) throw err

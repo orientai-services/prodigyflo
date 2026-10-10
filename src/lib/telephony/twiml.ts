@@ -31,6 +31,10 @@ export const DEFAULT_GREETING = 'Thanks for calling. Please hold while we connec
 export const DEFAULT_VOICEMAIL_PROMPT =
   'Sorry we missed you. Leave your name, number, and a short message after the tone, and we will call you right back.'
 export const RECORDING_NOTICE = 'This call may be recorded for quality.'
+export const CALLBACK_PROMPT = 'To have us call you back, press 1. Or stay on the line to leave a message.'
+export const CALLBACK_CONFIRMED = 'Thank you. We will call you back as soon as we can. Goodbye.'
+/** Seconds the callback offer waits for a key before falling through to voicemail. */
+export const CALLBACK_GATHER_SECONDS = 5
 
 /** Seconds each leg rings before moving on. */
 export const RING_SECONDS = 20
@@ -83,9 +87,11 @@ export type VoiceRouteConfig = {
   childStatusUrl?: string
   /** Skip the spoken greeting (it was already said in an earlier stage). */
   skipGreeting?: boolean
+  /** Signed transcription callback for the voicemail; absent → no transcription. */
+  transcribeCallbackUrl?: string | null
 }
 
-function greetingFor(config: Pick<VoiceRouteConfig, 'greeting' | 'recordCalls' | 'skipGreeting'>): string {
+export function greetingFor(config: Pick<VoiceRouteConfig, 'greeting' | 'recordCalls' | 'skipGreeting'>): string {
   if (config.skipGreeting) return ''
   const greeting = config.greeting?.trim() || DEFAULT_GREETING
   const notice = config.recordCalls ? ` ${RECORDING_NOTICE}` : ''
@@ -202,6 +208,8 @@ export function voicemailTwiml(config: {
   greeting?: string | null
   recordCalls?: boolean
   skipGreeting?: boolean
+  /** Signed transcription callback; absent → no transcription (as before). */
+  transcribeCallbackUrl?: string | null
 }): string {
   return document(
     greetingFor({ greeting: config.greeting, recordCalls: Boolean(config.recordCalls), skipGreeting: config.skipGreeting }) +
@@ -210,17 +218,54 @@ export function voicemailTwiml(config: {
 }
 
 /**
+ * The end of a ring chain nobody answered: offer a callback, then voicemail.
+ *
+ * The <Gather> has no actionOnEmptyResult, so a timeout (or no key at all)
+ * falls straight through to the voicemail verbs that follow it in THIS
+ * document — the caller who stays on the line gets exactly today's voicemail
+ * without another round trip to us. Only a pressed key posts to the action
+ * route, which answers 1 with a confirmation and anything else with
+ * voicemail. After a ring chain there is no greeting or recording notice here:
+ * both were already said when the call was first answered. When the offer IS
+ * the first answer, the caller passes them in as `lead`.
+ */
+export function callbackOfferTwiml(config: {
+  gatherActionUrl: string
+  voicemailCallbackUrl: string
+  transcribeCallbackUrl?: string | null
+  /** Greeting + recording notice when the offer is the call's first answer (voicemail-only line, after hours). */
+  lead?: string
+}): string {
+  const gather = `<Gather ${attrs([
+    ['input', 'dtmf'],
+    ['numDigits', 1],
+    ['timeout', CALLBACK_GATHER_SECONDS],
+    ['action', config.gatherActionUrl],
+    ['method', 'POST'],
+  ])}>${say(CALLBACK_PROMPT)}</Gather>`
+  return document((config.lead ?? '') + gather + voicemailBody(config))
+}
+
+/** The caller pressed 1: confirm and hang up. */
+export function callbackConfirmedTwiml(): string {
+  return document(say(CALLBACK_CONFIRMED) + '<Hangup/>')
+}
+
+/**
  * `action` and `recordingStatusCallback` both point at the recording route
  * (kind=voicemail); it is idempotent on the RecordingSid, so the two posts
- * store one voicemail.
+ * store one voicemail. With a transcription URL, Twilio transcribes the
+ * message (English, recordings up to two minutes) and posts the text there.
  */
-function voicemailBody(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl'>): string {
+function voicemailBody(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl'> & { transcribeCallbackUrl?: string | null }): string {
+  const transcribe = Boolean(config.transcribeCallbackUrl)
   return (
     say(DEFAULT_VOICEMAIL_PROMPT) +
     `<Record ${attrs([
       ['maxLength', VOICEMAIL_MAX_SECONDS],
       ['playBeep', 'true'],
-      ['transcribe', 'false'],
+      ['transcribe', transcribe ? 'true' : 'false'],
+      ['transcribeCallback', transcribe ? config.transcribeCallbackUrl : null],
       ['action', config.voicemailCallbackUrl],
       ['method', 'POST'],
       ['recordingStatusCallback', config.voicemailCallbackUrl],

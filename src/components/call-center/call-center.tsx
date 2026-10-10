@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   recordCallCenterAttempt,
   recordCallCenterText,
@@ -14,6 +14,9 @@ import {
   takeCallCenterLead,
 } from '@/lib/call-center/actions'
 import type { DeskResult } from '@/lib/call-center/desk-types'
+import { leadIdOfTarget } from '@/lib/call-center/lead-link'
+import { todayBoard } from '@/lib/call-center/priority'
+import { SHORTCUTS, type DeskKeyAction } from '@/lib/call-center/shortcuts'
 import type { MissedCallVM, TwilioStatusVM } from '@/lib/telephony/voice-contract'
 import type { PhoneSetupVM } from '@/lib/telephony/ui/phone-setup-data'
 import { CallButton } from '@/components/voice/call-button'
@@ -41,6 +44,7 @@ import {
   channelLabel,
   formatWhen,
   inboundFormMatch,
+  isExhausted,
   languageLabel,
   lockLabel,
   nextCallableLead,
@@ -55,8 +59,14 @@ import {
   visibleLeads,
   type CallLead,
   type LanguageFilter,
+  type LeadOutcome,
   type LeadTab,
 } from '@/lib/call-center/model'
+import { CallbackScheduler } from './callback-scheduler'
+import { PowerBar, WrapUp } from './power-panel'
+import { TodayView } from './today-view'
+import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
+import { usePowerMode } from './use-power-mode'
 import '../final-desk/final-desk.css'
 import './call-center.css'
 
@@ -78,6 +88,8 @@ const TABS: { id: LeadTab; label: string }[] = [
   { id: 'retry', label: 'Retry' },
   { id: 'dnc', label: 'Do not call' },
 ]
+
+type DeskView = 'today' | 'list' | 'missed'
 
 function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (lead: CallLead) => void }) {
   return (
@@ -114,16 +126,20 @@ export function CallCenter({
   initialLeads,
   viewerId,
   phone = {},
+  renderedAt,
 }: {
   initialLeads?: CallLead[]
   viewerId?: string
   phone?: CallCenterPhone
+  /** The server's clock when it rendered, so the first Today ranking matches on both sides. */
+  renderedAt?: string
 }) {
   const router = useRouter()
   const voice = useVoice()
   const [draft, setDraft] = useState<{ source: CallLead[] | undefined; leads: CallLead[] } | null>(null)
   const [tab, setTab] = useState<LeadTab>('all')
-  const [missedView, setMissedView] = useState(Boolean(phone.openMissedId))
+  const [view, setView] = useState<DeskView>(phone.openMissedId ? 'missed' : 'today')
+  const missedView = view === 'missed'
   const [openMissedId, setOpenMissedId] = useState<string | null>(phone.openMissedId ?? null)
   const [language, setLanguage] = useState<LanguageFilter>('all')
   const [query, setQuery] = useState('')
@@ -134,12 +150,22 @@ export function CallCenter({
   const [note, setNote] = useState('')
   const [dial, setDial] = useState<{ leadId: string; phone: string | null; email: string | null } | null>(null)
   const [deskError, setDeskError] = useState<string | null>(null)
+  const [scheduling, setScheduling] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [help, setHelp] = useState(false)
+  /** The last ended call whose result is in (or that the rep left for later). */
+  const [wrappedSeq, setWrappedSeq] = useState(0)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const noteRef = useRef<HTMLTextAreaElement>(null)
+  const callRef = useRef<HTMLSpanElement>(null)
+  const clock = useDeskClock(renderedAt ? Date.parse(renderedAt) : 0)
   const leads = draft && draft.source === initialLeads ? draft.leads : (initialLeads ?? seedLeads())
 
   function replace(next: CallLead) {
-    setDraft({
-      source: initialLeads,
-      leads: leads.map((lead) => (lead.id === next.id ? next : lead)),
+    // Functional: power mode replaces leads from async steps.
+    setDraft((prev) => {
+      const base = prev && prev.source === initialLeads ? prev.leads : (initialLeads ?? seedLeads())
+      return { source: initialLeads, leads: base.map((lead) => (lead.id === next.id ? next : lead)) }
     })
   }
 
@@ -174,8 +200,49 @@ export function CallCenter({
     return false
   }
 
+  // ── Today ────────────────────────────────────────────────────────────────
+  const deskRep = leads.some((lead) => lead.persisted) ? (viewerId ?? '') : CURRENT_REP
+  const board = todayBoard(visibleLeads(leads, 'all', language, query), new Date(clock), deskRep)
+
+  // ── Wrap-up: the last call to a lead in this tab still owes a result ─────
+  const last = voice?.lastCall ?? null
+  const wrapLeadId = last ? leadIdOfTarget(last.target) : null
+  const wrapLead = wrapLeadId ? (leads.find((lead) => lead.id === wrapLeadId) ?? null) : null
+  // A result saved since the call started (here or in another tab) settles it.
+  const resulted = Boolean(
+    last && wrapLead?.trail.some((event) => event.kind === 'outcome' && Date.parse(event.at) >= last.endedAt - last.talkSeconds * 1000 - 120_000),
+  )
+  const wrapPending = Boolean(
+    last && wrapLead && wrapLead.persisted && !wrapLead.dnc && last.seq > wrappedSeq && !resulted && canRecordOutcome(wrapLead, repFor(wrapLead)),
+  )
+
+  async function takeForPower(lead: CallLead): Promise<string | null> {
+    if (lead.lockedBy && lead.lockedBy === viewerId) return null
+    const result = await takeCallCenterLead(lead.id)
+    if (!result.ok) return result.error
+    replace(result.lead)
+    return null
+  }
+
+  async function releaseForPower(lead: CallLead): Promise<void> {
+    const result = await skipCallCenterLead(lead.id)
+    if (result.ok) replace(result.lead)
+    router.refresh()
+  }
+
+  const power = usePowerMode({
+    voice,
+    ranked: board.ranked,
+    lastLeadId: wrapLeadId,
+    wrapPending,
+    take: takeForPower,
+    release: releaseForPower,
+    select: (lead) => openLead(lead),
+  })
+
   const rows = visibleLeads(leads, tab, language, query)
-  const selected = rows.find((lead) => lead.id === selectedId && !lead.disabled) ?? null
+  const pool = view === 'today' ? leads : rows
+  const selected = pool.find((lead) => lead.id === selectedId && !lead.disabled) ?? null
   const who = selected ? repFor(selected) : CURRENT_REP
   const quietBlocked = Boolean(selected && now && callNeedsConfirm(selected, now) && callAnywayId !== selected.id)
   const revealLeadId = selected?.persisted && viewerId && selected.lockedBy === viewerId && !selected.dnc
@@ -183,6 +250,8 @@ export function CallCenter({
     : null
   const dialPhone = revealLeadId && dial?.leadId === revealLeadId ? dial.phone : null
   const dialEmail = revealLeadId && dial?.leadId === revealLeadId ? dial.email : null
+  // Power mode: no new dial until the last call has its result.
+  const resultOwed = power.on && wrapPending
 
   useEffect(() => {
     if (!revealLeadId) return
@@ -224,6 +293,124 @@ export function CallCenter({
     jump()
   }
 
+  /** Callback without a time opens the scheduler; every other result saves now. */
+  async function recordOutcome(lead: CallLead, outcome: LeadOutcome, callbackAt?: string): Promise<boolean> {
+    if (outcome === 'callback' && !callbackAt) {
+      setScheduling(lead.id)
+      return false
+    }
+    setBusy(true)
+    try {
+      const ok = await commit(
+        lead,
+        () => saveCallCenterOutcome(lead.id, outcome, callbackAt ?? null),
+        () => replace(applyOutcome(lead, outcome, stamp(), CURRENT_REP, { callbackAt })),
+      )
+      if (ok) {
+        setScheduling(null)
+        if (wrapPending && last && wrapLead?.id === lead.id) {
+          setWrappedSeq(last.seq)
+          power.afterWrapUp()
+        }
+      }
+      return ok
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function scheduler(lead: CallLead) {
+    return (
+      <CallbackScheduler
+        key={lead.id}
+        name={lead.name}
+        zone={lead.timeZone}
+        now={clock || Date.parse(now ?? '') || 0}
+        busy={busy}
+        onSave={(at) => { void recordOutcome(lead, 'callback', at) }}
+        onCancel={() => setScheduling(null)}
+      />
+    )
+  }
+
+  /** J/K walk the list on screen: the Today ranking then its queues, or the open tab's rows. */
+  function step(dir: 1 | -1) {
+    const order: CallLead[] = []
+    const seen = new Set<string>()
+    const add = (lead: CallLead) => {
+      if (lead.disabled || seen.has(lead.id)) return
+      seen.add(lead.id)
+      order.push(lead)
+    }
+    if (view === 'today') {
+      board.ranked.forEach((row) => add(row.lead))
+      for (const items of Object.values(board.queues)) items.forEach((item) => add(item.lead))
+    } else {
+      rows.forEach(add)
+    }
+    if (!order.length) return
+    const index = order.findIndex((lead) => lead.id === selectedId)
+    const next = index === -1 ? order[dir === 1 ? 0 : order.length - 1] : order[(index + dir + order.length) % order.length]
+    openLead(next)
+  }
+
+  useDeskKeys((action: DeskKeyAction) => {
+    switch (action.kind) {
+      case 'help':
+        setHelp((open) => !open)
+        return true
+      case 'close':
+        if (help) setHelp(false)
+        else if (scheduling) setScheduling(null)
+        else return false
+        return true
+      case 'search':
+        searchRef.current?.focus()
+        return true
+      case 'next':
+        step(1)
+        return true
+      case 'prev':
+        step(-1)
+        return true
+      case 'call': {
+        // Press the lead's own Call button: the same server check, every time.
+        const button = callRef.current?.querySelector('button')
+        if (button && !button.disabled) button.click()
+        return Boolean(button)
+      }
+      case 'take':
+        if (selected && canTake(selected, who)) {
+          void commit(selected, () => takeCallCenterLead(selected.id), () => replace(takeLead(selected, CURRENT_REP, stamp())))
+        }
+        return Boolean(selected)
+      case 'outcome': {
+        const target = wrapPending ? wrapLead : selected
+        const item = OUTCOMES[action.index]
+        if (!target || !item || busy || !canRecordOutcome(target, repFor(target)) || !holding(target)) return false
+        void recordOutcome(target, item.id)
+        return true
+      }
+      case 'note':
+        noteRef.current?.focus()
+        return Boolean(noteRef.current)
+      case 'power':
+        if (!voice) return false
+        power.toggle()
+        return true
+      case 'pause':
+        if (power.phase !== 'countdown') return false
+        power.pause()
+        return true
+    }
+  })
+
+  const refresh = useCallback(() => router.refresh(), [router])
+  useLiveRefresh(refresh, () => {
+    if (busy || scheduling || power.phase === 'dialing') return false
+    return !voice || (voice.status === 'idle' && !voice.activeTarget && !voice.incoming)
+  })
+
   return (
     <div className="final-desk call-center">
       <div className="shell">
@@ -247,6 +434,7 @@ export function CallCenter({
             <label className="search">
               <span className="sr">Search leads</span>
               <input
+                ref={searchRef}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search leads"
@@ -266,6 +454,17 @@ export function CallCenter({
                   <option value="es">Spanish page later</option>
                 </select>
               </label>
+              <button
+                type="button"
+                className={`power-toggle${power.on ? ' on' : ''}`}
+                aria-pressed={power.on}
+                disabled={!voice}
+                title={voice ? 'Dial the next lead by itself after each result (P)' : 'Power mode needs browser calling.'}
+                onClick={power.toggle}
+              >
+                Power mode {power.on ? 'on' : 'off'}
+              </button>
+              <button type="button" className="keys-btn" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>?</button>
               <span className="voice">
                 {voice
                   ? voice.setup.mode === 'mock'
@@ -282,16 +481,38 @@ export function CallCenter({
               <h2>Call Center</h2>
               <p className="muted">{CALL_CENTER_COPY}</p>
             </div>
+            <PowerBar power={power} nameOf={(id) => leads.find((lead) => lead.id === id)?.name ?? null} />
+            {wrapPending && wrapLead && last ? (
+              <WrapUp
+                lead={wrapLead}
+                call={last}
+                required={power.on}
+                busy={busy}
+                error={deskError}
+                scheduler={scheduling === wrapLead.id ? scheduler(wrapLead) : null}
+                onOutcome={(outcome) => { void recordOutcome(wrapLead, outcome) }}
+                onLater={() => setWrappedSeq(last.seq)}
+              />
+            ) : null}
             <div className="filters" role="tablist" aria-label="Lead filters">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === 'today'}
+                className={view === 'today' ? 'on' : ''}
+                onClick={() => setView('today')}
+              >
+                Today
+              </button>
               {TABS.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   role="tab"
-                  aria-selected={!missedView && tab === item.id}
-                  className={!missedView && tab === item.id ? 'on' : ''}
+                  aria-selected={view === 'list' && tab === item.id}
+                  className={view === 'list' && tab === item.id ? 'on' : ''}
                   onClick={() => {
-                    setMissedView(false)
+                    setView('list')
                     setTab(item.id)
                   }}
                 >
@@ -303,7 +524,7 @@ export function CallCenter({
                 role="tab"
                 aria-selected={missedView}
                 className={missedView ? 'on' : ''}
-                onClick={() => setMissedView(true)}
+                onClick={() => setView('missed')}
               >
                 Missed{missed.length ? ` (${missed.length})` : ''}
               </button>
@@ -314,6 +535,9 @@ export function CallCenter({
               </div>
             ) : (
             <div className="split">
+              {view === 'today' ? (
+                <TodayView board={board} rep={repFor} selectedId={selectedId} onOpen={openLead} />
+              ) : (
               <div className="card">
                 <table>
                   <thead>
@@ -344,6 +568,7 @@ export function CallCenter({
                 </table>
                 {!rows.length && <p className="block muted">No leads in this view.</p>}
               </div>
+              )}
               <article className="card block">
                 {selected ? (
                   <>
@@ -367,6 +592,9 @@ export function CallCenter({
                       {nextTryLine(selected) ? <div><dt>Next try</dt><dd>{nextTryLine(selected)}</dd></div> : null}
                       {inboundFormMatch(selected, leads) ? <div><dt>Match</dt><dd>{inboundFormMatch(selected, leads)}</dd></div> : null}
                     </dl>
+                    {isExhausted(selected) ? (
+                      <div className="banner" role="status">No further tries. Close it with Not interested or Wrong number.</div>
+                    ) : null}
                     {selected.missedCallId ? (
                       <div className="banner" role="status">
                         <button
@@ -374,7 +602,7 @@ export function CallCenter({
                           className="linkish"
                           onClick={() => {
                             setOpenMissedId(selected.missedCallId ?? null)
-                            setMissedView(true)
+                            setView('missed')
                           }}
                         >
                           Missed call waiting. Open it.
@@ -402,31 +630,33 @@ export function CallCenter({
                     </div>
                     <h3>Contact</h3>
                     <div className="actions">
-                      {selected.persisted ? (
-                        <CallButton
-                          key={selected.id}
-                          appearance="desk"
-                          target={{ kind: 'lead', id: selected.id }}
-                          tel={dialPhone}
-                          who={selected.name}
-                          canOverrideHours={phone.canOverrideHours}
-                          disabled={!canCall(selected, who) || !holding(selected)}
-                          onDialed={(via) => {
-                            // A browser call is written by the carrier webhooks; only the
-                            // tel: flow records its own attempt.
-                            if (via === 'tel') void commit(selected, () => recordCallCenterAttempt(selected.id), () => {})
-                          }}
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={!canCall(selected, who) || !holding(selected) || quietBlocked}
-                          onClick={() => replace(applyLeadAction(selected, 'call', stamp()))}
-                        >
-                          Call
-                        </button>
-                      )}
+                      <span ref={callRef} className="call-slot">
+                        {selected.persisted ? (
+                          <CallButton
+                            key={selected.id}
+                            appearance="desk"
+                            target={{ kind: 'lead', id: selected.id }}
+                            tel={dialPhone}
+                            who={selected.name}
+                            canOverrideHours={phone.canOverrideHours}
+                            disabled={!canCall(selected, who) || !holding(selected) || resultOwed}
+                            onDialed={(via) => {
+                              // A browser call is written by the carrier webhooks; only the
+                              // tel: flow records its own attempt.
+                              if (via === 'tel') void commit(selected, () => recordCallCenterAttempt(selected.id), () => {})
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={!canCall(selected, who) || !holding(selected) || quietBlocked}
+                            onClick={() => replace(applyLeadAction(selected, 'call', stamp()))}
+                          >
+                            Call
+                          </button>
+                        )}
+                      </span>
                       <button
                         type="button"
                         className="btn secondary"
@@ -436,22 +666,27 @@ export function CallCenter({
                         Text
                       </button>
                     </div>
+                    {resultOwed ? <p className="muted">Pick a result for the last call first.</p> : null}
                     {selected.persisted ? <p className="muted">Texting leads isn&rsquo;t live yet.</p> : null}
                     {now && textHeldUntilMorning(selected, now) ? <p className="muted">{HELD_UNTIL_MORNING}</p> : null}
                     <h3>Result</h3>
-                    <div className="actions">
-                      {OUTCOMES.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="btn secondary"
-                          disabled={!canRecordOutcome(selected, who) || !holding(selected)}
-                          onClick={() => { void commit(selected, () => saveCallCenterOutcome(selected.id, item.id), () => replace(applyOutcome(selected, item.id, stamp()))) }}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
+                    {scheduling === selected.id && !(wrapPending && wrapLead?.id === selected.id) ? (
+                      scheduler(selected)
+                    ) : (
+                      <div className="actions">
+                        {OUTCOMES.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className="btn secondary"
+                            disabled={busy || !canRecordOutcome(selected, who) || !holding(selected)}
+                            onClick={() => { void recordOutcome(selected, item.id) }}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <h3>Handoff</h3>
                     <div className="actions">
                       <button
@@ -465,6 +700,7 @@ export function CallCenter({
                     </div>
                     <h3>Note</h3>
                     <textarea
+                      ref={noteRef}
                       className="note"
                       value={note}
                       placeholder="Note on this attempt"
@@ -499,6 +735,9 @@ export function CallCenter({
                           {event.recording ? (
                             <RecordingPlayer src={event.recording.src} seconds={event.recording.seconds} className="mt-1.5" />
                           ) : null}
+                          {event.recording?.transcript ? (
+                            <blockquote className="muted transcript">&ldquo;{event.recording.transcript}&rdquo;</blockquote>
+                          ) : null}
                         </li>
                       ))}
                     </ol>
@@ -506,7 +745,11 @@ export function CallCenter({
                 ) : (
                   <>
                     <h2 className="who">Select a lead</h2>
-                    <p className="muted">Click a row. The Spanish page placeholder stays disabled.</p>
+                    <p className="muted">
+                      {view === 'today'
+                        ? 'Pick someone from Call first or a queue. Press ? for keyboard shortcuts.'
+                        : 'Click a row. The Spanish page placeholder stays disabled.'}
+                    </p>
                   </>
                 )}
               </article>
@@ -515,6 +758,25 @@ export function CallCenter({
           </main>
         </div>
       </div>
+      {help ? (
+        <div className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={() => setHelp(false)}>
+          <div className="card block" onClick={(event) => event.stopPropagation()}>
+            <h3>Keyboard shortcuts</h3>
+            <p className="muted">They work anywhere on the desk except while you are typing.</p>
+            <dl>
+              {SHORTCUTS.map((row) => (
+                <div key={row.keys}>
+                  <dt><kbd>{row.keys}</kbd></dt>
+                  <dd>{row.what}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="actions">
+              <button type="button" className="btn secondary" onClick={() => setHelp(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

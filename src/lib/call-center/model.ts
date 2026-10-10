@@ -2,7 +2,12 @@
  * Door 2 preview data. Facebook ad forms and calls to the number on those ads.
  * Nothing here is an SCS intake client, and nothing here dials a carrier.
  * Outcomes, the retry clock, the lock, and quiet hours are in-memory rules.
+ * The no-answer cadence itself lives in cadence.ts.
  */
+
+import { TRY_LIMIT, cadenceExhausted, nextCadenceAt, validateCallbackAt, zonedLabel } from './cadence'
+
+export { TRY_LIMIT }
 
 export const CALL_CENTER_COPY =
   'Ad form fills and inbound on the ad number. Not the SCS intake journey.'
@@ -17,10 +22,8 @@ export const INTAKE_QUEUED = 'SCS intake link queued · not a Client until they 
 
 export const CURRENT_REP = 'You'
 
-export const TRY_LIMIT = 4
-
-/** Days until the next try after attempt 1, 2, and 3. Attempt 4 stops. */
-export const RETRY_DELAY_DAYS = [1, 3, 7] as const
+/** Trail detail on a result that moved the lead to booked (the Today view counts these). */
+export const BOOKED_DETAIL = 'Moved to booked'
 
 const RECENT_FORM_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -54,13 +57,28 @@ export const OUTCOMES: { id: LeadOutcome; label: string }[] = [
   { id: 'do_not_call', label: 'Do not call' },
 ]
 
+/**
+ * Why a lead has a next attempt: the rep agreed a time with them ('callback'),
+ * or the no-answer cadence set it ('cadence'). An answered call clears only
+ * the cadence kind.
+ */
+export type FollowUp = 'callback' | 'cadence'
+
 export type TrailEvent = {
   kind: TrailKind
   at: string
   label: string
   detail: string
+  /**
+   * What this event did to the follow-up. 'cadence' on a call or result means
+   * it counted as an unanswered attempt; 'none' means it cleared the follow-up.
+   * Absent on events that left it alone (and on rows written before this).
+   */
+  followUp?: FollowUp | 'none'
+  /** A carrier call that was answered for CONNECTED_SECONDS or more. */
+  connected?: boolean
   /** A real recording (voicemail or recorded call), played through /api/voice/recordings/<id>. */
-  recording?: { src: string; seconds: number }
+  recording?: { src: string; seconds: number; transcript?: string | null }
 }
 
 /** Seed data only. Real calls carry TrailEvent.recording instead. */
@@ -97,6 +115,12 @@ export type CallLead = {
   timeZone: string
   /** The newest unhandled missed call from this lead (VoiceCall id), for "Call back" / ?missed=. */
   missedCallId?: string
+  /** When that missed call came in. */
+  missedCallAt?: string
+  /** They pressed 1 for a callback on that missed call. */
+  callbackRequested?: boolean
+  /** Why nextAttemptAt is set. Derived from the trail; see followUpOf. */
+  followUp?: FollowUp | null
 }
 
 export const ZONE = 'America/Los_Angeles'
@@ -405,9 +429,48 @@ export function triesLine(lead: CallLead): string {
 }
 
 export function nextTryLine(lead: CallLead): string | null {
-  if (lead.nextAttemptAt) return `Next try ${formatWhen(lead.nextAttemptAt)}`
-  if (lead.tries >= TRY_LIMIT) return 'No further tries'
+  if (lead.nextAttemptAt) return `${followUpOf(lead) === 'callback' ? 'Call back' : 'Next try'} ${formatWhen(lead.nextAttemptAt)}`
+  if (cadenceExhausted(lead.tries)) return 'No further tries'
   return null
+}
+
+/** Out of cadence tries with nothing booked: the desk suggests closing it. */
+export function isExhausted(lead: CallLead): boolean {
+  return cadenceExhausted(lead.tries) && !lead.nextAttemptAt && !lead.dnc && lead.status !== 'booked'
+}
+
+/**
+ * Why the lead has a next attempt. The newest trail event that says wins;
+ * rows written before the marker existed fall back to "tries > 0 means the
+ * cadence set it".
+ */
+export function deriveFollowUp(trail: readonly TrailEvent[], tries: number, nextAttemptAt: string | null): FollowUp | null {
+  if (!nextAttemptAt) return null
+  for (let i = trail.length - 1; i >= 0; i -= 1) {
+    const mark = trail[i].followUp
+    if (mark === 'callback' || mark === 'cadence') return mark
+    if (mark === 'none') break
+  }
+  return tries > 0 ? 'cadence' : 'callback'
+}
+
+export function followUpOf(lead: CallLead): FollowUp | null {
+  if (!lead.nextAttemptAt) return null
+  return lead.followUp ?? deriveFollowUp(lead.trail, lead.tries, lead.nextAttemptAt)
+}
+
+/**
+ * The newest call-or-result on the trail is a carrier call that already
+ * counted this attempt, so a result the rep picks now must not count it
+ * again (the carrier and the rep both report the same call).
+ */
+export function attemptAlreadyCounted(lead: CallLead): boolean {
+  for (let i = lead.trail.length - 1; i >= 0; i -= 1) {
+    const event = lead.trail[i]
+    if (event.kind === 'outcome') return false
+    if (event.kind === 'call') return event.followUp === 'cadence'
+  }
+  return false
 }
 
 export function autoTextDetail(language: LeadLanguage): string {
@@ -473,17 +536,6 @@ export function canRecordOutcome(lead: CallLead, rep = CURRENT_REP): boolean {
 
 export function canSaveNote(lead: CallLead, rep = CURRENT_REP): boolean {
   return !lead.disabled && !lockedToOther(lead, rep)
-}
-
-export function retryDelayDays(tries: number): number | null {
-  if (tries < 1 || tries > RETRY_DELAY_DAYS.length) return null
-  return RETRY_DELAY_DAYS[tries - 1]
-}
-
-export function nextRetryAt(tries: number, at: string): string | null {
-  const days = retryDelayDays(tries)
-  if (days == null) return null
-  return new Date(Date.parse(at) + days * 24 * 60 * 60 * 1000).toISOString()
 }
 
 export function visibleLeads(
@@ -565,35 +617,61 @@ export function applyLeadAction(lead: CallLead, action: LeadAction, at: string, 
   return next
 }
 
-export function applyOutcome(lead: CallLead, outcome: LeadOutcome, at: string, rep = CURRENT_REP): CallLead {
+export type OutcomeOptions = {
+  /** Callback only: the agreed time (ISO). Must be in the future and within 60 days. */
+  callbackAt?: string | null
+}
+
+const UNANSWERED: readonly LeadOutcome[] = ['no_answer', 'busy', 'voicemail']
+
+export function isOutcome(value: unknown): value is LeadOutcome {
+  return typeof value === 'string' && OUTCOMES.some((item) => item.id === value)
+}
+
+export function applyOutcome(
+  lead: CallLead,
+  outcome: LeadOutcome,
+  at: string,
+  rep = CURRENT_REP,
+  options: OutcomeOptions = {},
+): CallLead {
   if (!canRecordOutcome(lead, rep)) return lead
   const label = OUTCOMES.find((item) => item.id === outcome)?.label ?? outcome
+  const callbackAt = outcome === 'callback' && options.callbackAt ? options.callbackAt : null
+  if (callbackAt && !validateCallbackAt(callbackAt, new Date(at)).ok) return lead
   const next = cloneLead(lead)
   next.contacted = true
   if (outcome === 'talked' || outcome === 'appointment') {
     next.status = 'booked'
     next.nextAttemptAt = null
-    pushTrail(next, { kind: 'outcome', at, label, detail: 'Moved to booked' })
+    next.followUp = null
+    pushTrail(next, { kind: 'outcome', at, label, detail: BOOKED_DETAIL, followUp: 'none' })
     return next
   }
   if (outcome === 'do_not_call') {
     next.status = 'dnc'
     next.dnc = true
     next.nextAttemptAt = null
-    pushTrail(next, { kind: 'outcome', at, label, detail: 'Added to Do not call' })
+    next.followUp = null
+    pushTrail(next, { kind: 'outcome', at, label, detail: 'Added to Do not call', followUp: 'none' })
     return next
   }
-  if (outcome === 'no_answer' || outcome === 'busy' || outcome === 'voicemail') {
-    if (lead.tries >= TRY_LIMIT) return lead
-    const tries = next.tries + 1
-    next.tries = tries
-    next.status = 'retry'
-    next.nextAttemptAt = nextRetryAt(tries, at)
+  if (UNANSWERED.includes(outcome)) {
+    const counted = attemptAlreadyCounted(lead)
+    if (!counted && cadenceExhausted(lead.tries)) return lead
+    if (!counted) {
+      next.tries += 1
+      next.nextAttemptAt = nextCadenceAt(next.tries, at, next.timeZone)
+      next.followUp = next.nextAttemptAt ? 'cadence' : null
+    }
+    next.status = next.nextAttemptAt ? 'retry' : next.status === 'retry' ? 'waiting' : next.status
     pushTrail(next, {
       kind: 'outcome',
       at,
       label,
-      detail: next.nextAttemptAt ? `Next try ${next.nextAttemptAt}` : 'No further tries',
+      detail: next.nextAttemptAt ? `Next try ${formatWhen(next.nextAttemptAt)}` : 'No further tries',
+      // A result for a call the carrier already counted leaves the cadence alone.
+      ...(counted ? {} : { followUp: 'cadence' as const }),
     })
     if (outcome === 'no_answer') {
       pushTrail(next, {
@@ -605,9 +683,23 @@ export function applyOutcome(lead: CallLead, outcome: LeadOutcome, at: string, r
     }
     return next
   }
+  if (callbackAt) {
+    next.nextAttemptAt = new Date(callbackAt).toISOString()
+    next.followUp = 'callback'
+    next.status = next.tries > 0 ? 'retry' : next.status === 'retry' ? 'waiting' : next.status
+    pushTrail(next, {
+      kind: 'outcome',
+      at,
+      label,
+      detail: `Call back ${zonedLabel(next.nextAttemptAt, next.timeZone)} their time`,
+      followUp: 'callback',
+    })
+    return next
+  }
   if (next.status === 'retry') next.status = 'waiting'
   next.nextAttemptAt = null
-  pushTrail(next, { kind: 'outcome', at, label, detail: 'Result recorded' })
+  next.followUp = null
+  pushTrail(next, { kind: 'outcome', at, label, detail: 'Result recorded', followUp: 'none' })
   return next
 }
 

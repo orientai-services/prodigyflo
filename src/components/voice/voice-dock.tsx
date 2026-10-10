@@ -1,17 +1,42 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Grid3x3, Mic, MicOff, PhoneOff, Settings2, X } from 'lucide-react'
+import { Bell, BellOff, Grid3x3, Mic, MicOff, PhoneOff, Settings2, X } from 'lucide-react'
 import { clockLabel } from '@/lib/telephony/ui/result'
 import { AudioSettings } from './audio-settings'
+import { ConnectionTest } from './connection-test'
 import { useVoice } from './voice-provider'
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'] as const
 
+// "On call 1:23 · " in front of the page's own title, so the talk time shows
+// on the tab while the rep works in another one. Stripped and re-added each
+// tick, so a page that changes its title mid-call keeps its new title.
+const TITLE_PREFIX = /^On call \d+:\d{2} · /
+
+const LIGHT: Record<'good' | 'warn' | 'bad', { dot: string; text: string; label: string }> = {
+  good: {
+    dot: 'bg-emerald-500',
+    text: 'text-muted-foreground',
+    label: 'Call quality is good',
+  },
+  warn: {
+    dot: 'bg-amber-500',
+    text: 'text-amber-800 dark:text-amber-300',
+    label: 'Call quality is shaky',
+  },
+  bad: {
+    dot: 'bg-red-500',
+    text: 'text-red-700 dark:text-red-300',
+    label: 'Call quality is poor',
+  },
+}
+
 /**
  * The call bar: bottom right on a desk, a full-width bottom sheet on a phone.
  * Idle it is a small pill that says whether this tab rings; during a call it
- * shows who, the talk timer, mute, keypad and hang up. Errors stay until
+ * shows who, the talk timer, the quality light (one tip when it isn't
+ * green), mute, keypad and hang up. Errors stay until
  * dismissed, in plain words, because a rep who looked away must still learn
  * why the call dropped.
  */
@@ -28,14 +53,28 @@ export function VoiceDock() {
     return () => window.clearInterval(timer)
   }, [answeredAt])
 
+  // Talk timer in the tab title during a call.
+  const inCall = voice?.status === 'in-call' && answeredAt !== null
+  const talk = inCall ? clockLabel((now - answeredAt) / 1000) : null
+  useEffect(() => {
+    if (!talk) return
+    document.title = `On call ${talk} · ${document.title.replace(TITLE_PREFIX, '')}`
+  }, [talk])
+  useEffect(() => {
+    if (inCall) return
+    if (TITLE_PREFIX.test(document.title)) document.title = document.title.replace(TITLE_PREFIX, '')
+  }, [inCall])
+
   if (!voice) return null
   const { setup, status, leader, registered } = voice
   const busy = status !== 'idle'
   const showKeypad = keypad && status === 'in-call'
+  const quality = status === 'in-call' ? voice.callQuality : null
+  const light = quality ? LIGHT[quality.level] : null
 
   const stateLine = busy
     ? status === 'in-call'
-      ? `On a call · ${clockLabel(answeredAt ? (now - answeredAt) / 1000 : 0)}`
+      ? `On a call · ${clockLabel(answeredAt ? (now - answeredAt) / 1000 : 0)}${quality?.mos ? ` · MOS ${quality.mos.toFixed(1)}` : ''}`
       : status === 'ringing'
         ? 'Ringing…'
         : 'Connecting…'
@@ -55,15 +94,23 @@ export function VoiceDock() {
         <span
           className={[
             'size-2 shrink-0 rounded-full',
-            busy ? 'bg-emerald-500' : leader && registered ? 'bg-sky-500' : 'bg-muted-foreground/40',
+            light ? light.dot : busy ? 'bg-emerald-500' : leader && registered ? 'bg-sky-500' : 'bg-muted-foreground/40',
           ].join(' ')}
-          aria-hidden
+          role={light ? 'img' : undefined}
+          aria-label={light?.label}
+          aria-hidden={light ? undefined : true}
+          title={light ? `${light.label}. MOS is a 1 to 4.5 score; above 4 sounds clear.` : undefined}
         />
         <div className="min-w-0 flex-1">
           {voice.who && busy && <p className="truncate text-sm font-medium">{voice.who}</p>}
           <p className="text-muted-foreground truncate text-xs" aria-live="polite">
             {stateLine}
           </p>
+          {quality?.tip && light && (
+            <p className={`text-xs leading-snug ${light.text}`} role="status">
+              {quality.tip}
+            </p>
+          )}
         </div>
         {busy ? (
           <>
@@ -97,15 +144,29 @@ export function VoiceDock() {
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            aria-label="Phone settings"
-          >
-            <Settings2 className="size-4" />
-          </button>
+          <>
+            {leader && (
+              <button
+                type="button"
+                className="hover:bg-muted text-muted-foreground inline-flex size-8 items-center justify-center rounded-md"
+                onClick={() => voice.setRingtoneMuted(!voice.ringtoneMuted)}
+                aria-pressed={voice.ringtoneMuted}
+                aria-label={voice.ringtoneMuted ? 'Turn the ringtone on' : 'Mute the ringtone'}
+                title={voice.ringtoneMuted ? 'Ringtone off. Incoming calls still show here.' : 'Ringtone on'}
+              >
+                {voice.ringtoneMuted ? <BellOff className="size-4" /> : <Bell className="size-4" />}
+              </button>
+            )}
+            <button
+              type="button"
+              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              aria-label="Phone settings"
+            >
+              <Settings2 className="size-4" />
+            </button>
+          </>
         )}
       </div>
 
@@ -179,6 +240,7 @@ export function VoiceDock() {
             <p className="text-muted-foreground text-xs">This account has no phone line yet.</p>
           )}
           <AudioSettings />
+          <ConnectionTest />
           {setup.recordOutbound && (
             <p className="text-muted-foreground text-xs">
               Calls are recorded. People hear &ldquo;This call may be recorded&rdquo; when they answer.

@@ -15,6 +15,8 @@ export type BusinessHours = { days: number[]; start: string; end: string }
 
 export type TelephonySettings = {
   recordOutbound: boolean
+  /** Twilio transcribes voicemails (default on; only an explicit false turns it off). */
+  transcribeVoicemail: boolean
   callWindow: CallWindow
   businessHours: BusinessHours | null
   consentForms: Record<string, string>
@@ -40,6 +42,7 @@ export function readTelephonySettings(settings: unknown): TelephonySettings {
   const a2p = obj(t.a2p)
   return {
     recordOutbound: t.recordOutbound === true,
+    transcribeVoicemail: t.transcribeVoicemail !== false,
     callWindow: clampWindow({
       start: typeof window.start === 'number' ? window.start : undefined,
       end: typeof window.end === 'number' ? window.end : undefined,

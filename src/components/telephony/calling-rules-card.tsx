@@ -138,6 +138,21 @@ export function CallingRulesCard({
               />
             </label>
 
+            <label className="flex items-start justify-between gap-4">
+              <span>
+                <span className="block text-sm font-medium">Transcribe voicemails</span>
+                <span className="text-muted-foreground block text-xs">
+                  Twilio writes out each voicemail (English, up to two minutes). The text shows under the voicemail.
+                </span>
+              </span>
+              <Switch
+                checked={rules.transcribeVoicemail !== false}
+                disabled={!canManage || pending}
+                onCheckedChange={(checked) => setRules({ ...rules, transcribeVoicemail: checked })}
+                aria-label="Transcribe voicemails"
+              />
+            </label>
+
             <div className="flex flex-wrap items-end gap-3">
               <label className="grid gap-1 text-sm">
                 <span className="text-muted-foreground text-xs">Calls start</span>

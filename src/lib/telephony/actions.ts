@@ -30,6 +30,7 @@ import type {
   DialCheck,
   DialTarget,
   MissedCallVM,
+  MissedDisposition,
   SuppressionVM,
   SyncPreviewVM,
   SyncResultVM,
@@ -173,19 +174,39 @@ export async function listMissedCalls(): Promise<MissedCallVM[]> {
   return listMissed(user)
 }
 
-export async function markMissedCallHandled(id: string, note?: string): Promise<NumberActionResult> {
+/**
+ * Close a missed call: `{ disposition, note }` (called_back | no_answer | spam
+ * | wrong_number | handled). A bare string is still read as the note, with
+ * disposition 'handled'. Every earlier pending missed call from the same
+ * number in the org closes with it.
+ */
+export async function markMissedCallHandled(
+  id: string,
+  input?: { disposition?: MissedDisposition; note?: string } | string,
+): Promise<NumberActionResult> {
   const user = await requireUser()
   if (typeof id !== 'string' || !id) return fail('That call is not on your list.')
-  const res = await markHandled(user, id, note)
+  const opts = typeof input === 'string' || input == null ? { note: input } : input
+  const note = typeof opts.note === 'string' ? opts.note : undefined
+  const disposition = opts.disposition ?? 'handled'
+  const res = await markHandled(user, id, { disposition, note })
   if (!res.ok) return fail(res.error)
   await recordAudit(user, {
     action: 'telephony.missed_handled',
     entityType: 'VoiceCall',
     entityId: id,
-    summary: 'Missed call marked handled',
-    after: { note: note?.trim().slice(0, 200) || null },
+    summary: `Missed call closed: ${DISPOSITION_WORDS[disposition] ?? disposition}${res.cleared ? ` (and ${res.cleared} earlier from the same number)` : ''}`,
+    after: { disposition, note: note?.trim().slice(0, 200) || null, cleared: res.cleared },
   })
   return { ok: true }
+}
+
+const DISPOSITION_WORDS: Record<MissedDisposition, string> = {
+  called_back: 'called back',
+  no_answer: 'no answer',
+  spam: 'spam',
+  wrong_number: 'wrong number',
+  handled: 'handled',
 }
 
 // ── Numbers at the carrier ───────────────────────────────────────────────────
@@ -624,7 +645,12 @@ export async function setContactTimeZone(input: { target: DialTarget; zone: stri
 export async function getCallingRules(): Promise<CallingRulesVM | Fail> {
   const user = await requireUser()
   const settings = await telephonySettingsFor(user.organizationId)
-  return { recordOutbound: settings.recordOutbound, windowStart: settings.callWindow.start, windowEnd: settings.callWindow.end }
+  return {
+    recordOutbound: settings.recordOutbound,
+    windowStart: settings.callWindow.start,
+    windowEnd: settings.callWindow.end,
+    transcribeVoicemail: settings.transcribeVoicemail,
+  }
 }
 
 export async function saveCallingRules(rules: CallingRulesVM): Promise<NumberActionResult> {
@@ -645,14 +671,17 @@ export async function saveCallingRules(rules: CallingRulesVM): Promise<NumberAct
     }
   }
   const before = await telephonySettingsFor(user.organizationId)
-  await saveTelephonySettings(user.organizationId, { recordOutbound, callWindow: window })
+  // Absent (an older form) leaves voicemail transcription as it is.
+  const transcribeVoicemail =
+    typeof rules?.transcribeVoicemail === 'boolean' ? rules.transcribeVoicemail : before.transcribeVoicemail
+  await saveTelephonySettings(user.organizationId, { recordOutbound, callWindow: window, transcribeVoicemail })
   await recordAudit(user, {
     action: 'telephony.calling_rules_saved',
     entityType: 'Organization',
     entityId: user.organizationId,
-    summary: `Calling rules saved (${window.start}:00–${window.end}:00${recordOutbound ? ', outbound recording on' : ''})`,
-    before: { recordOutbound: before.recordOutbound, callWindow: before.callWindow },
-    after: { recordOutbound, callWindow: window },
+    summary: `Calling rules saved (${window.start}:00–${window.end}:00${recordOutbound ? ', outbound recording on' : ''}${transcribeVoicemail ? '' : ', voicemail transcription off'})`,
+    before: { recordOutbound: before.recordOutbound, callWindow: before.callWindow, transcribeVoicemail: before.transcribeVoicemail },
+    after: { recordOutbound, callWindow: window, transcribeVoicemail },
   })
   return { ok: true }
 }
