@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { signIn } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { homeFor } from '@/lib/permissions'
+import { landingAfterLogin } from '@/lib/staff-routes'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email address.'),
@@ -27,21 +28,19 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     return { fieldErrors }
   }
 
-  const next = formData.get('next')
-  let redirectTo = typeof next === 'string' && next.startsWith('/') ? next : null
-
-  if (!redirectTo) {
-    // Land each role on the home that suits it. Email uniqueness is global
-    // (src/lib/invites.ts), so this matches at most one live user; orderBy is
-    // a determinism backstop keeping this lookup and authorize() in
-    // src/lib/auth.ts agreed on the same row if duplicates ever existed.
-    const user = await db.user.findFirst({
-      where: { email: parsed.data.email.toLowerCase().trim(), deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      select: { role: { select: { key: true } }, landingPath: true },
-    })
-    redirectTo = user ? homeFor({ role: user.role.key, landingPath: user.landingPath }) : '/board'
-  }
+  // Land each role on the home that suits it. Email uniqueness is global
+  // (src/lib/invites.ts), so this matches at most one live user; orderBy is
+  // a determinism backstop keeping this lookup and authorize() in
+  // src/lib/auth.ts agreed on the same row if duplicates ever existed.
+  const user = await db.user.findFirst({
+    where: { email: parsed.data.email.toLowerCase().trim(), deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+    select: { role: { select: { key: true } }, landingPath: true },
+  })
+  const home = user ? homeFor({ role: user.role.key, landingPath: user.landingPath }) : '/board'
+  // `?next=` is honoured only when this role may open it; otherwise the rep
+  // would sign in straight into /forbidden.
+  const redirectTo = user ? landingAfterLogin(user.role.key, formData.get('next'), home) : home
 
   try {
     await signIn('credentials', { ...parsed.data, redirectTo })

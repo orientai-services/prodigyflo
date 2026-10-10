@@ -31,7 +31,10 @@ export async function GET(_req: Request, ctx: RouteContext<'/manifest/[slug]'>) 
     {
       name: brand.name,
       short_name: brand.shortName,
-      start_url: '/dashboard',
+      // The root page sends each role to its own home. `/dashboard` used to be
+      // here, and the final desk hides that page, so the installed app opened
+      // on "You don't have access to this".
+      start_url: '/',
       scope: '/',
       display: 'standalone',
       theme_color: brand.themeColor,
