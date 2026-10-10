@@ -84,6 +84,7 @@ export function resolveCaseFacts(client: CaseFactSource, cys: { values: Reviewed
     ?? (!isPpaOrLease ? fact('finance_agreement', 'first_year_monthly_payment') : null)
     ?? fact('solar_contract', 'monthly_payment')
     ?? fact('solar_contract', 'first_year_monthly_payment')
+    ?? (isPpaOrLease ? fact('finance_agreement', 'monthly_payment') ?? fact('finance_agreement', 'first_year_monthly_payment') : null)
     ?? typed(['monthly_payment', 'monthly_guess', 'monthly_solar_payment'])
   const firstYearFact = fact('solar_contract', 'first_year_monthly_payment') ?? fact('finance_agreement', 'first_year_monthly_payment')
   const basisFact = fact('solar_contract', 'payment_basis')

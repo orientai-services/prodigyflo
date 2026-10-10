@@ -49,6 +49,11 @@ describe('PF evidence field mapping',()=>{
   expect(typeFor(lender,{sourceDocumentType:'loan_or_til',sourceFileName:'Goodleap Loan Agreement Solar Panels.pdf'})).toBe('finance_agreement')
   expect(typeFor(lender,{sourceFileName:'Mosaic Loan Agreement.pdf'})).toBe('finance_agreement')
  })
+ it('slots a Sunrun PPA to solar_contract when the packet tag is loan_or_til',()=>{
+  const sunrun={...doc,classification:['ppa'],fields:{agreement_type:{...fact,value:'ppa'},lender_servicer:{...fact,value:'Sunrun'}}}
+  expect(typeFor(sunrun,{sourceDocumentType:'loan_or_til',sourceFileName:'agreement-custom.pdf'})).toBe('solar_contract')
+  expect(typeFor({...doc,classification:['loan'],fields:{agreement_type:{...fact,value:'loan'}}},{sourceDocumentType:'loan_or_til',sourceFileName:'agreement-custom.pdf'})).toBe('finance_agreement')
+ })
  it('keeps a lease packet on solar_contract when a federal leasing disclosure page is classified til',()=>{
   const lease={...doc,classification:['lease','warranty','til','other'],fields:{
     agreement_type:{...fact,value:'lease'},
