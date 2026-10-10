@@ -102,7 +102,7 @@ export function PowerBar({ power, nameOf }: { power: PowerMode; nameOf: (id: str
         <button
           type="button"
           className="btn secondary"
-          disabled={power.phase !== 'countdown'}
+          disabled={power.phase !== 'countdown' && power.phase !== 'dialing'}
           aria-pressed={power.paused}
           onClick={power.pause}
         >

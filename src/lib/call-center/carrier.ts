@@ -62,13 +62,15 @@ function unansweredDetail(call: CarrierCall): string {
 }
 
 /**
- * The rep already recorded an unanswered result for this call: a counting
- * OUTCOME at or after the moment the call started.
+ * The rep already recorded a result for this call: any OUTCOME at or after the
+ * moment the call started. The rep's word wins over the carrier's clock: a
+ * 15-second call where they agreed "call me tomorrow at 3" keeps that
+ * callback, and an unanswered result isn't counted twice.
  */
 export function countedByRep(lead: CallLead, startedAt: Date | null): boolean {
   if (!startedAt) return false
   const since = startedAt.getTime()
-  return lead.trail.some((event) => event.kind === 'outcome' && event.followUp === 'cadence' && Date.parse(event.at) >= since)
+  return lead.trail.some((event) => event.kind === 'outcome' && Date.parse(event.at) >= since)
 }
 
 export function planCarrierCall(

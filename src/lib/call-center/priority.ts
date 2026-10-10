@@ -155,8 +155,26 @@ export function callFirst(ranked: readonly Ranked[], count = 3): Ranked[] {
  * Power mode's next lead: the best available, saved lead that isn't the one
  * just called and wasn't skipped this session. Seed rows never auto-dial.
  */
-export function nextPowerLead(ranked: readonly Ranked[], skip: ReadonlySet<string>, currentId: string | null = null): Ranked | null {
-  return ranked.find((row) => row.available && row.lead.persisted && row.lead.id !== currentId && !skip.has(row.lead.id)) ?? null
+/** A promised callback may be auto-dialled at most this early. */
+export const CALLBACK_DIAL_GRACE_MS = 2 * 60 * 1000
+
+export function nextPowerLead(
+  ranked: readonly Ranked[],
+  skip: ReadonlySet<string>,
+  currentId: string | null = null,
+  now: number = Date.now(),
+): Ranked | null {
+  return (
+    ranked.find((row) => {
+      if (!row.available || !row.lead.persisted || row.lead.id === currentId || skip.has(row.lead.id)) return false
+      // Showing a callback early on Today is fine; dialling it early is not:
+      // "call me at 3" never rings at 2:05.
+      if (followUpOf(row.lead) === 'callback' && row.lead.nextAttemptAt) {
+        if (Date.parse(row.lead.nextAttemptAt) > now + CALLBACK_DIAL_GRACE_MS) return false
+      }
+      return true
+    }) ?? null
+  )
 }
 
 // ── Queues and KPIs ─────────────────────────────────────────────────────────

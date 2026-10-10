@@ -78,63 +78,65 @@ export async function runSpeedToLead(
     select: { id: true, organizationId: true, createdAt: true, phoneLast4: true, speedAlertedAt: true, speedEscalatedAt: true },
   })
 
-  const recipients = new Map<string, Recipients>()
-  const who = async (orgId: string) => {
-    let r = recipients.get(orgId)
-    if (!r) {
-      r = await recipientsFor(orgId, now)
-      recipients.set(orgId, r)
+  // Claim first, notify after: one lead gets its own alert; several at once
+  // (the 9:00 overnight backlog) get ONE summary per person, not a pile.
+  type Claimed = { id: string; phoneLast4: string | null; minutes: number }
+  const byOrg = new Map<string, { alert: Claimed[]; escalate: Claimed[] }>()
+  const bucket = (orgId: string) => {
+    let b = byOrg.get(orgId)
+    if (!b) {
+      b = { alert: [], escalate: [] }
+      byOrg.set(orgId, b)
     }
-    return r
+    return b
   }
 
   for (const lead of leads) {
     if (opts.left && !opts.left()) break
     summary.checked += 1
     const due = speedAlertsDue(lead, now)
-    const href = `/call-center?lead=${encodeURIComponent(lead.id)}`
-
     if (due.alert) {
       const claimed = await db.callCenterLead.updateMany({ where: { id: lead.id, speedAlertedAt: null }, data: { speedAlertedAt: now } })
       if (claimed.count === 1) {
         summary.alerted += 1
-        const { alert } = await who(lead.organizationId)
-        if (alert.length) {
-          await db.notification.createMany({
-            data: alert.map((userId) => ({
-              organizationId: lead.organizationId,
-              userId,
-              kind: 'SLA_WARNING' as const,
-              title: `New lead waiting ${SPEED_ALERT_MINUTES} minutes`,
-              body: `${leadLabel(lead.phoneLast4)} has waited ${due.minutes} minutes and nobody has called yet.`,
-              href,
-            })),
-          })
-          summary.notified += alert.length
-        }
+        bucket(lead.organizationId).alert.push({ id: lead.id, phoneLast4: lead.phoneLast4, minutes: due.minutes })
       }
     }
-
     if (due.escalate) {
       const claimed = await db.callCenterLead.updateMany({ where: { id: lead.id, speedEscalatedAt: null }, data: { speedEscalatedAt: now } })
       if (claimed.count === 1) {
         summary.escalated += 1
-        const { escalate } = await who(lead.organizationId)
-        if (escalate.length) {
-          await db.notification.createMany({
-            data: escalate.map((userId) => ({
-              organizationId: lead.organizationId,
-              userId,
-              kind: 'SLA_WARNING' as const,
-              title: `New lead still waiting after ${SPEED_ESCALATE_MINUTES} minutes`,
-              body: `${leadLabel(lead.phoneLast4)} has waited ${due.minutes} minutes of calling time and nobody has called yet.`,
-              href,
-            })),
-          })
-          summary.notified += escalate.length
-        }
+        bucket(lead.organizationId).escalate.push({ id: lead.id, phoneLast4: lead.phoneLast4, minutes: due.minutes })
       }
     }
+  }
+
+  const send = async (organizationId: string, userIds: string[], list: Claimed[], level: 'alert' | 'escalate') => {
+    if (!userIds.length || !list.length) return
+    const one = list.length === 1 ? list[0] : null
+    const title = one
+      ? level === 'alert'
+        ? `New lead waiting ${SPEED_ALERT_MINUTES} minutes`
+        : `New lead still waiting after ${SPEED_ESCALATE_MINUTES} minutes`
+      : level === 'alert'
+        ? `${list.length} new leads waiting`
+        : `${list.length} new leads still waiting after ${SPEED_ESCALATE_MINUTES} minutes`
+    const body = one
+      ? level === 'alert'
+        ? `${leadLabel(one.phoneLast4)} has waited ${one.minutes} minutes and nobody has called yet.`
+        : `${leadLabel(one.phoneLast4)} has waited ${one.minutes} minutes of calling time and nobody has called yet.`
+      : `Nobody has called them yet. The longest has waited ${Math.max(...list.map((l) => l.minutes))} minutes. They're at the top of Today.`
+    const href = one ? `/call-center?lead=${encodeURIComponent(one.id)}` : '/call-center'
+    await db.notification.createMany({
+      data: userIds.map((userId) => ({ organizationId, userId, kind: 'SLA_WARNING' as const, title, body, href })),
+    })
+    summary.notified += userIds.length
+  }
+
+  for (const [orgId, b] of byOrg) {
+    const r = await recipientsFor(orgId, now)
+    await send(orgId, r.alert, b.alert, 'alert')
+    await send(orgId, r.escalate, b.escalate, 'escalate')
   }
   return summary
 }

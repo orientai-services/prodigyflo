@@ -109,6 +109,16 @@ describe('a finished carrier call on a lead', () => {
     expect(countedByRep(counted, null)).toBe(false)
   })
 
+  it("keeps a callback the rep set during a short call (the rep's result wins)", () => {
+    const agreed = lead({
+      followUp: 'callback',
+      nextAttemptAt: '2026-10-10T22:00:00.000Z',
+      trail: [{ kind: 'outcome', at: '2026-10-09T16:59:40.000Z', label: 'Callback', detail: 'Callback set', followUp: 'callback' }],
+    })
+    // Answered for 15 s: the carrier alone would call it unanswered and add a cadence step.
+    expect(planCarrierCall(agreed, row(), call({ status: 'completed', talkSeconds: 15 }), ENDED).update).toBeNull()
+  })
+
   it('never schedules a booked or do-not-call lead', () => {
     expect(planCarrierCall(lead(), row({ status: 'BOOKED' }), call(), ENDED).update).toBeNull()
     expect(planCarrierCall(lead(), row({ doNotCallAt: ENDED }), call(), ENDED).update).toBeNull()

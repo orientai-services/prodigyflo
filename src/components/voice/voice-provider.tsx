@@ -277,6 +277,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
   const activeRef = useRef<SdkCall | null>(null)
   const incomingRef = useRef<SdkCall | null>(null)
   const micHeldRef = useRef(false)
+  const connectingRef = useRef(false)
   /** What the active call is about, kept beside activeRef for the ended-call record. */
   const metaRef = useRef<{ target: string; direction: 'outbound' | 'inbound'; who: string | null; answeredAt: number | null; error: string | null } | null>(null)
   const seqRef = useRef(0)
@@ -769,7 +770,9 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
 
   const call = useCallback(
     async (target: DialTarget, chosenLine?: string | null, override?: string, label?: string) => {
-      if (activeRef.current) {
+      // activeRef is only set once connect() resolves; connectingRef closes the
+      // gap so two quick dials (power-mode countdown + a Call press) can't both connect.
+      if (activeRef.current || connectingRef.current) {
         setError('Hang up the current call first.')
         return false
       }
@@ -778,11 +781,13 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
         setError('This account has no phone line yet.')
         return false
       }
+      connectingRef.current = true
       setError(null)
       setStatus('connecting')
       setWho(label ?? null)
       const device = await ensureDevice()
       if (!device) {
+        connectingRef.current = false
         setStatus('idle')
         return false
       }
@@ -791,12 +796,14 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       if (override) params.override = override
       try {
         const placed = await device.connect({ params })
+        connectingRef.current = false
         activeRef.current = placed
         metaRef.current = { target: params.target, direction: 'outbound', who: label ?? null, answeredAt: null, error: null }
         setActiveTarget(params.target)
         watchCall(placed)
         return true
       } catch (err) {
+        connectingRef.current = false
         setError(plainVoiceError(err))
         setStatus('idle')
         setWho(null)

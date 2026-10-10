@@ -136,9 +136,21 @@ describe('power mode next lead', () => {
   const ranked = rankLeads(LEADS, NOW, ME)
 
   it('takes the best available saved lead, minus skips and the one just called', () => {
-    expect(nextPowerLead(ranked, new Set())?.lead.id).toBe('h-missed-today')
-    expect(nextPowerLead(ranked, new Set(), 'h-missed-today')?.lead.id).toBe('k2-booked-callback')
-    expect(nextPowerLead(ranked, new Set(['h-missed-today', 'k2-booked-callback', 'c-callback-soon']))?.lead.id).toBe('b-new-hot')
+    const t = NOW.getTime()
+    expect(nextPowerLead(ranked, new Set(), null, t)?.lead.id).toBe('h-missed-today')
+    expect(nextPowerLead(ranked, new Set(), 'h-missed-today', t)?.lead.id).toBe('k2-booked-callback')
+    expect(nextPowerLead(ranked, new Set(['h-missed-today', 'k2-booked-callback']), null, t)?.lead.id).toBe('b-new-hot')
+  })
+
+  it('never auto-dials a promised callback early, though Today shows it', () => {
+    const t = NOW.getTime()
+    // c-callback-soon is due in 30 min: ranked tier 0, but power mode passes it over.
+    expect(ranked.find((row) => row.lead.id === 'c-callback-soon')?.tier).toBe(0)
+    const skip = new Set(['h-missed-today', 'k2-booked-callback'])
+    expect(nextPowerLead(ranked, skip, null, t)?.lead.id).not.toBe('c-callback-soon')
+    // Two minutes before its time it is fair game.
+    expect(nextPowerLead(ranked.filter((row) => row.lead.id === 'c-callback-soon'), new Set(), null, t + min(28))?.lead.id).toBe('c-callback-soon')
+    expect(nextPowerLead(ranked.filter((row) => row.lead.id === 'c-callback-soon'), new Set(), null, t + min(27))).toBeNull()
   })
 
   it('never auto-dials a seed row and returns null when nothing is left', () => {

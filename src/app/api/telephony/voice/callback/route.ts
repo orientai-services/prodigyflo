@@ -40,8 +40,18 @@ export async function POST(request: Request) {
 
   if (digits === '1' && callSid) {
     try {
-      await requestCallback(callSid)
-      return twiml(callbackConfirmedTwiml())
+      // The inbound row is written in after(), so on a first-answer offer it can
+      // still be landing: wait briefly for it. No saved request, no promise —
+      // the caller gets voicemail instead of "we'll call you back".
+      let saved = await requestCallback(callSid)
+      for (let i = 0; i < 4 && !saved; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        saved = await requestCallback(callSid)
+      }
+      if (saved && saved.direction === 'INBOUND' && saved.organizationId === number.organizationId && saved.callbackRequested) {
+        return twiml(callbackConfirmedTwiml())
+      }
+      console.error('[telephony] callback request had no inbound call row; sending to voicemail')
     } catch (err) {
       console.error('[telephony] callback request not saved; sending to voicemail', err instanceof Error ? err.message : err)
     }

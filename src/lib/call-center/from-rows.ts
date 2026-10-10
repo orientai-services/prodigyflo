@@ -165,9 +165,12 @@ export type CallLeadExtras = {
  * "Connected · m:ss" detail is read instead.
  */
 function reached(row: StoredCallCenterLead): boolean {
-  if (row.tries > 0 || row.doNotCallAt != null || row.status === 'BOOKED') return true
+  // Tries alone are not contact: a dial nobody picked up is a try.
+  if (row.doNotCallAt != null || row.status === 'BOOKED') return true
   return row.events.some((event) => {
-    if (event.type === 'SMS' || event.type === 'OUTCOME') return true
+    if (event.type === 'SMS') return true
+    // An unanswered result (no answer, busy, voicemail) schedules a cadence step; it isn't contact.
+    if (event.type === 'OUTCOME') return readCopy(event.body)?.followUp !== 'cadence'
     if (event.type !== 'CALL') return false
     const copy = readCopy(event.body)
     if (copy?.connected) return true

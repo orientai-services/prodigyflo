@@ -105,6 +105,23 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
   const runningRef = useRef(false)
   const dialRef = useRef<() => Promise<void>>(async () => {})
   const usable = Boolean(voice)
+  // Live values for the awaits inside dialNext: a dial that started before a
+  // Pause, a power-off, an incoming call or leaving the page must not place a call.
+  const genRef = useRef(0)
+  const liveRef = useRef({ on, paused, voice })
+  const mountedRef = useRef(true)
+  /** voice.lastCall.seq when power mode placed its call; a newer seq means that call ended. */
+  const dialSeqRef = useRef<number | null>(null)
+  useEffect(() => {
+    liveRef.current = { on, paused, voice }
+  })
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      genRef.current += 1
+    }
+  }, [])
 
   const skipSet = new Set(skipped)
   const next = nextPowerLead(ranked, skipSet, lastLeadId)
@@ -130,7 +147,22 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
   const dialNext = useCallback(async () => {
     if (runningRef.current || !voice) return
     runningRef.current = true
+    const gen = ++genRef.current
+    /** Still the dial the rep wants, with the phone free? Checked after every await. */
+    const current = () => {
+      const live = liveRef.current
+      return (
+        mountedRef.current &&
+        genRef.current === gen &&
+        live.on &&
+        !live.paused &&
+        Boolean(live.voice) &&
+        live.voice?.status === 'idle' &&
+        !live.voice?.incoming
+      )
+    }
     setPhase('dialing')
+    let held: CallLead | null = null
     try {
       const passed = new Set(skipped)
       // Locks can be lost to another rep between ranking and taking: try the
@@ -147,8 +179,11 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
         if (refused) {
           passed.add(lead.id)
           setSkipped((list) => [...list, lead.id])
+          if (!current()) return
           continue
         }
+        held = lead
+        if (!current()) return
         let check: DialCheck
         try {
           const res = await checkDial({ kind: 'lead', id: lead.id }, voice.lineId ?? undefined)
@@ -169,6 +204,9 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
           stop(`${check.reason}${hint}`, lead.id)
           return
         }
+        if (!current()) return
+        held = null
+        dialSeqRef.current = voice.lastCall?.seq ?? 0
         const placed = await voice.call({ kind: 'lead', id: lead.id }, check.line?.id ?? voice.lineId, check.overrideToken, check.who || lead.name)
         // The phone bar shows the provider's own reason.
         if (!placed) stop("The call didn't start. The phone bar says why.", lead.id)
@@ -178,8 +216,31 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
       stop('Every lead in reach is held by another rep.')
     } finally {
       runningRef.current = false
+      // Cancelled between the lock and the dial: give the lead back, and leave
+      // 'dialing' unless a newer action already moved the phase on.
+      if (held && !current()) {
+        void release(held)
+        if (genRef.current === gen) setPhase('idle')
+      }
     }
-  }, [voice, skipped, ranked, lastLeadId, select, take, stop])
+  }, [voice, skipped, ranked, lastLeadId, select, take, release, stop])
+
+  // The placed call ended and nothing is owed (the result was saved during the
+  // call, here or in another tab): count down again instead of waiting for a
+  // wrap-up that will never show.
+  const endedSeq = voice?.lastCall?.seq ?? 0
+  const phoneIdle = voice?.status === 'idle'
+  useEffect(() => {
+    if (phase !== 'dialing' || runningRef.current || !phoneIdle || wrapPending) return
+    if (dialSeqRef.current === null || endedSeq <= dialSeqRef.current) return
+    // Next tick, so a wrap-up that this same render is about to show wins.
+    const timer = window.setTimeout(() => {
+      dialSeqRef.current = null
+      if (on && usable && !paused) countdown()
+      else setPhase('idle')
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [phase, phoneIdle, wrapPending, endedSeq, on, usable, paused, countdown])
 
   // The clock calls whatever dialNext is current, without restarting on every render.
   useEffect(() => {
@@ -205,6 +266,8 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
 
   const toggle = useCallback(() => {
     const nextOn = !on
+    genRef.current += 1
+    liveRef.current = { ...liveRef.current, on: nextOn }
     writePower(nextOn)
     setPaused(false)
     setPhase('idle')
@@ -214,13 +277,24 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
 
   const start = useCallback(() => {
     if (!on || !usable) return
+    // 'dialing' with the phone idle and nothing running is a stall: let Start clear it.
+    if (phase === 'dialing' && (runningRef.current || voice?.status !== 'idle')) return
     setPaused(false)
     countdown()
-  }, [on, usable, countdown])
+  }, [on, usable, countdown, phase, voice?.status])
 
-  // Pause holds the count where it is; pressing it again carries on.
+  // Pause holds the count where it is; pressing it again carries on. Pressed
+  // while a dial is being prepared, it cancels that dial before it rings.
   const pause = useCallback(() => {
-    if (phase !== 'countdown') return
+    if (phase === 'dialing' && runningRef.current) {
+      genRef.current += 1
+      liveRef.current = { ...liveRef.current, paused: true }
+      setPaused(true)
+      setPhase('idle')
+      return
+    }
+    // On a power-mode call: pausing means "don't go on to the next one after this".
+    if (phase !== 'countdown' && phase !== 'dialing') return
     setPaused((p) => !p)
   }, [phase])
 
