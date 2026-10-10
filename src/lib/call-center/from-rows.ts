@@ -3,7 +3,7 @@
  * An empty list stays on the dummy seed. A real row never carries a full phone.
  */
 
-import { seedLeads, type CallLead, type LeadChannel, type LeadLanguage, type LeadStatus, type TrailKind } from './model'
+import { deriveFollowUp, seedLeads, type CallLead, type LeadChannel, type LeadLanguage, type LeadStatus, type TrailEvent, type TrailKind } from './model'
 import { SCS_ENGLISH_PAGE_ID, readFacebookFormEvent } from './meta-route'
 
 export type StoredCallCenterEvent = {
@@ -70,6 +70,8 @@ type EventCopy = {
   name?: string
   /** The VoiceCall a CALL / INBOUND event is about, when it came from the carrier. */
   voiceCallId?: string
+  followUp?: TrailEvent['followUp']
+  connected?: boolean
 }
 
 function readCopy(body: string): EventCopy | null {
@@ -83,6 +85,8 @@ function readCopy(body: string): EventCopy | null {
     if (typeof parsed.userId === 'string') copy.userId = parsed.userId
     if (typeof parsed.name === 'string') copy.name = parsed.name
     if (typeof parsed.voiceCallId === 'string') copy.voiceCallId = parsed.voiceCallId
+    if (parsed.followUp === 'callback' || parsed.followUp === 'cadence' || parsed.followUp === 'none') copy.followUp = parsed.followUp
+    if (parsed.connected === true) copy.connected = true
     return copy
   } catch {
     return null
@@ -148,6 +152,27 @@ export type CallLeadExtras = {
   recordings?: ReadonlyMap<string, { src: string; seconds: number }>
   /** The newest unhandled missed call from this lead. */
   missedCallId?: string | null
+  /** When that missed call came in (ISO). */
+  missedCallAt?: string | null
+}
+
+/**
+ * Reached means a person answered: a result, a text, a stored decision, or a
+ * carrier call answered long enough to count. A dial nobody picked up is a
+ * try (counted in `tries`), not contact. Older CALL rows carry no marker; their
+ * "Connected · m:ss" detail is read instead.
+ */
+function reached(row: StoredCallCenterLead): boolean {
+  if (row.tries > 0 || row.doNotCallAt != null || row.status === 'BOOKED') return true
+  return row.events.some((event) => {
+    if (event.type === 'SMS' || event.type === 'OUTCOME') return true
+    if (event.type !== 'CALL') return false
+    const copy = readCopy(event.body)
+    if (copy?.connected) return true
+    if (copy?.voiceCallId) return /^Connected /u.test(copy.detail ?? '') && copy.followUp !== 'cadence'
+    // A desk-recorded dial (tel: or preview) with no carrier result.
+    return true
+  })
 }
 
 export function callLeadFromRow(
@@ -159,10 +184,24 @@ export function callLeadFromRow(
   const page = pageName(row)
   const language: LeadLanguage = row.language === 'ES' ? 'es' : 'en'
   const channel: LeadChannel = row.source === 'INBOUND' ? 'inbound' : 'form'
-  const contacted = row.tries > 0
-    || row.doNotCallAt != null
-    || row.status === 'BOOKED'
-    || row.events.some((event) => event.type === 'CALL' || event.type === 'SMS' || event.type === 'OUTCOME')
+  const contacted = reached(row)
+  const trail: TrailEvent[] = row.events.map((event) => {
+    const copy = event.type === 'FORM' ? null : readCopy(event.body)
+    const recording =
+      copy?.voiceCallId && (event.type === 'CALL' || event.type === 'INBOUND')
+        ? extras.recordings?.get(copy.voiceCallId)
+        : undefined
+    return {
+      kind: trailKind(event.type),
+      at: event.createdAt.toISOString(),
+      label: copy?.label ? safeText(copy.label) || trailLabel(event.type) : trailLabel(event.type),
+      detail: trailDetail(event.type, event.body, page, viewerId),
+      ...(recording && event.type === 'CALL' ? { recording: { ...recording } } : {}),
+      ...(copy?.followUp ? { followUp: copy.followUp } : {}),
+      ...(copy?.connected ? { connected: true } : {}),
+    }
+  })
+  const nextAttemptAt = row.nextAttemptAt ? row.nextAttemptAt.toISOString() : null
   return {
     id: row.id,
     name: personName(row),
@@ -176,28 +215,17 @@ export function callLeadFromRow(
     arrivedAt: row.createdAt.toISOString(),
     disabled: false,
     recording: null,
-    trail: row.events.map((event) => {
-      const copy = event.type === 'FORM' ? null : readCopy(event.body)
-      const recording =
-        copy?.voiceCallId && (event.type === 'CALL' || event.type === 'INBOUND')
-          ? extras.recordings?.get(copy.voiceCallId)
-          : undefined
-      return {
-        kind: trailKind(event.type),
-        at: event.createdAt.toISOString(),
-        label: copy?.label ? safeText(copy.label) || trailLabel(event.type) : trailLabel(event.type),
-        detail: trailDetail(event.type, event.body, page, viewerId),
-        ...(recording && event.type === 'CALL' ? { recording: { ...recording } } : {}),
-      }
-    }),
+    trail,
     lockedBy: row.lockedBy,
     lockName: lockName ?? null,
     persisted: true,
     tries: row.tries,
-    nextAttemptAt: row.nextAttemptAt ? row.nextAttemptAt.toISOString() : null,
+    nextAttemptAt,
+    followUp: deriveFollowUp(trail, row.tries, nextAttemptAt),
     dnc: row.doNotCallAt != null,
     timeZone: row.timeZone || 'America/Los_Angeles',
     ...(extras.missedCallId ? { missedCallId: extras.missedCallId } : {}),
+    ...(extras.missedCallId && extras.missedCallAt ? { missedCallAt: extras.missedCallAt } : {}),
   }
 }
 
@@ -209,6 +237,7 @@ export function callLeadsForDesk(
   extras?: {
     recordings?: ReadonlyMap<string, { src: string; seconds: number }>
     missedByLead?: ReadonlyMap<string, string>
+    missedAtByLead?: ReadonlyMap<string, string>
   },
 ): CallLead[] {
   if (rows.length === 0) return seedLeads()
@@ -216,6 +245,7 @@ export function callLeadsForDesk(
     callLeadFromRow(row, viewerId, row.lockedBy ? lockNames?.get(row.lockedBy) ?? null : null, {
       recordings: extras?.recordings,
       missedCallId: extras?.missedByLead?.get(row.id) ?? null,
+      missedCallAt: extras?.missedAtByLead?.get(row.id) ?? null,
     }),
   )
 }

@@ -46,6 +46,48 @@ describe('call center rows on the desk', () => {
     expect(JSON.stringify(lead)).not.toContain('Mara Ellison')
   })
 
+  it('reads the follow-up kind and the reached flag from the trail', () => {
+    const at = new Date('2026-10-03T18:10:00.000Z')
+    const call = (body: Record<string, unknown>) => ({ type: 'CALL', body: JSON.stringify({ label: 'Call', ...body }), createdAt: at })
+    // A carrier no-answer counted a try: not reached, cadence follow-up.
+    const [cadence] = callLeadsForDesk([
+      row({ tries: 1, nextAttemptAt: new Date('2026-10-03T18:15:00.000Z'), events: [call({ detail: 'No answer', voiceCallId: 'vc1', followUp: 'cadence' })] }),
+    ])
+    expect(cadence.followUp).toBe('cadence')
+    expect(cadence.trail.at(-1)?.followUp).toBe('cadence')
+    // A callback the rep set.
+    const [callback] = callLeadsForDesk([
+      row({
+        nextAttemptAt: new Date('2026-10-05T18:00:00.000Z'),
+        events: [{ type: 'OUTCOME', body: JSON.stringify({ label: 'Callback', detail: 'Call back', followUp: 'callback' }), createdAt: at }],
+      }),
+    ])
+    expect(callback.followUp).toBe('callback')
+    expect(callback.contacted).toBe(true)
+    // A result that never arrived is not contact.
+    const [unknown] = callLeadsForDesk([row({ events: [call({ detail: 'Call result unknown', voiceCallId: 'vc2' })] })])
+    expect(unknown.contacted).toBe(false)
+    // An answered call of 20 s or more is.
+    const [reached] = callLeadsForDesk([row({ events: [call({ detail: 'Connected · 0:45', voiceCallId: 'vc3', connected: true })] })])
+    expect(reached.contacted).toBe(true)
+    expect(reached.trail.at(-1)?.connected).toBe(true)
+    // A short pick-up counted as a no-answer is not.
+    const [short] = callLeadsForDesk([row({ events: [call({ detail: 'Connected · 0:05', voiceCallId: 'vc4', followUp: 'cadence' })] })])
+    expect(short.contacted).toBe(false)
+    // Rows from before the marker: a "Connected" carrier line still counts.
+    const [legacy] = callLeadsForDesk([row({ events: [call({ detail: 'Connected · 1:10', voiceCallId: 'vc5' })] })])
+    expect(legacy.contacted).toBe(true)
+  })
+
+  it('carries the missed call time with its id', () => {
+    const [lead] = callLeadsForDesk([row()], null, undefined, {
+      missedByLead: new Map([['meta:org:lg-1', 'vc9']]),
+      missedAtByLead: new Map([['meta:org:lg-1', '2026-10-03T18:20:00.000Z']]),
+    })
+    expect(lead.missedCallId).toBe('vc9')
+    expect(lead.missedCallAt).toBe('2026-10-03T18:20:00.000Z')
+  })
+
   it('shows a stored last-4 as four masked digits', () => {
     const [lead] = callLeadsForDesk([row()])
     expect(lead.last4).toBe('0199')
