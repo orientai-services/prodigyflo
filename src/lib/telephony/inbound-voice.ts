@@ -7,7 +7,14 @@ import { voiceLimited } from './account-status'
 import { ringsBrowsers } from './lines'
 import { presentUsersFor } from './presence'
 import { telephonySettingsFor, withinBusinessHours } from './settings'
-import { browserDialTwiml, teamStepTwiml, voiceAnswerTwiml, voicemailTwiml, type BrowserLeg } from './twiml'
+import {
+  browserDialTwiml,
+  callbackOfferTwiml,
+  teamStepTwiml,
+  voiceAnswerTwiml,
+  voicemailTwiml,
+  type BrowserLeg,
+} from './twiml'
 import { activeLegs, startInboundCall, withAccountLock } from './voice-calls'
 import { voiceBrowserEnabled } from './voice-config'
 import { callbackUrls, type WebhookContext } from './webhook'
@@ -21,6 +28,11 @@ import { callbackUrls, type WebhookContext } from './webhook'
  *   FORWARD                       → ring one number                  stage=forward
  *   TEAM                          → ring teammate 0, then 1, …       stage=team&i=n
  *   otherwise / end of every chain → voicemail
+ *
+ * When a ringing stage (browser, forward, team) ends unanswered and the next
+ * stage is voicemail, the caller is first offered "press 1 for a callback"
+ * (docs/DIALER_POWER.md Lane C). Silence or any other key is today's
+ * voicemail. Voicemails are transcribed unless the account turned it off.
  *
  * The first answer is decided here; each later one by the dial route through
  * nextStage(). While the account is voice-limited the inbound row is written
@@ -75,17 +87,50 @@ export function stageName(stage: Stage): string {
   return stage.kind
 }
 
-function twimlFor(stage: Stage, ctx: StageCtx, opts: { skipGreeting: boolean; limited: boolean }): string {
-  const { number, callSid } = ctx
+type TwimlOpts = {
+  skipGreeting: boolean
+  limited: boolean
+  /** Ask Twilio to transcribe the voicemail (settings.telephony.transcribeVoicemail). */
+  transcribe?: boolean
+  /** A ringing stage just failed: offer press-1-for-a-callback before voicemail. */
+  offerCallback?: boolean
+}
+
+/** The voicemail answer for a line, with or without the greeting and callback offer. */
+export function voicemailAnswerTwiml(
+  number: Pick<InboundNumber, 'voicemailGreeting' | 'recordCalls'>,
+  callSid: string,
+  opts: { skipGreeting: boolean; transcribe?: boolean; offerCallback?: boolean },
+): string {
   const base = callbackUrls(callSid)
+  const transcribeCallbackUrl = opts.transcribe && callSid ? base.transcription : null
+  if (opts.offerCallback && callSid) {
+    return callbackOfferTwiml({ gatherActionUrl: base.callback, voicemailCallbackUrl: base.voicemail, transcribeCallbackUrl })
+  }
+  return voicemailTwiml({
+    voicemailCallbackUrl: base.voicemail,
+    greeting: number.voicemailGreeting,
+    recordCalls: number.recordCalls,
+    skipGreeting: opts.skipGreeting,
+    transcribeCallbackUrl,
+  })
+}
+
+/** Transcription on unless the account turned it off; a failed read keeps the default. */
+export async function transcribeVoicemailFor(organizationId: string): Promise<boolean> {
+  try {
+    return (await telephonySettingsFor(organizationId)).transcribeVoicemail
+  } catch {
+    return true
+  }
+}
+
+function twimlFor(stage: Stage, ctx: StageCtx, opts: TwimlOpts): string {
+  const { number, callSid } = ctx
   const greeting = number.voicemailGreeting
+  const transcribeCallbackUrl = opts.transcribe && callSid ? callbackUrls(callSid).transcription : null
   if (stage.kind === 'voicemail') {
-    return voicemailTwiml({
-      voicemailCallbackUrl: base.voicemail,
-      greeting,
-      recordCalls: number.recordCalls,
-      skipGreeting: opts.skipGreeting,
-    })
+    return voicemailAnswerTwiml(number, callSid, opts)
   }
   if (stage.kind === 'browser') {
     const urls = callbackUrls(callSid, { stage: 'browser' })
@@ -111,6 +156,7 @@ function twimlFor(stage: Stage, ctx: StageCtx, opts: { skipGreeting: boolean; li
       callRecordingUrl: urls.callRecording,
       childStatusUrl: urls.childStatus,
       skipGreeting: opts.skipGreeting,
+      transcribeCallbackUrl,
     })
   }
   const urls = callbackUrls(callSid, { stage: 'team', i: stage.i })
@@ -132,6 +178,7 @@ function twimlFor(stage: Stage, ctx: StageCtx, opts: { skipGreeting: boolean; li
     actionUrl: urls.dial,
     callRecordingUrl: urls.callRecording,
     childStatusUrl: urls.childStatus,
+    transcribeCallbackUrl,
   })
 }
 
@@ -155,7 +202,11 @@ export async function answerInboundCall(ctx: WebhookContext, now = new Date()): 
 
   const settings = await telephonySettingsFor(ctx.number.organizationId)
   if (!withinBusinessHours(settings.businessHours, settings.timezone, now)) {
-    return { twiml: twimlFor({ kind: 'voicemail' }, sctx, { skipGreeting: false, limited: false }), stage: 'voicemail', rowWritten: false }
+    return {
+      twiml: twimlFor({ kind: 'voicemail' }, sctx, { skipGreeting: false, limited: false, transcribe: settings.transcribeVoicemail }),
+      stage: 'voicemail',
+      rowWritten: false,
+    }
   }
 
   const limited = await voiceLimited(ctx.accountSid, now)
@@ -187,7 +238,11 @@ export async function answerInboundCall(ctx: WebhookContext, now = new Date()): 
     rowWritten = true
   }
 
-  return { twiml: twimlFor(stage, sctx, { skipGreeting: false, limited }), stage: stageName(stage), rowWritten }
+  return {
+    twiml: twimlFor(stage, sctx, { skipGreeting: false, limited, transcribe: settings.transcribeVoicemail }),
+    stage: stageName(stage),
+    rowWritten,
+  }
 }
 
 /**
@@ -228,7 +283,14 @@ export async function nextInboundStage(
     await db.voiceCall.updateMany({ where: { callSid }, data: { stage: stageName(next) } })
   }
 
-  return { twiml: twimlFor(next, sctx, { skipGreeting: true, limited }), stage: stageName(next), rowWritten: true }
+  // Something rang and nobody took it: offer the callback before voicemail.
+  const rang = current.stage === 'browser' || current.stage === 'forward' || current.stage === 'team'
+  const transcribe = await transcribeVoicemailFor(ctx.number.organizationId)
+  return {
+    twiml: twimlFor(next, sctx, { skipGreeting: true, limited, transcribe, offerCallback: rang && next.kind === 'voicemail' }),
+    stage: stageName(next),
+    rowWritten: true,
+  }
 }
 
 /** answeredBy for a dial stage that was answered. */

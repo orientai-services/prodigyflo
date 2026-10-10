@@ -75,11 +75,14 @@ function NavSections({
   pathname,
   rail = false,
   expanded = true,
+  badges = {},
 }: {
   sections: NavSection[]
   pathname: string
   rail?: boolean
   expanded?: boolean
+  /** Count per nav href (e.g. missed calls on /call-center). Zero/absent = no badge. */
+  badges?: Record<string, number>
 }) {
   const t = uiCopyFor(useUiLocale(), UI_COPY)
   const isActive = (href: string, exact?: boolean) =>
@@ -116,6 +119,8 @@ function NavSections({
                 : item.href === '/pipeline' ? t.nav.pipeline
                 : item.label
               const active = isActive(item.href, item.exact)
+              const count = badges[item.href] ?? 0
+              const countText = count > 99 ? '99+' : String(count)
               const linkClass = cn(
                 'focus-visible:ring-ring flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none',
                 rail && 'justify-center gap-0 [.pf-nav-open_&]:justify-start [.pf-nav-open_&]:gap-2.5',
@@ -125,16 +130,37 @@ function NavSections({
               )
               const inner = (
                 <>
-                  <NavIcon name={item.icon} className="size-4 shrink-0" />
+                  <span className="relative shrink-0">
+                    <NavIcon name={item.icon} className="size-4 shrink-0" />
+                    {/* Collapsed rail: a dot on the icon stands in for the count. */}
+                    {count > 0 && rail && (
+                      <span
+                        aria-hidden="true"
+                        className="bg-brand absolute -top-1 -right-1 size-2 rounded-full [.pf-nav-open_&]:hidden"
+                      />
+                    )}
+                  </span>
                   <span
                     className={cn(
                       'min-w-0 truncate',
                       rail &&
                         'w-0 opacity-0 motion-safe:transition-opacity motion-safe:duration-200 [.pf-nav-open_&]:w-auto [.pf-nav-open_&]:flex-1 [.pf-nav-open_&]:opacity-100',
+                      !rail && 'flex-1',
                     )}
                   >
                     {label}
                   </span>
+                  {count > 0 && (
+                    <span
+                      className={cn(
+                        'bg-brand text-primary-foreground ml-auto shrink-0 rounded-full px-1.5 text-[0.65rem] leading-4 font-semibold tabular-nums',
+                        rail && 'hidden [.pf-nav-open_&]:inline',
+                      )}
+                    >
+                      {countText}
+                    </span>
+                  )}
+                  {count > 0 && <span className="sr-only">{`, ${count} waiting`}</span>}
                 </>
               )
               return (
@@ -152,7 +178,7 @@ function NavSections({
                       >
                         {inner}
                       </TooltipTrigger>
-                      <TooltipContent side="right">{label}</TooltipContent>
+                      <TooltipContent side="right">{count > 0 ? `${label} (${countText})` : label}</TooltipContent>
                     </Tooltip>
                   ) : (
                     <Link href={item.href} aria-current={active ? 'page' : undefined} className={linkClass}>
@@ -174,6 +200,7 @@ export function AppShell({
   subroutes = [],
   user,
   unreadCount,
+  navBadges = {},
   switchableOrgs = [],
   activeOrgId,
   activeOrgSlug,
@@ -183,6 +210,8 @@ export function AppShell({
   subroutes?: NavItem[]
   user: ShellUser
   unreadCount: number
+  /** Count badges per nav href, computed on the server (layout). */
+  navBadges?: Record<string, number>
   /** Agency users only: the accounts they may switch between (home first). */
   switchableOrgs?: SwitchableOrg[]
   activeOrgId?: string
@@ -283,7 +312,7 @@ export function AppShell({
           </div>
           <div className="min-h-0 flex-1">
             <ScrollArea className="h-full">
-              <NavSections sections={sections} pathname={pathname} rail expanded={navExpanded} />
+              <NavSections sections={sections} pathname={pathname} rail expanded={navExpanded} badges={navBadges} />
             </ScrollArea>
           </div>
           {/* Expand/collapse seam at the sidebar foot. */}
@@ -338,7 +367,7 @@ export function AppShell({
           </div>
           <div className="min-h-0 flex-1">
             <ScrollArea className="h-full">
-              <NavSections sections={sections} pathname={pathname} />
+              <NavSections sections={sections} pathname={pathname} badges={navBadges} />
             </ScrollArea>
           </div>
           {orgFooter(false)}

@@ -7,6 +7,7 @@ import { brandFor } from '@/components/brand/org-brand'
 import { navigationFor, subroutesFor } from '@/lib/navigation'
 import { AppShell } from '@/components/layout/app-shell'
 import { getVoiceSetup } from '@/lib/telephony/actions'
+import { navBadgesFor } from '@/lib/telephony/nav-badge'
 import type { VoiceSetup } from '@/lib/telephony/voice-contract'
 import { VoiceProvider } from '@/components/voice/voice-provider'
 import { VoiceDock } from '@/components/voice/voice-dock'
@@ -66,13 +67,18 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const body = await withVoice(children)
   if (finalDeskEnabled()) return <>{body}</>
 
-  const unreadCount = await db.notification.count({
-    where: { ...await notificationScope(user), readAt: null },
-  })
+  const sections = navigationFor(user)
+  const [unreadCount, navBadges] = await Promise.all([
+    db.notification.count({
+      where: { ...await notificationScope(user), readAt: null },
+    }),
+    navBadgesFor(user, sections),
+  ])
 
   return (
     <AppShell
-      sections={navigationFor(user)}
+      sections={sections}
+      navBadges={navBadges}
       subroutes={subroutesFor(user)}
       unreadCount={unreadCount}
       switchableOrgs={[]}

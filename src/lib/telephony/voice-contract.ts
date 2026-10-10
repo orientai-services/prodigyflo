@@ -85,7 +85,15 @@ export type MissedCallVM = {
   target: DialTarget | null
   reason: 'no-answer' | 'hung-up' | 'voicemail' | 'busy' | 'failed'
   voicemail: { src: string; seconds: number } | null
+  /** The caller pressed 1 for a callback. These sort first. */
+  callbackRequested?: boolean
+  /** Twilio's transcription of the voicemail, when there is one. */
+  transcript?: string | null
 }
+
+/** How a missed call was closed (VoiceCall.handledDisposition). */
+export const MISSED_DISPOSITIONS = ['called_back', 'no_answer', 'spam', 'wrong_number', 'handled'] as const
+export type MissedDisposition = (typeof MISSED_DISPOSITIONS)[number]
 
 export type CarrierState = { status: string; source: 'twilio' | 'manual' | 'unknown'; note: string }
 
@@ -132,4 +140,10 @@ export type SuppressionVM = {
   sms: { at: string; source: string } | null
   call: { at: string; source: string } | null
 }
-export type CallingRulesVM = { recordOutbound: boolean; windowStart: number; windowEnd: number } // strict DNC is the only mode in P0
+export type CallingRulesVM = {
+  recordOutbound: boolean
+  windowStart: number
+  windowEnd: number
+  /** Transcribe voicemails (default on). Absent on save = leave as it is. */
+  transcribeVoicemail?: boolean
+} // strict DNC is the only mode in P0

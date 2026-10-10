@@ -8,6 +8,7 @@ import { expirePresence } from './presence'
 import type { TelephonyCredentials } from './provider'
 import { readTelephonySettings, saveTelephonySettings } from './settings'
 import { applySmsStatus } from './sms-status'
+import { runSpeedToLead, type SpeedSummary } from './speed-to-lead'
 import {
   buildCallRecordingsRequest,
   buildFetchCallRequest,
@@ -33,6 +34,8 @@ import { ACTIVE_STATUSES, applyCallStatus, applyRecording, finalizeCall, isTermi
  *  4 recordings that were expected but never arrived → their SIDs
  *  5 webhook drift, once a day per number (report only, never repoints)
  *  6 presence rows older than 10 minutes are deleted
+ *  7 speed-to-lead: untouched new form leads alert at 5 and 15 minutes of
+ *    calling-hours clock (speed-to-lead.ts), each alert once
  *
  * Every Twilio fetch has a 5-second timeout and the whole sweep a 20-second
  * budget, checked before each step and item. It never throws.
@@ -60,6 +63,7 @@ export type SweepSummary = {
   recordings: { checked: number; recovered: number }
   drift: { checked: number; drifting: number }
   presenceExpired: number
+  speed: SpeedSummary
   budgetExhausted: boolean
   errors: string[]
 }
@@ -112,6 +116,7 @@ export async function runTelephonySweep(now = new Date(), opts: SweepOptions = {
     recordings: { checked: 0, recovered: 0 },
     drift: { checked: 0, drifting: 0 },
     presenceExpired: 0,
+    speed: { checked: 0, alerted: 0, escalated: 0, notified: 0 },
     budgetExhausted: false,
     errors: [],
   }
@@ -316,6 +321,11 @@ export async function runTelephonySweep(now = new Date(), opts: SweepOptions = {
   // 6 — presence older than ten minutes.
   await step('presence', async () => {
     summary.presenceExpired = await expirePresence(now)
+  })
+
+  // 7 — speed-to-lead alerts (no carrier calls; runs in mock mode too).
+  await step('speed', async () => {
+    summary.speed = await runSpeedToLead(now, { organizationId: opts.organizationId, left })
   })
 
   return summary

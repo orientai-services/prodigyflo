@@ -2711,6 +2711,10 @@ model CallCenterLead {
   consentRevokedAt   DateTime?
   /// IANA zone set by staff ("they told us they're in X"). Audited.
   timeZone           String?
+  /// Speed-to-lead: the 5-minute alert went out (set once).
+  speedAlertedAt     DateTime?
+  /// Speed-to-lead: the 15-minute escalation to super admins went out (set once).
+  speedEscalatedAt   DateTime?
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 
@@ -2827,6 +2831,12 @@ model VoiceCall {
   handledAt                DateTime?
   handledById              String?
   handledNote              String?
+  /// called_back | no_answer | spam | wrong_number | handled
+  handledDisposition       String?
+  /// The caller pressed 1 for a callback instead of leaving a voicemail.
+  callbackRequested        Boolean            @default(false)
+  /// Twilio's voicemail transcription (truncated). Shown under the voicemail.
+  transcript               String?
   errorCode                String?
   /// Compliance basis for outbound ("Consent on file (form 1234, Oct 2)") or the override note.
   basis                    String?
