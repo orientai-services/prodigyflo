@@ -1,0 +1,20 @@
+# .github/CODEOWNERS (DRAFT — same in all three repos)
+# Canon, agent instructions, CI, and rule checks need Hector's (@dakotahanshew) approving review.
+# Pair with branch protection: "Require review from Code Owners".
+/docs/SCS-FLO-CANON.md          @dakotahanshew
+/docs/CANONICAL.md              @dakotahanshew
+/docs/CLIENT-JOURNEY.md         @dakotahanshew
+/AGENTS.md                      @dakotahanshew
+/CLAUDE.md                      @dakotahanshew
+/.github/                       @dakotahanshew
+/scripts/canon-check.mjs        @dakotahanshew
+/scripts/check-canonical.sh     @dakotahanshew
+/.pre-commit-config.yaml        @dakotahanshew
+/canon/                         @dakotahanshew
+# SCS only (harmless elsewhere)
+/scripts/check-copy.ts          @dakotahanshew
+/scripts/check-journey-lock.ts  @dakotahanshew
+/scripts/check-client-journey.ts @dakotahanshew
+/scripts/check-loan-authority.ts @dakotahanshew
+/src/config/copy.ts             @dakotahanshew
+/src/config/marketing.ts        @dakotahanshew

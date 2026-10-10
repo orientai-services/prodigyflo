@@ -1,0 +1,29 @@
+# .pre-commit-config.yaml (DRAFT — same in all three repos)
+# Install once per machine/checkout:  pipx install pre-commit && pre-commit install --hook-type pre-commit --hook-type commit-msg
+# Works on devs-Mac-mini and MacBook Pro, and for every CLI (Grok Build, Codex, Claude Code) because git runs it.
+repos:
+  - repo: local
+    hooks:
+      - id: canon-check
+        name: canon-check (staged files)
+        entry: node scripts/canon-check.mjs --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: author-is-dakotahanshew
+        name: commit author is dakotahanshew (R-GOV-004)
+        entry: bash -c 'n="$(git config user.name)"; e="$(git config user.email)"; case "$n $e" in *dakotahanshew*) exit 0;; *) echo "R-GOV-004: git user is \"$n <$e>\"; commit as dakotahanshew"; exit 1;; esac'
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: no-add-all
+        name: no bulk staging (R-GOV-005)
+        # Heuristic: refuses commits staging >40 files or any untracked-dir sweep. Override: CANON_BULK_OK=1 (Hector only).
+        entry: bash -c '[ "${CANON_BULK_OK:-}" = 1 ] && exit 0; c=$(git diff --cached --name-only | wc -l); [ "$c" -le 40 ] || { echo "R-GOV-005: $c files staged. Stage by path."; exit 1; }'
+        language: system
+        pass_filenames: false
+        always_run: true
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

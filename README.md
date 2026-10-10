@@ -1,6 +1,6 @@
 # ProdigyFlo
 
-Internal ops CRM for Solar Contract Services. Not a homeowner-facing site — that is [SCS Intake](https://github.com/lxrdgatsby/scs-intake).
+Internal ops CRM for Solar Contract Services. Not a homeowner-facing site — that is [SCS Intake](https://github.com/orientai-services/scs-intake).
 
 **Stack:** Next.js 16 · React 19 · Prisma 7 · PostgreSQL · Auth.js · S3-compatible storage.
 
