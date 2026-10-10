@@ -14,6 +14,7 @@ import {
   requirePermission,
   userScope,
 } from '@/lib/rbac'
+import { sameContractProperty } from '@/lib/intake/property-identity'
 import { StageTransitionError, moveClientToStage } from '@/lib/stage-transitions'
 
 export type ActionResult = {
@@ -180,7 +181,16 @@ export async function updateOverviewAction(input: unknown): Promise<ActionResult
         const source=await tx.externalDocumentImport.findFirst({where:{clientId:client.id,sourceLeadId:{not:null}},select:{sourceLeadId:true}})
         await (await import('@/lib/property-records/jobs')).queuePropertyRecords({organizationId:user.organizationId,clientId:client.id,sourceLeadId:source?.sourceLeadId??undefined,address:{line1:address.line1,city:address.city,state:address.state,postal_code:address.postalCode}},tx)
       }
-      if(data.firstName!==client.firstName||data.lastName!==client.lastName||data.line1&&(data.line1!==primaryAddress?.line1||data.city!==primaryAddress?.city||data.state!==primaryAddress?.state||data.postalCode!==primaryAddress?.postalCode)) {
+      const nameChanged = data.firstName !== client.firstName || data.lastName !== client.lastName
+      const addressChanged = Boolean(data.line1 && primaryAddress && (
+        data.line1 !== primaryAddress.line1 || data.city !== primaryAddress.city || data.state !== primaryAddress.state || data.postalCode !== primaryAddress.postalCode
+      ))
+      const spellingOnly = addressChanged && primaryAddress && data.line1 && data.city && data.state && data.postalCode
+        ? sameContractProperty(primaryAddress, { line1: data.line1, city: data.city, state: data.state, postalCode: data.postalCode })
+        : false
+      // A different person or a different house retires the bound contract reading.
+      // Correcting "Alemnia" to "Almenia" is the same house, so the Sunrun extract stays on the profile.
+      if (nameChanged || (addressChanged && !spellingOnly)) {
         await tx.documentExtraction.updateMany({where:{provider:'records',document:{clientId:client.id}},data:{sourceActive:false}})
         await tx.externalDocumentImport.updateMany({where:{clientId:client.id,analysisPending:true},data:{analysisPending:false,analysisError:'Client identity/property changed; current evidence must be reviewed again.'}})
       }

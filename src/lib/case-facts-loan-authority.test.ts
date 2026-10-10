@@ -163,6 +163,43 @@ describe('loan-map document authority on FinalDesk cells', () => {
     expect(JSON.stringify(cell(facts, 'System size')?.cell)).toMatch(/8\.64/)
   })
 
+  it('shows a Sunrun PPA parked on the finance tile, and hides it once that reading is retired', () => {
+    const fields = [
+      field('product_type', 'ppa'),
+      field('amount_financed', '51696'),
+      field('monthly_payment', '215.4'),
+      field('first_year_monthly_payment', '215.4'),
+      field('escalator_pct', '0'),
+      field('term_months', '240'),
+      field('term_years', '20'),
+      field('first_payment_date', '2015-04-02'),
+      field('lender_name', 'Sunrun'),
+      field('installer_name', 'Sunrun Inc'),
+      field('system_size_kw', '14.23'),
+      field('remaining_balance', '21970.8'),
+    ].map(item => ({ ...item, verification: 'UNVERIFIED' as const }))
+    const parked = {
+      extractions: [{ detectedTypeKey: 'finance_agreement', status: 'COMPLETED', sourceActive: true, fields }],
+    }
+    const client = source([parked])
+    client.contracts = [{ productType: null }]
+    client.surveyResponses = [{ answers: { credit_band: '670_739', product_type_guess: 'ppa' } }]
+    const facts = resolveCaseFacts(client, null, { now: new Date('2026-10-09T12:00:00Z') })
+    expect(cell(facts, 'Agreement type')?.cell).toMatchObject({ kind: 'value', display: 'ppa' })
+    expect(cell(facts, 'Total / amount financed')?.cell).toMatchObject({ kind: 'value' })
+    expect(cell(facts, 'Monthly payment')?.cell).toMatchObject({ kind: 'value' })
+    expect(cell(facts, 'Lender')?.cell).toMatchObject({ kind: 'value', display: 'Sunrun' })
+    expect(cell(facts, 'Installer')?.cell).toMatchObject({ kind: 'value', display: 'Sunrun Inc' })
+    expect(cell(facts, 'System size')?.cell).toMatchObject({ kind: 'value' })
+    const retired = source([{ extractions: [{ ...parked.extractions[0], sourceActive: false }] }])
+    retired.contracts = [{ productType: null }]
+    retired.surveyResponses = [{ answers: { product_type_guess: 'ppa' } }]
+    const hidden = resolveCaseFacts(retired, null, { now: new Date('2026-10-09T12:00:00Z') })
+    expect(hidden.finance.find(row => row.label === 'Contract-stated monthly payment')?.cell).toMatchObject({ kind: 'missing' })
+    expect(hidden.finance.find(row => row.label === 'Total / amount financed')?.cell.kind).not.toBe('value')
+    expect(hidden.solar.find(row => row.label === 'System size')?.cell).toMatchObject({ kind: 'missing' })
+  })
+
   it('a loan install agreement fills amount, APR, first pay, and a typed monthly without inventing a lender', () => {
     const install = {
       extractions: [{
