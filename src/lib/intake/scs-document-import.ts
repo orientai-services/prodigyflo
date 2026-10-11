@@ -91,6 +91,60 @@ export async function queueScsDocumentImports(args: {
   }
 }
 
+/**
+ * A Review Confirm packet lists the SCS case's current files. When SCS
+ * replaces a file (the old SCS document is soft-deleted), the old PF copy
+ * must stop feeding readings, or it competes with the replacement (e.g.
+ * product_confirmed CONFLICT unknown-vs-cash). Retire earlier imports from
+ * the same SCS lead and the same tile type that are no longer in the packet.
+ * Types absent from the packet are left alone, so a partial packet can never
+ * retire a tile it did not mention.
+ */
+export async function retireSupersededScsDocuments(args: {
+  organizationId: string
+  clientId: string
+  sourceLeadId: string | null
+  documents: DocumentRef[]
+}, store: Prisma.TransactionClient = db): Promise<number> {
+  if (!args.sourceLeadId) return 0
+  const currentIds = args.documents.map(doc => value(doc.id)).filter((id): id is string => Boolean(id))
+  const currentTypes = [...new Set(args.documents.map(doc => value(doc.doc_type)).filter((t): t is string => Boolean(t)))]
+  if (!currentIds.length || !currentTypes.length) return 0
+  const stale = await store.externalDocumentImport.findMany({
+    where: {
+      organizationId: args.organizationId,
+      clientId: args.clientId,
+      sourceLeadId: args.sourceLeadId,
+      status: 'IMPORTED',
+      clientDocumentId: { not: null },
+      sourceDocumentType: { in: currentTypes },
+      sourceDocumentId: { notIn: currentIds },
+    },
+    select: { clientDocumentId: true, sourceDocumentId: true, sourceDocumentType: true },
+  })
+  const documentIds = stale.map(row => row.clientDocumentId).filter((id): id is string => Boolean(id))
+  if (!documentIds.length) return 0
+  const retired = await store.clientDocument.updateMany({
+    where: { id: { in: documentIds }, clientId: args.clientId, status: { notIn: ['REJECTED', 'EXPIRED'] } },
+    data: { status: 'EXPIRED' },
+  })
+  if (retired.count) {
+    await store.documentExtraction.updateMany({ where: { documentId: { in: documentIds } }, data: { sourceActive: false } })
+    await store.auditEvent.create({
+      data: {
+        organizationId: args.organizationId,
+        actorLabel: 'SCS document importer',
+        action: 'scs.document_superseded',
+        entityType: 'Client',
+        entityId: args.clientId,
+        summary: `Retired ${retired.count} SCS document(s) replaced in SCS.`,
+        after: { sourceLeadId: args.sourceLeadId, superseded: stale.map(row => ({ sourceDocumentId: row.sourceDocumentId, sourceDocumentType: row.sourceDocumentType, clientDocumentId: row.clientDocumentId })) },
+      },
+    })
+  }
+  return retired.count
+}
+
 async function fail(id: string, error: unknown, attempts?: number) {
   const message = error instanceof Error ? error.message : 'Unknown SCS document import error.'
   await db.externalDocumentImport.updateMany({

@@ -16,7 +16,7 @@ vi.mock('@/lib/db', () => ({
   },
 }))
 vi.mock('@/lib/cys/data', () => ({ refreshCysMirror: mocks.refresh }))
-vi.mock('./scs-document-import', () => ({ queueScsDocumentImports: mocks.queue }))
+vi.mock('./scs-document-import', () => ({ queueScsDocumentImports: mocks.queue, retireSupersededScsDocuments: vi.fn(async () => 0) }))
 vi.mock('@/lib/property-records/jobs', () => ({ queuePropertyRecords: mocks.records }))
 
 import { ingestScsPacket, scsLeadId, intakeAnswersFromPacket } from './scs-packet'
