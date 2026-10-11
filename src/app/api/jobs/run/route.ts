@@ -9,6 +9,7 @@ import { buildAssistContext } from '@/lib/ai/assists'
 import { sendWeeklyDigests } from '@/lib/digest'
 import { renewNumbers } from '@/lib/telephony/renewal'
 import { runTelephonySweep } from '@/lib/telephony/sweep'
+import { calendarEnabled } from '@/lib/call-center/calendar/config'
 import { runPendingScsDocumentExtractions, runPendingScsDocumentImports } from '@/lib/intake/scs-document-import'
 
 export const maxDuration = 300
@@ -120,11 +121,15 @@ async function run(request: NextRequest) {
   // Telephony housekeeping (lost callbacks, stuck calls, honest SMS status)
   // runs in every mode, including the final desk. It never throws.
   const telephonySweep = await runTelephonySweep(new Date())
+  // Call Center Calendar reminders (24h and 3h). Off unless CALL_CENTER_CALENDAR is on. Never throws.
+  const callCenterCalendar = calendarEnabled()
+    ? await (await import('@/lib/call-center/calendar/service')).runCalendarReminders(new Date()).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }))
+    : null
   if (new URL(request.url).searchParams.get('scope') === 'scs-document-extractions') {
     return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentExtractions })
   }
   if (process.env.PRODIGYFLO_FINAL_DESK === 'true') {
-    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, recordsStaff, propertyRecords, telephonySweep, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
+    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, recordsStaff, propertyRecords, telephonySweep, callCenterCalendar, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
   }
   const counts = await runDueWork(new Date())
   const scores = await freshenScores()
@@ -136,7 +141,7 @@ async function run(request: NextRequest) {
   // month per line. A wallet that cannot cover it suspends the line (never
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
-  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine: { status: 'RETIRED' }, telephony, telephonySweep, scsDocumentImports, scsDocumentExtractions })
+  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine: { status: 'RETIRED' }, telephony, telephonySweep, callCenterCalendar, scsDocumentImports, scsDocumentExtractions })
 }
 
 export const POST = run

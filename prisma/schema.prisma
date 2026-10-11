@@ -380,6 +380,8 @@ model Organization {
   callCenterLeads        CallCenterLead[]
   callCenterSuppressions CallCenterSuppression[]
   voiceCalls             VoiceCall[]
+  callCenterSlots        CallCenterSlot[]
+  callCenterRepHours     CallCenterRepHours[]
 
   // Meta Ads reporting (one bound workspace; see docs/META_ADS_SCS.md).
   metaAdAccounts       MetaAdAccount[]
@@ -2744,6 +2746,8 @@ model CallCenterLead {
 
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   events       CallCenterEvent[]
+  /// Call Center Calendar holds (back-relation only, no column on this table).
+  calendarSlots CallCenterSlot[]
 
   @@index([organizationId, status])
   @@index([organizationId, nextAttemptAt])
@@ -2792,6 +2796,77 @@ model CallCenterSuppression {
 
   @@unique([organizationId, numberHash])
   @@index([organizationId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Call Center Calendar (Door 2 leads only). Fully separate from the Master
+// Calendar: it never reads or writes Appointment, AppointmentReceipt or
+// AvailabilitySlot. A slot is a HOLD until the rep confirms on the call.
+// All times are stored in UTC. See src/lib/call-center/calendar/.
+// ─────────────────────────────────────────────────────────────
+
+enum CallCenterSlotStatus {
+  HOLD
+  CONFIRMED
+  SAT
+  NO_SHOW
+  RESCHEDULED
+  CANCELLED
+}
+
+model CallCenterSlot {
+  id             String               @id @default(cuid())
+  organizationId String
+  leadId         String
+  /// Rep key from the calendar config list (not a User relation).
+  repKey         String
+  startsAt       DateTime
+  endsAt         DateTime
+  status         CallCenterSlotStatus @default(HOLD)
+  language       CallCenterLeadLanguage @default(EN)
+  /// Who placed the hold: 'rep' | 'autobook'.
+  heldBy         String               @default("rep")
+  confirmedAt    DateTime?
+  /// Staff user id of the rep who confirmed on the call. No relation.
+  confirmedById  String?
+  outcomeAt      DateTime?
+  /// For RESCHEDULED: the slot that replaced this one.
+  rescheduledToId String?
+  reminder24RepAt    DateTime?
+  reminder24ClientAt DateTime?
+  reminder3RepAt     DateTime?
+  reminder3ClientAt  DateTime?
+  /// Last reminder error (no contact data).
+  reminderError  String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         CallCenterLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, repKey, startsAt])
+  @@index([leadId])
+  @@index([status, startsAt])
+}
+
+/// Optional per-rep working hours override, in America/Los_Angeles minutes.
+model CallCenterRepHours {
+  id             String   @id @default(cuid())
+  organizationId String
+  repKey         String
+  /// 0 = Sunday … 6 = Saturday.
+  weekday        Int
+  /// Minutes after local midnight of the first allowed start (default 540 = 9:00 AM).
+  startMinute    Int      @default(540)
+  /// Minutes after local midnight of the last allowed start (default 1050 = 5:30 PM).
+  endMinute      Int      @default(1050)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, repKey, weekday])
 }
 
 // ─────────────────────────────────────────────────────────────

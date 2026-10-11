@@ -122,6 +122,10 @@ export async function ingestCallCenterMetaLead(input: {
     throw err
   }
 
+  // Call Center Calendar autobook (flag, default off). It only places a HOLD and
+  // never throws, so lead creation can't break if booking fails.
+  await (await import('./calendar/service')).tryAutobookHold(input.organizationId, id).catch(() => undefined)
+
   return { duplicate: false, leadId: id }
 }
 
