@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import { INTAKE_SURVEY_NAME } from '@/lib/org/bootstrap'
 import { refreshCysMirror } from '@/lib/cys/data'
 import { SCHEMA_VERSION, asRecord, str, type DocumentRef } from '@/lib/packet/schema'
-import { queueScsDocumentImports } from './scs-document-import'
+import { queueScsDocumentImports, retireSupersededScsDocuments } from './scs-document-import'
 import { profileAddressAfterPacket } from './property-identity'
 
 export function isSchema42Payload(raw: unknown): boolean {
@@ -143,6 +143,12 @@ export async function ingestScsPacket(opts: {
     organizationId: opts.organizationId,
     clientId: opts.clientId,
     intakeSubmissionId: opts.intakeSubmissionId,
+    sourceLeadId: str(raw.lead_id) || null,
+    documents: files,
+  }, store)
+  await retireSupersededScsDocuments({
+    organizationId: opts.organizationId,
+    clientId: opts.clientId,
     sourceLeadId: str(raw.lead_id) || null,
     documents: files,
   }, store)
