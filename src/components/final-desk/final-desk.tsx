@@ -58,6 +58,8 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   const [answers, setAnswers] = useState<QuestionnaireAnswers>(initial.questionnaire?.answers ?? {}), [page, setPage] = useState(initial.questionnaire?.page ?? 0)
   const answerRef = useRef(answers), touched = useRef(new Set<string>()), revision = useRef(initial.questionnaire?.revision ?? 0), saving = useRef<Promise<boolean> | null>(null)
   const calendarRef = useRef<HTMLDivElement>(null), busyRef = useRef(false), refreshEpoch = useRef(0), bookingRequest = useRef('')
+  const refreshPending = useRef(0)
+  const pollRefresh = useRef<(() => Promise<void>) | null>(null)
   const cursorRef = useRef(initial.board?.today ?? '')
   const file = data.file, board = data.board, clients = data.clients ?? [], isAdmin = data.user.role === 'SUPER_ADMIN'
   const monthRef = useRef(board?.month)
@@ -77,18 +79,23 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
     setData((prev) => (prev.board && prev.board.month !== key ? { ...prev, board: boardForMonth(prev.board, key) } : prev))
   }
   async function refresh(month?: string) {
-    const requested = month ?? monthRef.current
-    const epoch = ++refreshEpoch.current
-    const params = new URLSearchParams({ view, ...query, ...(clientId ? { clientId } : {}), ...(requested ? { month: requested } : {}) })
-    const response = await fetch(`/api/desk?${params}`, { cache: 'no-store' })
-    if (!response.ok) { if ([401, 403, 404].includes(response.status)) router.refresh(); throw Error('Unable to refresh this view') }
-    const next: FinalDeskPayload = await response.json()
-    // The 15s poll can still be answering for the previous month. Applying it snaps the arrows back.
-    if (epoch !== refreshEpoch.current) return
-    if (next.board && monthRef.current && next.board.month !== monthRef.current) return
-    setData(next)
-    if (next.board?.month) monthRef.current = next.board.month
-    if (next.questionnaire && !touched.current.size && !saving.current) { answerRef.current = next.questionnaire.answers; setAnswers(next.questionnaire.answers); revision.current = next.questionnaire.revision }
+    refreshPending.current++
+    try {
+      const requested = month ?? monthRef.current
+      const epoch = ++refreshEpoch.current
+      const params = new URLSearchParams({ view, ...query, ...(clientId ? { clientId } : {}), ...(requested ? { month: requested } : {}) })
+      const response = await fetch(`/api/desk?${params}`, { cache: 'no-store' })
+      if (!response.ok) { if ([401, 403, 404].includes(response.status)) router.refresh(); throw Error('Unable to refresh this view') }
+      const next: FinalDeskPayload = await response.json()
+      // The 15s poll can still be answering for the previous month. Applying it snaps the arrows back.
+      if (epoch !== refreshEpoch.current) return
+      if (next.board && monthRef.current && next.board.month !== monthRef.current) return
+      setData(next)
+      if (next.board?.month) monthRef.current = next.board.month
+      if (next.questionnaire && !touched.current.size && !saving.current) { answerRef.current = next.questionnaire.answers; setAnswers(next.questionnaire.answers); revision.current = next.questionnaire.revision }
+    } finally {
+      refreshPending.current--
+    }
   }
   useEffect(() => {
     if (!navOpen) return
@@ -99,9 +106,11 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   useEffect(() => { monthRef.current = board?.month }, [board?.month])
   useEffect(() => { cursorRef.current = cursor }, [cursor])
   useEffect(() => { const tick = () => setNow(new Date()); const timer = setInterval(tick, 15000); tick(); return () => { clearInterval(timer); if (toastTimer.current) clearTimeout(toastTimer.current) } }, [])
+  // Poll with current filters/client, without restarting the timer on every render.
+  useEffect(() => { pollRefresh.current = () => refresh() })
   useEffect(() => {
     const timer = setInterval(() => {
-      if (!busyRef.current && view !== 'questionnaire') void refresh().catch(() => {})
+      if (document.visibilityState === 'visible' && !refreshPending.current && !busyRef.current && view !== 'questionnaire') void pollRefresh.current?.().catch(() => {})
     }, 15000)
     return () => clearInterval(timer)
   }, [view])
