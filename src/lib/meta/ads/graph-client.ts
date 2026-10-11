@@ -63,6 +63,15 @@ export const ALL_EFFECTIVE_STATUSES = [
 ] as const
 
 /**
+ * The object edges (`/campaigns`, `/adsets`, `/ads`) refuse DELETED in their
+ * `effective_status` filter ("Requesting for deleted objects is not supported",
+ * subcode 1815001), so the list sent there leaves it out. Deleted objects still
+ * reach the sums through the insights filter below, and anything missing from
+ * a full sync is marked removed.
+ */
+export const EDGE_EFFECTIVE_STATUSES = ALL_EFFECTIVE_STATUSES.filter((s) => s !== 'DELETED')
+
+/**
  * Statuses for the insights `filtering` param. Without it, ad-, ad set- and
  * campaign-level rows leave archived and deleted objects out, so their spend
  * would be missing from the per-ad and per-campaign sums. Campaigns only ever
@@ -367,7 +376,7 @@ export function createGraphClient(opts: GraphClientOptions) {
         const query: Record<string, string> = { fields: EDGE_FIELDS[route.edge], limit: '500' }
         try {
           if (route.edge === 'insights') insightQuery(route.params, query)
-          else query.effective_status = JSON.stringify(ALL_EFFECTIVE_STATUSES)
+          else query.effective_status = JSON.stringify(EDGE_EFFECTIVE_STATUSES)
         } catch {
           return refuse(route.account, where)
         }

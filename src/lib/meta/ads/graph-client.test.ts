@@ -254,6 +254,17 @@ describe('paging', () => {
     // We rebuild from the cursor; Meta's `next` URL (and anything in it) is never followed.
     expect(urls.every((u) => !u.toString().includes('leak') && u.pathname === `/v25.0/${ALLOWED_ACCOUNT}/campaigns`)).toBe(true)
   })
+  it('object edges never ask for DELETED (Meta refuses it there), insights still do', async () => {
+    const { client, calls } = make()
+    for (const edge of ['campaigns', 'adsets', 'ads'] as const) {
+      await client.getAllPages({ r: 'edge', account: ALLOWED_ACCOUNT, edge })
+    }
+    for (const call of calls) {
+      const statuses = JSON.parse(call.url.searchParams.get('effective_status')!) as string[]
+      expect(statuses).not.toContain('DELETED')
+      expect(statuses).toEqual(expect.arrayContaining(['ACTIVE', 'PAUSED', 'ARCHIVED']))
+    }
+  })
   it('stops cleanly on the last page', async () => {
     const { client } = make()
     const r = await client.getAllPages({ r: 'edge', account: ALLOWED_ACCOUNT, edge: 'adsets' })
