@@ -42,8 +42,24 @@ export function intakeAnswersFromPacket(raw: Record<string, unknown>): Record<st
   if (humanAnswers.paying_both == null && money.paying_both != null) extras.paying_both = money.paying_both
   if (humanAnswers.credit_band == null && screening.credit_band != null) extras.credit_band = screening.credit_band
   if (humanAnswers.payment_status == null && money.payment_status != null) extras.payment_status = money.payment_status
-  const merged = { ...extras, ...humanAnswers }
-  const answerProvenance = Object.fromEntries(Object.keys(merged).filter(key => provenance[key]).map(key => [key, provenance[key]]))
+  // Money-form answers typed after Stage 1 ride in typed_field_provenance as
+  // { value, source, ... } (or a plain value). They fill only keys with no
+  // Stage 1 answer, and never document-derived readings.
+  const typedProvenance = asRecord(data.typed_field_provenance ?? raw.typed_field_provenance)
+  const typed: Record<string, unknown> = {}
+  const typedSources: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(typedProvenance)) {
+    if (key.startsWith('_') || humanAnswers[key] != null) continue
+    const record = entry && typeof entry === 'object' && !Array.isArray(entry) ? asRecord(entry) : null
+    const typedValue = record ? record.value : entry
+    const source = str(record?.source)
+    if (typedValue == null || str(typedValue) === '' || source === 'document_extraction' || source === 'document_review') continue
+    typed[key] = typedValue
+    if (record && !provenance[key]) typedSources[key] = record
+  }
+  const merged = { ...extras, ...typed, ...humanAnswers }
+  const sources = { ...typedSources, ...provenance }
+  const answerProvenance = Object.fromEntries(Object.keys(merged).filter(key => sources[key]).map(key => [key, sources[key]]))
   const dispositions=asRecord(data.questionnaire_dispositions??raw.questionnaire_dispositions)
   return {...merged,...(Object.keys(answerProvenance).length?{_scs_answer_provenance:answerProvenance}:{}),...(Object.keys(dispositions).length?{_scs_questionnaire_dispositions:dispositions}:{})}
 }
