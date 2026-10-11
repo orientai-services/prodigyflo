@@ -7,6 +7,8 @@ import { getTwilioStatus, getVoiceSetup, listMissedCalls } from '@/lib/telephony
 import type { MissedCallVM, TwilioStatusVM, VoiceSetup } from '@/lib/telephony/voice-contract'
 import { loadPhoneSetup } from '@/lib/telephony/ui/phone-setup-data'
 import { MetaAdsContent } from '@/app/(app)/marketing/meta/dashboard'
+import { calendarEnabled } from '@/lib/call-center/calendar/config'
+import { CallCenterCalendarTab } from '@/components/call-center/calendar/calendar-tab'
 
 export const metadata: Metadata = { title: 'Call Center' }
 export const dynamic = 'force-dynamic'
@@ -33,6 +35,12 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   // and link back here (docs/META_ADS_SCS.md).
   const adsAllowed = can(user, 'connectors:read')
   const adsTab = adsAllowed && params.tab === 'ads'
+
+  // Call Center Calendar (flag CALL_CENTER_CALENDAR, default off: the tab is hidden).
+  const calendarOn = calendarEnabled()
+  if (calendarOn && params.tab === 'calendar') {
+    return <CallCenterCalendarTab organizationId={user.organizationId} leadId={leadIdParam(params.lead)} />
+  }
 
   const [desk, voice, missed, setup, status] = await Promise.all([
     loadCallCenterDesk(),
@@ -64,6 +72,7 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       phone={phone}
       renderedAt={renderedAt}
       adsAllowed={adsAllowed}
+      calendarAllowed={calendarOn}
       ads={adsTab ? <MetaAdsContent user={user} params={params} base="/call-center?tab=ads" embedded /> : null}
     />
   )

@@ -136,6 +136,7 @@ export function CallCenter({
   phone = {},
   renderedAt,
   adsAllowed = false,
+  calendarAllowed = false,
   ads = null,
 }: {
   initialLeads?: CallLead[]
@@ -145,6 +146,8 @@ export function CallCenter({
   renderedAt?: string
   /** Holds connectors:read, so the Ads tab shows. */
   adsAllowed?: boolean
+  /** CALL_CENTER_CALENDAR is on, so the Calendar tab shows. */
+  calendarAllowed?: boolean
   /** The Meta Ads dashboard, server-rendered when the page opened on `?tab=ads`. */
   ads?: React.ReactNode
 }) {
@@ -609,6 +612,11 @@ export function CallCenter({
                 // The dashboard renders on the server, so the first open is a navigation.
                 <Link role="tab" aria-selected={false} href="/call-center?tab=ads">
                   Ads
+                </Link>
+              ) : null}
+              {calendarAllowed ? (
+                <Link role="tab" aria-selected={false} href="/call-center?tab=calendar">
+                  Calendar
                 </Link>
               ) : null}
             </div>
