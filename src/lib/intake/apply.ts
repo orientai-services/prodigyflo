@@ -2,6 +2,7 @@ import 'server-only'
 import { IntakeStatus, Prisma, type IntakeSource, type IntakeSubmission } from '@prisma/client'
 import { db } from '@/lib/db'
 import { isRetiredIdentity, RetiredIntakeError } from '@/lib/retired-identities'
+import { BoundClientUnavailableError } from './errors'
 import { parseIntakeBooking } from '@/lib/intake/appointment'
 import type { SchedulingResult } from '@/lib/scheduling'
 import { redactForAudit } from '@/lib/audit'
@@ -234,7 +235,7 @@ export async function applyToCrm(
       }
     }
 
-    if (opts.clientId) throw new Error('Bound SCS client is unavailable; reconciliation required.')
+    if (opts.clientId) throw new BoundClientUnavailableError()
 
     // Intake sources are tenant-scoped, but a relational foreign key alone
     // cannot prove a configured team belongs to the same tenant. Treat a
