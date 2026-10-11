@@ -76,6 +76,21 @@ export function deedCheckNote(result:unknown):string|null {
   const deed=outcomes.find((o:unknown)=>(o as {kind?:unknown})?.kind==='deed') as {status?:string;detail?:string}|undefined
   return deed?.status==='failed'&&/needs human check/i.test(deed.detail??'')?deed.detail!:null
 }
+const UCC_NONE_ON_FILE='No UCC on file — county index searched'
+const UCC_REAL_ERROR=/timeout|human check|cloudflare|captcha|profile_(busy|in_use)|could not|too large|not enough time|search failed/i
+/** Staff-facing line for the UCC tile of a COMPLETED records job that filed no UCC page; null when a UCC file exists or nothing applies.
+ * An index search that finished with no UCC rows is an answer ('no UCC on file'), not a failure. Only real errors read as failed. */
+export function uccStatusNote(result:unknown):string|null {
+  const r=result as {outcomes?:unknown;files?:unknown}|null|undefined
+  if(!r||!Array.isArray(r.outcomes)) return null
+  if(Array.isArray(r.files)&&r.files.some((f:unknown)=>(f as {category?:unknown})?.category==='ucc')) return null
+  const ucc=r.outcomes.find((o:unknown)=>(o as {kind?:unknown})?.kind==='ucc') as {status?:string;detail?:string}|undefined
+  if(!ucc||!ucc.status||ucc.status==='no_match') return UCC_NONE_ON_FILE
+  if(ucc.status!=='failed') return null
+  const detail=(ucc.detail??'').trim()
+  if(/no ucc record page/i.test(detail)&&!UCC_REAL_ERROR.test(detail)) return UCC_NONE_ON_FILE
+  return `UCC lookup failed — ${detail||'see records detail'}`
+}
 /** Stable filing identity. The same instrument or attachment keeps one key when the PDF bytes change. */
 export function filingIdentity(file:{category:string;filename:string;record_key?:string|null}) {
   const key=file.record_key?.trim()

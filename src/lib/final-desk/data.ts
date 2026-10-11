@@ -7,7 +7,7 @@ import { loadCaseFile } from '@/lib/daily-desk-case'
 import { loadDeskBoard } from '@/lib/daily-desk-data'
 import { classifyDeskKind, tileState } from '@/lib/daily-desk-docs'
 import { asRecord, str } from '@/lib/packet/schema'
-import { addressNotFoundNote, deedCheckNote, permitStatusNote, recordsJobStatusNote } from '@/lib/property-records/contract'
+import { addressNotFoundNote, deedCheckNote, permitStatusNote, recordsJobStatusNote, uccStatusNote } from '@/lib/property-records/contract'
 import { DOCUMENT_MODULES, mergeQuestionnaire, prefillQuestionnaire, prefillFromDocuments, applyQuestionnaireDispositions, profileCells } from './mapping'
 import { QUESTIONNAIRE_NAME, QUESTIONNAIRE_VERSION, answerCount } from './questions'
 import type { FinalClient, FinalDeskPayload, DeskView } from './types'
@@ -79,12 +79,14 @@ export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?
     const notFound = addressNotFoundNote(records?.result)
     const jobNote = recordsJobStatusNote(latestJob)
     const deedNote = deedCheckNote(records?.result)
+    const uccNote = uccStatusNote(records?.result)
     const docs = DOCUMENT_MODULES.map(([key, label]) => {
       const tile = { ...file.docs.find(d => d.key === key)!, key, label }
       if (tile.state !== 'missing') return tile
       if (jobNote && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: jobNote }
       if (notFound && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: notFound }
       if (key === 'home_deed' && deedNote) return { ...tile, records: deedNote }
+      if (key === 'ucc_lien' && uccNote) return { ...tile, records: uccNote }
       return key === 'county_permit' && permitNote ? { ...tile, records: permitNote } : tile
     })
     payload.file = { ...file, ...cells, availableFiles: file.docs.flatMap(d=>d.files), docs, docsPresent: docs.filter(d => d.state !== 'missing').length }
