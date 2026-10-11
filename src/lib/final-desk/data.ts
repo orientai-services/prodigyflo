@@ -63,12 +63,17 @@ const PUBLIC_RECORD_TILES = new Set<string>(['ucc_lien', 'home_deed', 'county_pe
 
 export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?: string, month?: string, query: ClientQuery = {}): Promise<FinalDeskPayload> {
   if ((view === 'engine' || view === 'users') && user.role !== 'SUPER_ADMIN') throw Error('Forbidden')
-  const clients = await loadFinalClients(user)
+  // Independent view queries must not wait for the queue's client scan.
+  const [clients, board, filteredClients] = await Promise.all([
+    loadFinalClients(user),
+    view === 'board' ? loadDeskBoard(user, month) : Promise.resolve(undefined),
+    view === 'clients' ? loadFilteredClients(user, query) : Promise.resolve(undefined),
+  ])
   const queueCount = clients.filter(c => c.extraction === 'unverified' || (c.extraction === 'none' && c.appointment)).length
   const payload: FinalDeskPayload = { user: { id: user.id, name: user.name, role: user.role as 'SUPER_ADMIN' | 'CLOSER' }, queueCount }
-  if (view === 'board') payload.board = await loadDeskBoard(user, month)
+  if (board) payload.board = board
   if (['queue', 'engine', 'documents', 'submissions'].includes(view)) payload.clients = clients
-  if (view === 'clients') Object.assign(payload, await loadFilteredClients(user, query))
+  if (filteredClients) Object.assign(payload, filteredClients)
   if ((view === 'profile' || view === 'questionnaire') && clientId) {
     const [file, questionnaire, records, latestJob] = await Promise.all([loadCaseFile(user, clientId), loadFinalQuestionnaire(user, clientId),
       db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: 'COMPLETED' }, orderBy: { updatedAt: 'desc' }, select: { result: true } }),
