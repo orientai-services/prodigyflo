@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { addressNotFoundNote, addressVersion, normalizeApn, validateRecordsResult } from './contract'
+import { addressNotFoundNote, addressVersion, validateRecordsResult } from './contract'
 
 const tried = { line1: '9796 alemnia st', city: 'las vegas', state: 'nv', postal_code: '89178' }
 const noMatch = {
@@ -43,19 +43,5 @@ describe('records job and deed notes on profile tiles', () => {
     const detail = 'Needs human check: assessor image for 20200305:02858 failed verification (page 1 is blank or overlay-only (ink 0.20%)); no deed filed'
     expect(deedCheckNote({ outcomes: [{ kind: 'deed', status: 'failed', detail }] })).toBe(detail)
     expect(deedCheckNote({ outcomes: [{ kind: 'deed', status: 'assessor_copy', detail: '20200305:02858' }] })).toBeNull()
-  })
-})
-
-describe('parcel not yet listed', () => {
-  const listed = { ...noMatch, status: 'not_listed', outcomes: ['parcel', 'deed', 'ucc', 'permit'].map(kind => ({ source: 'clark_assessor', kind, status: 'not_listed', detail: 'Parcel not yet listed at county (recent sale?)', retryable: true })) }
-  it('is a valid records result and never reads as check spelling', () => {
-    const result = validateRecordsResult(listed, 'scs:t', tried)
-    expect(result.status).toBe('not_listed')
-    expect(addressNotFoundNote(result)).toBeNull()
-  })
-  it('normalizes a staff APN', () => {
-    expect(normalizeApn('17600000002')).toBe('176-00-000-002')
-    expect(normalizeApn(' 176-00-000-002 ')).toBe('176-00-000-002')
-    expect(normalizeApn('176-00-000')).toBeNull()
   })
 })

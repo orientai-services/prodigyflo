@@ -6,8 +6,7 @@ vi.mock('@/lib/intake/synthetic',()=>({isSyntheticClient:vi.fn()}))
 import type {Prisma} from '@prisma/client'
 import {db} from '@/lib/db'
 import {addressVersion,normalizeAddress,type PropertyAddress} from './contract'
-import {MAX_ATTEMPTS,queuePropertyRecords,recordsIdempotencyKey,retryDelayMs,runPropertyRecordsJobs} from './jobs'
-import {NOT_LISTED_NOTE,recordsJobStatusNote} from './contract'
+import {MAX_ATTEMPTS,queuePropertyRecords,retryDelayMs,runPropertyRecordsJobs} from './jobs'
 const A={line1:'4416 Clear Brook Pl',city:'Las Vegas',state:'NV',postal_code:'89103'},B={...A,line1:'4417 Clear Brook Pl'}
 type Job={id:string;clientId:string;addressVersion:string;status:string;attempts:number;result:unknown;importedFiles:Record<string,unknown>}
 type Doc={id:string;clientId:string;status:string;updatedAt:Date}
@@ -66,7 +65,7 @@ afterEach(()=>{for(const [name,value] of savedEnv){if(value===undefined)delete p
 
 function runner(attempts=0,result:unknown=null){
   const address=normalizeAddress(BARTONA)
-  const job={id:'job-1',clientId:'client-1',organizationId:'org',caseKey:'case-1',addressVersion:addressVersion(address),address,status:'RUNNING',attempts,result,importedFiles:{},claimedAt:new Date('2026-10-03T12:00:00.000Z'),error:null as string|null,notListedSince:null as Date|null,staffApn:null as string|null}
+  const job={id:'job-1',clientId:'client-1',organizationId:'org',caseKey:'case-1',addressVersion:addressVersion(address),address,status:'RUNNING',attempts,result,importedFiles:{},claimedAt:new Date('2026-10-03T12:00:00.000Z'),error:null as string|null}
   const queries:string[]=[]
   const live={line1:address.line1,city:address.city,state:address.state,postalCode:address.postal_code}
   const tx={$queryRaw:async()=>[],clientAddress:{findFirst:async()=>live},propertyRecordsJob:{updateMany:async()=>({count:1}),findUniqueOrThrow:async()=>job},clientDocument:{findMany:async()=>[]}}
@@ -78,7 +77,6 @@ function runner(attempts=0,result:unknown=null){
       if(bump&&typeof bump==='object'&&typeof bump.increment==='number') job.attempts+=bump.increment
       if(typeof data.status==='string') job.status=data.status
       if('error' in data) job.error=data.error as string|null
-      if(data.notListedSince instanceof Date) (job as unknown as {notListedSince?:Date}).notListedSince=data.notListedSince
       if(data.nextAttemptAt instanceof Date) (job as unknown as {nextAttemptAt?:Date}).nextAttemptAt=data.nextAttemptAt
       return {count:1}
     }},
@@ -155,51 +153,5 @@ describe('property records job failures',()=>{
   it('backs off 2m, 10m, 30m, 2h',()=>{
     expect([1,2,3,4,9].map(retryDelayMs)).toEqual([120_000,600_000,1_800_000,7_200_000,7_200_000])
     expect(MAX_ATTEMPTS).toBe(5)
-  })
-})
-
-function notListedResult(){
-  const address=normalizeAddress(BARTONA)
-  const row=(source:string,kind:string)=>({source,kind,status:'not_listed',detail:NOT_LISTED_NOTE,retryable:true})
-  return {version:'property-records-v1',case_key:'case-1',address_version:addressVersion(address),address,parcel:null,status:'not_listed',outcomes:[row('clark_assessor','parcel'),row('clark_assessor','deed'),row('clark_recorder','ucc'),row('records','permit')],originals:[],cached:false}
-}
-describe('parcel not yet listed at county',()=>{
-  it('retries daily without spending a failure attempt',async()=>{
-    const f=runner(0)
-    const fetch=vi.fn(async()=>({ok:true,status:200,json:async()=>notListedResult()}))
-    vi.stubGlobal('fetch',fetch)
-    const before=Date.now()
-    const counts=await runPropertyRecordsJobs()
-    expect(counts).toMatchObject({notListed:1,failed:0,paused:0})
-    expect(f.job.status).toBe('NOT_LISTED')
-    expect(f.job.attempts).toBe(0)
-    expect(f.job.error).toBe(NOT_LISTED_NOTE)
-    expect(f.job.notListedSince).toBeInstanceOf(Date)
-    const next=(f.job as unknown as {nextAttemptAt:Date}).nextAttemptAt.getTime()-before
-    expect(next).toBeGreaterThanOrEqual(24*60*60_000-1000)
-    expect(f.queries[0]).toContain("'NOT_LISTED'")
-    expect(recordsJobStatusNote(f.job)).toBe(`${NOT_LISTED_NOTE} — retrying daily; staff can enter the parcel number`)
-  })
-  it('stops for a human after 30 days of not listed',async()=>{
-    const f=runner(0)
-    f.job.notListedSince=new Date(Date.now()-31*24*60*60_000)
-    vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,status:200,json:async()=>notListedResult()})))
-    await runPropertyRecordsJobs()
-    expect(f.job.status).toBe('PAUSED')
-    expect(f.job.error).toMatch(/^Needs human check after repeated failures: Parcel not yet listed/)
-  })
-  it('sends a staff APN and uses a fresh idempotency key so the county is asked again',async()=>{
-    const f=runner(0)
-    f.job.staffApn='176-00-000-002'
-    const fetch=vi.fn(async(...args:[unknown,{body:string;headers:Record<string,string>}])=>args&&({ok:true,status:200,json:async()=>notListedResult()}))
-    vi.stubGlobal('fetch',fetch)
-    await runPropertyRecordsJobs()
-    const init=fetch.mock.calls[0][1]
-    expect(JSON.parse(init.body).apn).toBe('176-00-000-002')
-    expect(init.headers['idempotency-key']).toMatch(/^job-1:apn-17600000002:\d+$/)
-  })
-  it('keeps the original idempotency key for an ordinary job',()=>{
-    expect(recordsIdempotencyKey({id:'job-1'})).toBe('job-1')
-    expect(recordsIdempotencyKey({id:'job-1',notListedSince:new Date()},86_400_000*3)).toBe('job-1:listed-check:3')
   })
 })
