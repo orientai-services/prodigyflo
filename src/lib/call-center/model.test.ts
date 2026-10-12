@@ -113,10 +113,11 @@ describe('call center door', () => {
   })
 
   it('does not call Twilio, Meta, or the intake desk', () => {
-    // The screen is the dialer shell: the desk itself plus the pieces it draws (sections, More, Today, Team).
+    // The screen is the dialer shell: the desk itself plus the pieces it draws (sections, More, Today, Team,
+    // the lead's Handoff group and Client profile).
     const read = (file: string) => readFileSync(path.join(root, file), 'utf8')
     const desk = read('components/call-center/call-center.tsx')
-    const parts = ['app-nav', 'more-sheet', 'today-view', 'team-view'].map((name) => read(`components/call-center/${name}.tsx`))
+    const parts = ['app-nav', 'more-sheet', 'today-view', 'team-view', 'lead-profile'].map((name) => read(`components/call-center/${name}.tsx`))
     const shell = read('lib/call-center/app-shell.ts')
     const screen = [desk, ...parts, shell].join('\n')
     const model = read('lib/call-center/model.ts')
@@ -142,7 +143,12 @@ describe('call center door', () => {
     expect(desk).toMatch(/<header className="cc-head">[\s\S]*<PhoneStatusPill[\s\S]*className=\{`cc-dialer[\s\S]*<\/header>/)
     expect(desk.slice(desk.indexOf('<header'), desk.indexOf('</header>'))).not.toContain('Search leads')
     expect(screen).toContain('Call anyway')
-    expect(screen).toContain('Send intake link')
+    // Handoff: SCS Intake (open / text / copy) and CYS Sign up, all through server actions.
+    expect(screen).toContain('>SCS Intake<')
+    expect(screen).toContain('Open with client (live)')
+    expect(screen).toContain('✍️ CYS Sign up')
+    expect(screen).toContain('Link your SunOff account')
+    expect(screen).not.toMatch(/solarcontractservices.com|sunoff.app/)
     expect(screen).toContain('Save note')
     expect(screen).toContain('Take')
     expect(screen).toContain('>Skip<')

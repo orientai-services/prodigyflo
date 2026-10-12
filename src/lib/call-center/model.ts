@@ -121,6 +121,81 @@ export type CallLead = {
   callbackRequested?: boolean
   /** Why nextAttemptAt is set. Derived from the trail; see followUpOf. */
   followUp?: FollowUp | null
+  /**
+   * The Client this lead became (SCS intake linked it, or staff linked a
+   * possible match). Absent on rows a desk action returned, which don't read it.
+   */
+  clientId?: string | null
+  /** The newest SCS Intake link sent to this lead. */
+  intake?: LeadIntake | null
+  /** The newest CYS Sign up hand-off state the trail knows (HANDOFF events). */
+  handoff?: LeadHandoff | null
+  /** Why "Text link" is off for this lead (consent, DNC, SMS not live), or null when it may be texted. */
+  intakeTextBlock?: string | null
+}
+
+/** How the SCS Intake link reached the homeowner (docs/CYS_BRIDGE.md §B1). */
+export type IntakeMode = 'open' | 'text' | 'copy'
+export type LeadIntake = { sentAt: string; mode: IntakeMode | null }
+
+/** SunoffHandoff.status (docs/CYS_BRIDGE.md §B3.2). */
+export type HandoffStatus = 'SENDING' | 'STANDBY' | 'STARTED' | 'SUBMITTED' | 'WITHDRAWN' | 'ERROR'
+export type LeadHandoff = { status: HandoffStatus; at: string | null; stale?: boolean; lastError?: string | null }
+
+/** The four lead states of docs/CYS_BRIDGE.md §B2. */
+export type ProfileState = 'no_intake' | 'link_sent' | 'analysing' | 'linked'
+
+export function isHandoffStatus(value: unknown): value is HandoffStatus {
+  return typeof value === 'string' && ['SENDING', 'STANDBY', 'STARTED', 'SUBMITTED', 'WITHDRAWN', 'ERROR'].includes(value)
+}
+
+/** `analysing`: the linked Client's intake or documents are still being processed (the profile load says). */
+export function profileStateOf(lead: Pick<CallLead, 'clientId' | 'intake'>, analysing = false): ProfileState {
+  if (lead.clientId) return analysing ? 'analysing' : 'linked'
+  return lead.intake ? 'link_sent' : 'no_intake'
+}
+
+/** SCS Intake: the rep may send the link while the lead has no Client yet. */
+export function canScsIntake(lead: CallLead, rep = CURRENT_REP): boolean {
+  return canSendIntake(lead, rep) && !lead.clientId
+}
+
+/** CYS Sign up: a linked Client, and the rep holds the lock (or is an admin). */
+export function canCysSignUp(lead: CallLead, holds: boolean, admin = false): boolean {
+  return Boolean(lead.clientId) && !lead.disabled && (holds || admin)
+}
+
+const INTAKE_MODE_LABEL: Record<IntakeMode, string> = { open: 'opened with client', text: 'text', copy: 'copied link' }
+
+/** "3 min ago", "2 h ago", "Oct 9". */
+export function agoLabel(iso: string, now: number): string {
+  const ms = now - Date.parse(iso)
+  if (!Number.isFinite(ms) || ms < 60_000) return 'just now'
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)} min ago`
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)} h ago`
+  return new Intl.DateTimeFormat('en-US', { timeZone: ZONE, month: 'short', day: 'numeric' }).format(new Date(iso))
+}
+
+export function intakeSentLine(intake: LeadIntake, now: number): string {
+  return `Intake link sent ${agoLabel(intake.sentAt, now)}${intake.mode ? ` via ${INTAKE_MODE_LABEL[intake.mode]}` : ''}`
+}
+
+/** The chip on CYS Sign up once SunOff holds the lead; null before the first send. */
+export function handoffChip(handoff: LeadHandoff | null | undefined): string | null {
+  switch (handoff?.status) {
+    case 'SENDING': return 'Sending to SunOff…'
+    case 'STANDBY': return 'In SunOff · Standby'
+    case 'STARTED': return 'In SunOff · Started'
+    case 'SUBMITTED': return 'In SunOff · Submitted'
+    case 'WITHDRAWN': return 'Withdrawn in SunOff'
+    case 'ERROR': return 'SunOff didn’t answer · Retry'
+    default: return null
+  }
+}
+
+/** "Re-send profile" shows once SunOff holds the lead and the Client changed after the last send. */
+export function canResendProfile(handoff: LeadHandoff | null | undefined): boolean {
+  return Boolean(handoff?.stale) && (handoff?.status === 'STANDBY' || handoff?.status === 'STARTED')
 }
 
 export const ZONE = 'America/Los_Angeles'

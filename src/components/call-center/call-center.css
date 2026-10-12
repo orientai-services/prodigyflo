@@ -687,3 +687,90 @@
   .final-desk.call-center *::before,
   .final-desk.call-center *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ── Lead panel: the Handoff group and the Client profile (docs/CYS_BRIDGE.md §B1–§B3). ── */
+.final-desk.call-center .handoff { display: grid; gap: 8px; justify-items: start; }
+.final-desk.call-center .split-btn { position: relative; display: inline-flex; }
+.final-desk.call-center .split-btn > .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.final-desk.call-center .split-btn > .split-caret { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(255, 255, 255, .35); padding: 0 12px; }
+.final-desk.call-center .split-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; display: grid; gap: 2px;
+  width: max-content; max-width: min(320px, calc(100vw - 32px)); padding: 6px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(18, 32, 44, .14);
+}
+.final-desk.call-center .split-menu button {
+  display: grid; gap: 2px; text-align: left; background: none; border: 0; border-radius: 8px; padding: 9px 12px; color: var(--ink); cursor: pointer;
+}
+.final-desk.call-center .split-menu button:hover:not(:disabled) { background: var(--teal2); }
+.final-desk.call-center .split-menu button:disabled { opacity: .55; cursor: not-allowed; }
+.final-desk.call-center .split-menu span { font-size: 12px; color: var(--muted); }
+.final-desk.call-center .cys-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.final-desk.call-center .cys-chip.s-standby { background: var(--amberbg); border-color: #f0c9a0; color: #7a3e10; }
+.final-desk.call-center .cys-chip.s-started { background: var(--teal2); border-color: #c5e0de; color: var(--teal); }
+.final-desk.call-center .cys-chip.s-submitted { background: var(--greenbg); border-color: #bcdcbc; color: var(--green); }
+.final-desk.call-center .cys-chip.s-error { border-color: #f0c9a0; color: #7a3e10; }
+.final-desk.call-center .sunoff-link { display: grid; gap: 10px; justify-items: start; }
+
+.final-desk.call-center .detail-tabs,
+.final-desk.call-center .lead-profile-col { display: none; }
+.final-desk.call-center .lead-main,
+.final-desk.call-center .lead-profile-col { min-width: 0; }
+.final-desk.call-center .lead-profile { display: grid; gap: 14px; }
+.final-desk.call-center .lead-profile .g2 { grid-template-columns: 1fr; margin-bottom: 0; }
+.final-desk.call-center .lead-profile .card { background: var(--card); }
+.final-desk.call-center .lead-profile .card[style] { margin: 0 !important; }
+.final-desk.call-center .lead-profile .docs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.final-desk.call-center .lead-profile .who { font-size: 24px; }
+.final-desk.call-center .lead-profile .tags { margin-top: 8px; }
+.final-desk.call-center .lead-profile .state-line { margin: 4px 0 12px; font-size: 14px; line-height: 1.45; }
+.final-desk.call-center .lead-profile .linkish { display: inline-block; margin-top: 8px; }
+.final-desk.call-center .lead-profile .match-card {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 12px; padding: 10px 12px; border: 1px solid #c5e0de; border-radius: 10px; background: var(--teal2); font-size: 14px;
+}
+.final-desk.call-center .lead-profile .skeleton { display: grid; gap: 10px; }
+.final-desk.call-center .lead-profile .skeleton i { display: block; height: 64px; border-radius: 10px; background: linear-gradient(90deg, #eee8dc, #f6f2ea, #eee8dc); background-size: 200% 100%; animation: cc-shimmer 1.4s linear infinite; }
+@keyframes cc-shimmer { to { background-position: -200% 0; } }
+
+/* A desk: the profile is a second column next to the lead. */
+@media (min-width: 1024px) {
+  .final-desk.call-center .split.profile-on { grid-template-columns: minmax(0, .85fr) minmax(0, 1.65fr); }
+  /* The open lead shows its channel and contact state; the list keeps When, Person and Status. */
+  .final-desk.call-center .split.profile-on .lead-table :is(th, td):is(:nth-child(3), :nth-child(4)) { display: none; }
+  .final-desk.call-center .detail.has-profile .detail-cols {
+    display: grid; grid-template-columns: minmax(260px, .8fr) minmax(0, 1.2fr); gap: 18px; align-items: start;
+  }
+  .final-desk.call-center .detail.has-profile .lead-profile-col { display: block; }
+}
+/* Below a desk: Lead and Profile are two tabs inside the lead sheet. */
+@media (max-width: 1023.98px) {
+  .final-desk.call-center .detail.has-profile .detail-tabs { display: flex; gap: 8px; margin: 12px 0 4px; }
+  .final-desk.call-center .detail-tabs button {
+    flex: 1 1 0; min-height: 44px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); font-size: 15px; font-weight: 600;
+  }
+  .final-desk.call-center .detail-tabs button.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+  .final-desk.call-center .detail.tab-profile .lead-main { display: none; }
+  .final-desk.call-center .detail.tab-profile .lead-profile-col { display: block; margin-top: 12px; }
+}
+@media (max-width: 767.98px) {
+  .final-desk.call-center .lead-profile .docs { grid-template-columns: 1fr; }
+  .final-desk.call-center .lead-profile .block { padding: 14px; }
+  .final-desk.call-center .lead-profile .qtab { min-height: 56px; }
+  .final-desk.call-center .lead-profile .actions .btn,
+  .final-desk.call-center .handoff .btn,
+  .final-desk.call-center .lead-profile .lookbtn { min-height: 44px; }
+  .final-desk.call-center .handoff,
+  .final-desk.call-center .split-btn { width: 100%; }
+  .final-desk.call-center .split-btn > .btn:first-child { flex: 1 1 auto; }
+  .final-desk.call-center .split-menu { left: auto; right: 0; width: 100%; max-width: none; }
+  .final-desk.call-center .split-menu button { min-height: 48px; }
+  .final-desk.call-center .lookbox { width: 100%; max-height: calc(100dvh - 24px); border-radius: 18px 18px 0 0; }
+  .final-desk.call-center .modal.on { align-items: flex-end; z-index: 60; }
+  .final-desk.call-center .lookhead h3 { font-size: 22px; }
+}
+@media (max-width: 399.98px) {
+  .final-desk.call-center .lead-profile .math { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .final-desk.call-center .lead-profile .skeleton i { animation: none; }
+}

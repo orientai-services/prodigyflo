@@ -61,6 +61,30 @@ async function loadFinalClients(user: SessionUser): Promise<FinalClient[]> {
 
 const PUBLIC_RECORD_TILES = new Set<string>(['ucc_lien', 'home_deed', 'county_permit'])
 
+/** The profile view's file and questionnaire (also the dialer's lead profile). Null when out of scope. */
+export async function loadProfileFile(user: SessionUser, clientId: string) {
+  const [file, questionnaire, records, latestJob] = await Promise.all([loadCaseFile(user, clientId), loadFinalQuestionnaire(user, clientId),
+    db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: 'COMPLETED' }, orderBy: { updatedAt: 'desc' }, select: { result: true } }),
+    db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: { not: 'SUPERSEDED' } }, orderBy: { updatedAt: 'desc' }, select: { status: true, error: true } })])
+  if (!file || !questionnaire) return null
+  const cells = profileCells(file)
+  const permitNote = permitStatusNote(records?.result)
+  const notFound = addressNotFoundNote(records?.result)
+  const jobNote = recordsJobStatusNote(latestJob)
+  const deedNote = deedCheckNote(records?.result)
+  const uccNote = uccStatusNote(records?.result)
+  const docs = DOCUMENT_MODULES.map(([key, label]) => {
+    const tile = { ...file.docs.find(d => d.key === key)!, key, label }
+    if (tile.state !== 'missing') return tile
+    if (jobNote && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: jobNote }
+    if (notFound && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: notFound }
+    if (key === 'home_deed' && deedNote) return { ...tile, records: deedNote }
+    if (key === 'ucc_lien' && uccNote) return { ...tile, records: uccNote }
+    return key === 'county_permit' && permitNote ? { ...tile, records: permitNote } : tile
+  })
+  return { file: { ...file, ...cells, availableFiles: file.docs.flatMap(d=>d.files), docs, docsPresent: docs.filter(d => d.state !== 'missing').length }, questionnaire }
+}
+
 export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?: string, month?: string, query: ClientQuery = {}): Promise<FinalDeskPayload> {
   if ((view === 'engine' || view === 'users') && user.role !== 'SUPER_ADMIN') throw Error('Forbidden')
   const clients = await loadFinalClients(user)
@@ -70,27 +94,10 @@ export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?
   if (['queue', 'engine', 'documents', 'submissions'].includes(view)) payload.clients = clients
   if (view === 'clients') Object.assign(payload, await loadFilteredClients(user, query))
   if ((view === 'profile' || view === 'questionnaire') && clientId) {
-    const [file, questionnaire, records, latestJob] = await Promise.all([loadCaseFile(user, clientId), loadFinalQuestionnaire(user, clientId),
-      db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: 'COMPLETED' }, orderBy: { updatedAt: 'desc' }, select: { result: true } }),
-      db.propertyRecordsJob.findFirst({ where: { clientId, organizationId: user.organizationId, status: { not: 'SUPERSEDED' } }, orderBy: { updatedAt: 'desc' }, select: { status: true, error: true } })])
-    if (!file || !questionnaire) throw Error('Not found')
-    const cells = profileCells(file)
-    const permitNote = permitStatusNote(records?.result)
-    const notFound = addressNotFoundNote(records?.result)
-    const jobNote = recordsJobStatusNote(latestJob)
-    const deedNote = deedCheckNote(records?.result)
-    const uccNote = uccStatusNote(records?.result)
-    const docs = DOCUMENT_MODULES.map(([key, label]) => {
-      const tile = { ...file.docs.find(d => d.key === key)!, key, label }
-      if (tile.state !== 'missing') return tile
-      if (jobNote && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: jobNote }
-      if (notFound && PUBLIC_RECORD_TILES.has(key)) return { ...tile, records: notFound }
-      if (key === 'home_deed' && deedNote) return { ...tile, records: deedNote }
-      if (key === 'ucc_lien' && uccNote) return { ...tile, records: uccNote }
-      return key === 'county_permit' && permitNote ? { ...tile, records: permitNote } : tile
-    })
-    payload.file = { ...file, ...cells, availableFiles: file.docs.flatMap(d=>d.files), docs, docsPresent: docs.filter(d => d.state !== 'missing').length }
-    payload.questionnaire = questionnaire
+    const loaded = await loadProfileFile(user, clientId)
+    if (!loaded) throw Error('Not found')
+    payload.file = loaded.file
+    payload.questionnaire = loaded.questionnaire
   }
   if (view === 'engine') {
     const decisions = await db.auditEvent.findMany({ where: { organizationId: user.organizationId, action: { in: ['desk.suggestion.accepted', 'desk.suggestion.dismissed'] } }, orderBy: { createdAt: 'desc' }, select: { entityId: true, action: true } })
