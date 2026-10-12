@@ -8,7 +8,21 @@ import { clockLabel } from '@/lib/telephony/ui/result'
 import { PhoneSettings } from './phone-settings'
 import { useVoice } from './voice-provider'
 
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'] as const
+// A phone keypad: the letters under each digit, nothing under 1, * and #.
+const KEYS = [
+  ['1', ''],
+  ['2', 'ABC'],
+  ['3', 'DEF'],
+  ['4', 'GHI'],
+  ['5', 'JKL'],
+  ['6', 'MNO'],
+  ['7', 'PQRS'],
+  ['8', 'TUV'],
+  ['9', 'WXYZ'],
+  ['*', ''],
+  ['0', '+'],
+  ['#', ''],
+] as const
 
 // "On call 1:23 · " in front of the page's own title, so the talk time shows
 // on the tab while the rep works in another one. Stripped and re-added each
@@ -237,17 +251,28 @@ export function VoiceDock() {
       )}
 
       {showKeypad && (
-        <div className="grid grid-cols-3 gap-2 border-t px-4 py-3 sm:gap-1.5 sm:px-3 sm:py-2">
-          {KEYS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              className="hover:bg-muted h-14 rounded-lg border text-xl font-medium tabular-nums sm:h-9 sm:rounded-md sm:text-sm"
-              onClick={() => voice.sendDigits(key)}
-            >
-              {key}
-            </button>
-          ))}
+        // Twelve keys of one fixed size, centred under the bar like a phone's keypad.
+        <div className="border-t px-4 py-3 sm:px-3 sm:py-2">
+          <div
+            className="mx-auto grid w-fit auto-rows-[3.5rem] grid-cols-[repeat(3,5.5rem)] gap-3 sm:auto-rows-[2.75rem] sm:grid-cols-[repeat(3,4.5rem)] sm:gap-2"
+            role="group"
+            aria-label="Keypad"
+          >
+            {KEYS.map(([key, sub]) => (
+              <button
+                key={key}
+                type="button"
+                className="flex touch-manipulation flex-col items-center justify-center gap-[3px] rounded-xl border leading-none hover:bg-muted active:bg-muted select-none sm:rounded-lg"
+                aria-label={key === '*' ? 'Star' : key === '#' ? 'Pound' : key}
+                onClick={() => voice.sendDigits(key)}
+              >
+                <span className={`text-2xl leading-none tabular-nums sm:text-lg ${key === '*' ? 'translate-y-[0.2em] scale-[1.35]' : ''}`}>{key}</span>
+                <span className="text-muted-foreground pl-[0.14em] text-[10px] leading-none font-semibold tracking-[0.14em] sm:text-[9px]">
+                  {sub || ' '}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

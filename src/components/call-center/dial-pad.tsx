@@ -199,7 +199,7 @@ export function DialPad({
             <button
               key={item.key}
               type="button"
-              className="pad-key"
+              className={item.key === '*' ? 'pad-key pad-star' : 'pad-key'}
               aria-label={item.key === '*' ? 'Star' : item.key === '#' ? 'Pound' : item.key}
               // Keep the caret in the field on a desk.
               onPointerDown={(event) => event.preventDefault()}

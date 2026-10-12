@@ -74,7 +74,11 @@ way a desk phone does:
   (`src/lib/call-center/model.test.ts`) passing: no `fetch(`, no
   `process.env`, no `router.push`, no carrier imports in the screen.
 - `src/components/call-center/call-center.css`: keypad styles in the desk
-  look (44 px keys on phones, 40 px on a desk; `.final-desk` reset applies).
+  look, laid out like a phone keypad: twelve keys of one fixed size in a
+  3 × 4 grid (80 × 48 on a desk; up to 96 × 60 on a phone, 52 high on a
+  short one), digit centred with its letters under it, and the number,
+  keys and Call in one centred column as wide as the keys (`.final-desk`
+  reset applies). The call bar's in-call keypad uses the same layout.
 - `src/lib/telephony/ui/dial-pad.ts` (new, pure, tested): `formatAsTyped`,
   `normalizeTyped` (digits only, strip leading 1), `isDialable`.
 
