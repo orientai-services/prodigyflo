@@ -48,6 +48,74 @@ export class ForbiddenError extends Error {
   }
 }
 
+/** What a session needs from User, its Organization, its Role and the role's permission keys. */
+export type SessionRow = {
+  id: string
+  name: string
+  email: string
+  organizationId: string
+  roleId: string
+  teamId: string | null
+  avatarUrl: string | null
+  title: string | null
+  organizationName: string
+  /** `slug` is the per-account branding key — see components/brand/org-brand. */
+  organizationSlug: string
+  roleKey: RoleKey
+  roleName: string
+  permissionKeys: string[]
+}
+
+/**
+ * One round trip for the active user, their organization, role and the role's
+ * permission keys. Prisma's include fetched the same rows in five queries, and
+ * this runs on every page, action and API call (a request waits on each
+ * query in turn on Vercel, where the pool holds one connection).
+ */
+export async function loadSessionRow(userId: string): Promise<SessionRow | null> {
+  const rows = await db.$queryRaw<SessionRow[]>`
+    SELECT u."id", u."name", u."email", u."organizationId", u."roleId", u."teamId", u."avatarUrl", u."title",
+           o."name" AS "organizationName", o."slug" AS "organizationSlug",
+           r."key"::text AS "roleKey", r."name" AS "roleName",
+           COALESCE(array_agg(p."key") FILTER (WHERE p."key" IS NOT NULL), ARRAY[]::text[]) AS "permissionKeys"
+    FROM "User" u
+    JOIN "Organization" o ON o."id" = u."organizationId"
+    JOIN "Role" r ON r."id" = u."roleId"
+    LEFT JOIN "RolePermission" rp ON rp."roleId" = r."id"
+    LEFT JOIN "Permission" p ON p."id" = rp."permissionId"
+    WHERE u."id" = ${userId} AND u."isActive" = true AND u."deletedAt" IS NULL
+    GROUP BY u."id", o."id", r."id"
+    LIMIT 1`
+  return rows[0] ?? null
+}
+
+/** The SessionUser for a loaded row, or null when the role is not a staff role. */
+export function sessionUserFrom(user: SessionRow): SessionUser | null {
+  if (!isStaffRole(user.roleKey)) return null
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    organizationId: user.organizationId,
+    organizationName: user.organizationName,
+    organizationSlug: user.organizationSlug,
+    homeOrganizationId: user.organizationId,
+    organizationKind: 'CLIENT',
+    roleId: user.roleId,
+    role: user.roleKey,
+    roleName: user.roleName,
+    isOwner: user.roleKey === 'SUPER_ADMIN',
+    regionId: null,
+    teamId: user.teamId,
+    managerId: null,
+    avatarUrl: user.avatarUrl,
+    title: user.title,
+    permissions: effectivePermissions(user.roleKey, user.permissionKeys as PermissionKey[]),
+    portalClientId: null,
+    landingPath: null,
+  }
+}
+
 /**
  * Loads the signed-in user with role and permissions straight from the database.
  * `cache` dedupes it within a single request, so calling it from a layout, a page
@@ -58,38 +126,8 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const userId = session?.user?.id
   if (!userId) return null
 
-  const user = await db.user.findFirst({
-    where: { id: userId, isActive: true, deletedAt: null },
-    include: {
-      // `slug` is the per-account branding key — see components/brand/org-brand.
-      organization: { select: { id: true, name: true, kind: true, slug: true } },
-      role: { include: { permissions: { include: { permission: true } } } },
-    },
-  })
-  if (!user || !isStaffRole(user.role.key)) return null
-
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    organizationId: user.organizationId,
-    organizationName: user.organization.name,
-    organizationSlug: user.organization.slug,
-    homeOrganizationId: user.organizationId,
-    organizationKind: 'CLIENT',
-    roleId: user.roleId,
-    role: user.role.key,
-    roleName: user.role.name,
-    isOwner: user.role.key === 'SUPER_ADMIN',
-    regionId: null,
-    teamId: user.teamId,
-    managerId: null,
-    avatarUrl: user.avatarUrl,
-    title: user.title,
-    permissions: effectivePermissions(user.role.key, user.role.permissions.map((rp) => rp.permission.key as PermissionKey)),
-    portalClientId: null,
-    landingPath: null,
-  }
+  const user = await loadSessionRow(userId)
+  return user ? sessionUserFrom(user) : null
 })
 
 /** Redirects to /login when signed out. Use in every protected layout and page. */
