@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { CallCenter, type CallCenterPhone } from '@/components/call-center/call-center'
 import { HistorySection } from '@/components/call-center/history/history-section'
 import { MessagesSection, unreadMessageCount } from '@/components/call-center/messages/messages-section'
@@ -16,6 +16,11 @@ import { calendarEnabled } from '@/lib/call-center/calendar/config'
 import { CallCenterCalendarTab } from '@/components/call-center/calendar/calendar-tab'
 
 export const metadata: Metadata = { title: 'Call Center' }
+// The dialer is an app-style page with a bottom tab bar: `cover` lets it run
+// under the iPhone home indicator so env(safe-area-inset-*) reports the real
+// insets (they read 0 without it), and the theme colour tints Safari's
+// toolbars to the desk paper.
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#faf7f0' }
 export const dynamic = 'force-dynamic'
 
 /** `?missed=` is a VoiceCall cuid. */
