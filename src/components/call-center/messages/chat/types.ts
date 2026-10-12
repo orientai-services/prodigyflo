@@ -113,7 +113,12 @@ export type Message = {
   /** Local only: an optimistic copy waiting for (or refused by) the server. */
   pending?: boolean
   failed?: string | null
+  /** Local only: what a retry sends again (files already up, mentions, a voice note still to upload). */
+  retry?: { attachments: string[]; mentions: string[]; voice?: VoiceDraft } | null
 }
+
+/** A recorded voice note not uploaded yet (kept so a failed upload can be retried from the same recording). */
+export type VoiceDraft = { blob: Blob; name: string; duration: number; wave: string }
 
 export type Relation = 'staff' | 'upline' | 'downline' | 'team'
 export type Person = {

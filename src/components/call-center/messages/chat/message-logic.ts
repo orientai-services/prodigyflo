@@ -221,10 +221,9 @@ export function mentionItems(o: {
     return !q || n.startsWith(q) || n.split(/\s+/).some((w) => w.startsWith(q))
   }
   let items = [...pool.values()].filter((u) => u.name && hit(u.name)).slice(0, 8)
-  if (o.staff && o.kind !== 'dm') {
-    const words = q ? EVERYONE.filter((w) => w.startsWith(q)) : [o.lang === 'es' ? 'todos' : 'all']
-    items = [...words.map((w) => ({ uid: '*', name: w, special: true })), ...items]
-  }
+  // Exactly SunOff's suggestion: one "@todos" (es) / "@all" (en) while the query could be either word.
+  // The Worker still accepts all four words typed out (@todos, @all, @canal, @channel).
+  if (o.staff && o.kind !== 'dm' && (!q || 'todos'.startsWith(q) || 'all'.startsWith(q))) items = [{ uid: '*', name: o.lang === 'es' ? 'todos' : 'all', special: true }, ...items]
   return items
 }
 

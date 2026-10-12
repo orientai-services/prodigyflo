@@ -12,7 +12,7 @@ import { RoomsSheet } from './rooms-sheet'
 import { SettingsSheet } from './settings-sheet'
 import { FlaggedSheet, NewChatSheet, PinsSheet, SearchSheet, type Goto } from './sheets'
 import { strings, type T } from './strings'
-import type { Channel, ChatEvent, Lang, Me, MeAnswer, MePrefs, Message, RoomsAnswer } from './types'
+import type { Channel, ChatEvent, Lang, Me, MeAnswer, MePrefs, Message, RoomsAnswer, VoiceDraft } from './types'
 import './chat.css'
 
 /**
@@ -159,7 +159,8 @@ function reducer(s: State, a: Action): State {
     }
     case 'drop': {
       const cur = s.panes[a.channel]
-      return cur ? { ...s, panes: { ...s.panes, [a.channel]: { ...cur, list: cur.list.filter((m) => m.id !== a.id) } } } : s
+      const panes = cur ? { ...s.panes, [a.channel]: { ...cur, list: cur.list.filter((m) => m.id !== a.id) } } : s.panes
+      return { ...s, panes, thread: s.thread ? { ...s.thread, list: s.thread.list.filter((m) => m.id !== a.id) } : null }
     }
     case 'thread':
       return { ...s, thread: a.thread }
@@ -202,7 +203,9 @@ function reducer(s: State, a: Action): State {
 // ── App ─────────────────────────────────────────────────────────────────────
 
 export type ChatActions = {
-  send: (channel: string, body: string, o?: { parent?: string; attachments?: string[]; mentions?: string[]; sms?: boolean; retryOf?: Message }) => Promise<void>
+  send: (channel: string, body: string, o?: { parent?: string; attachments?: string[]; mentions?: string[]; sms?: boolean; retryOf?: Message; voice?: VoiceDraft }) => Promise<void>
+  /** The conversation reports whether its list is scrolled to the bottom; reading only counts there (SunOff). */
+  atBottom: (channel: string, bottom: boolean) => void
   edit: (m: Message, body: string) => Promise<void>
   remove: (m: Message) => Promise<void>
   react: (m: Message, emoji: string) => Promise<void>
@@ -296,6 +299,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
   const loadChannels = useCallback(async () => {
     const list = await api.req<Channel[]>('GET', '/api/channels')
     dispatch({ type: 'channels', list })
+    return list
   }, [api])
 
   const loadRooms = useCallback(async () => {
@@ -307,8 +311,11 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
     }
   }, [api])
 
+  // Like SunOff, a conversation is read only while its list sits at the bottom and the tab is visible.
+  const bottoms = useRef<Record<string, boolean>>({})
   const markRead = useCallback(
     async (channel: string) => {
+      if (!bottoms.current[channel] || document.visibilityState !== 'visible') return
       const pane = stateRef.current.panes[channel]
       const last = pane?.list.filter(isServer).at(-1)
       const ch = stateRef.current.channels.find((c) => c.id === channel)
@@ -341,12 +348,13 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
    * just went away). Phones show the list, so there it only closes what is open.
    */
   const openDefault = useCallback(
-    (skip?: string) => {
+    (skip?: string, fresh?: Channel[]) => {
       if (!isDesk()) {
         if (activeRef.current) open(null)
         return
       }
-      const c = mostRecent(stateRef.current.channels.filter((x) => x.id !== skip))
+      // `fresh`: a list just loaded, before stateRef catches up with the render (first open on sign-in).
+      const c = mostRecent((fresh ?? stateRef.current.channels).filter((x) => x.id !== skip))
       open(c ? c.id : null, { replace: true })
     },
     [open],
@@ -381,13 +389,13 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
           const l = me.prefs?.lang === 'en' || me.prefs?.lang === 'es' ? me.prefs.lang : me.lang
           if (l === 'en' || l === 'es') applyLang(l)
         }
-        await loadChannels()
+        const first = await loadChannels()
         if (!live) return
         setPhase('ready')
         void api.connect()
         void loadRooms()
         // #c= / #case= / #m= / #thread= links belong to the host bridge (./host-bridge.ts); otherwise the default.
-        if (!/(^#|&)(c|case|m|thread)=/.test(window.location.hash)) openDefault()
+        if (!/(^#|&)(c|case|m|thread)=/.test(window.location.hash)) openDefault(undefined, first)
       } catch {
         if (live) setPhase('error')
       }
@@ -523,6 +531,16 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
     return () => window.clearInterval(id)
   }, [api, phase, status, loadChannels, loadRooms])
 
+  // Back to the tab with the open conversation at its bottom: that counts as reading it.
+  useEffect(() => {
+    const onVis = () => {
+      const ch = activeRef.current
+      if (ch && document.visibilityState === 'visible') void markRead(ch)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [markRead])
+
   // Opening a conversation: load, focus (no push while I'm looking), mark read, keep it in the URL.
   useEffect(() => {
     if (!active || phase !== 'ready') return
@@ -655,6 +673,10 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         const me = stateRef.current.me
         if (!me) return
         const cid = o.retryOf?.client_id ?? clientId()
+        const prev = o.retryOf?.retry
+        let attachments = o.attachments ?? prev?.attachments ?? []
+        const mentions = o.mentions ?? prev?.mentions ?? []
+        let voice = o.voice ?? prev?.voice
         const local: Message = o.retryOf
           ? { ...o.retryOf, pending: true, failed: null }
           : {
@@ -676,18 +698,36 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
               client_id: cid,
               client: o.sms ? { dir: 'out', via: 'sms' } : null,
               pending: true,
+              retry: { attachments, mentions, voice },
             }
         dispatch({ type: 'msg', channel, message: local })
         try {
+          // A voice note uploads first, inside the send, so a failed upload is a failed bubble with Retry (SunOff).
+          if (voice && !o.sms) {
+            const form = new FormData()
+            form.set('file', voice.blob, voice.name)
+            form.set('channel', channel)
+            form.set('kind', 'voice')
+            form.set('duration', String(voice.duration))
+            if (voice.wave) form.set('wave', voice.wave)
+            attachments = [...attachments, (await api.upload(form)).attachment.id]
+            voice = undefined
+            dispatch({ type: 'patch', channel, id: local.id, patch: { retry: { attachments, mentions } } })
+          }
           const r = o.sms
             ? await api.req<{ message: Message }>('POST', `/api/cases/${channel}/sms`, { body })
-            : await api.req<{ message: Message }>('POST', `/api/channels/${channel}/messages`, { body, parent_id: o.parent ?? null, attachments: o.attachments ?? [], client_id: cid, ...(o.mentions?.length ? { mentions: o.mentions } : {}) })
+            : await api.req<{ message: Message }>('POST', `/api/channels/${channel}/messages`, { body, parent_id: local.parent_id ?? null, attachments, client_id: cid, ...(mentions.length ? { mentions } : {}) })
           dispatch({ type: 'drop', channel, id: local.id })
           dispatch({ type: 'msg', channel, message: { ...r.message, client_id: r.message.client_id ?? cid } })
           bumpRoot({ ...r.message, channel })
         } catch (e) {
           dispatch({ type: 'patch', channel, id: local.id, patch: { pending: false, failed: e instanceof ChatError ? e.message : t.notSent } })
         }
+      },
+      atBottom(channel, bottom) {
+        const was = bottoms.current[channel]
+        bottoms.current[channel] = bottom
+        if (bottom && !was) window.setTimeout(() => void markRead(channel), 500)
       },
       discard(m) {
         dispatch({ type: 'drop', channel: m.channel, id: m.id })
@@ -737,7 +777,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         if (!api.send({ t: 'typing', channel })) void api.req('POST', `/api/channels/${channel}/typing`).catch(() => undefined)
       },
     }),
-    [api, toast, bumpRoot, t.failed, t.notSent, t.tooBig],
+    [api, toast, bumpRoot, markRead, t.failed, t.notSent, t.tooBig],
   )
 
   // Shell seam (./host-bridge.ts): badge counts, live state, the phone title, and #c= / #case= / #m= / #thread= links.

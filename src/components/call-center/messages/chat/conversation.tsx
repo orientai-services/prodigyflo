@@ -130,7 +130,17 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
       el.scrollTop = Math.max(0, div.offsetTop - el.clientHeight / 3)
       setStick(false)
     } else el.scrollTop = el.scrollHeight
-  }, [pane.loaded])
+    actions.atBottom(channel.id, el.scrollHeight - el.scrollTop - el.clientHeight < 48)
+  }, [pane.loaded, actions, channel.id])
+  // Leaving the conversation stops it counting as read (the actions object changes with the language; the channel decides).
+  const actionsRef = useRef(actions)
+  useEffect(() => {
+    actionsRef.current = actions
+  })
+  useEffect(() => {
+    const ch = channel.id
+    return () => actionsRef.current.atBottom(ch, false)
+  }, [channel.id])
 
   // Older messages land above: keep what I'm looking at in place.
   const keepAnchor = useRef<{ h: number; top: number } | null>(null)
@@ -173,10 +183,11 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
     const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48
     setStick(bottom)
     if (bottom) setNewBelow(0)
+    if (opened.current) actions.atBottom(channel.id, bottom)
     const div = el.querySelector<HTMLElement>('.chat-new')
     setDivBelow(Boolean(div && div.offsetTop > el.scrollTop + el.clientHeight))
     if (el.scrollTop < 300 && pane.hasMore) void loadOlder()
-  }, [loadOlder, pane.hasMore])
+  }, [loadOlder, pane.hasMore, actions, channel.id])
 
   function jump() {
     const el = scroller.current
@@ -571,6 +582,9 @@ function MessageItem({ ctx, m, grouped, inThread }: { ctx: Ctx; m: Message; grou
           <EditBox ctx={ctx} m={m} />
         ) : (
           <>
+            {!m.body && m.retry?.voice ? (
+              <p className="chat-text chat-voice-local">🎤 {t.voiceNote} {fmtDur(m.retry.voice.duration)}</p>
+            ) : null}
             {m.body ? (
               <p className={`chat-text${isJumbo(m.body) && !m.attachments.length ? ' jumbo' : ''}`}>
                 <Body body={m.body} names={names} meName={me.name} />
@@ -802,7 +816,6 @@ function Composer({
   const dkey = main && !sms ? draftKey(me.uid, channel.id) : null
   const [text, setText] = useState(() => (dkey ? readDraft(dkey) : ''))
   const [files, setFiles] = useState<FileEnt[]>([])
-  const [busy, setBusy] = useState(false)
   const [mq, setMq] = useState<{ q: string; start: number; end: number } | null>(null)
   const [sel, setSel] = useState(0)
   const [dir, setDir] = useState<Person[] | null>(null)
@@ -934,24 +947,16 @@ function Composer({
     })
   }
 
-  const sendVoice = async (r: Recording) => {
-    setBusy(true)
-    try {
-      const id = await actions.upload(channel.id, r.blob, voiceFileName(new Date(), r.type), { kind: 'voice', duration: String(r.duration), wave: r.wave })
-      await actions.send(channel.id, '', { parent, attachments: [id] })
-      onSent()
-    } catch (e) {
-      actions.toast(e instanceof ChatError ? e.message : t.failed)
-    } finally {
-      setBusy(false)
-    }
+  // The upload happens inside the send: a failed one stays as a bubble with Retry / Discard.
+  const sendVoice = (r: Recording) => {
+    void actions.send(channel.id, '', { parent, voice: { blob: r.blob, name: voiceFileName(new Date(), r.type), duration: r.duration, wave: r.wave } })
+    onSent()
   }
-  const rec = useRecorder((r) => void sendVoice(r), (msg) => actions.toast(msg), t)
+  const rec = useRecorder(sendVoice, (msg) => actions.toast(msg), t)
   const recording = rec.rec && rec.rec.state !== 'preview'
   const preview = rec.rec?.state === 'preview'
 
   function submit() {
-    if (busy) return
     const body = text.replace(/\s+$/, '')
     if (sms) {
       if (!body.trim()) return
@@ -984,7 +989,7 @@ function Composer({
   }
 
   const hasContent = Boolean(text.trim() || files.length)
-  const canSend = (text.trim() || files.some((f) => f.status === 'ok')) && !files.some((f) => f.status === 'up') && len <= (sms ? SMS_MAX_BODY : MAX_BODY) && !busy
+  const canSend = (text.trim() || files.some((f) => f.status === 'ok')) && !files.some((f) => f.status === 'up') && len <= (sms ? SMS_MAX_BODY : MAX_BODY)
   const showMic = !sms && !hasContent && canRecord()
   const micLabel = rec.rec?.mode === 'tap' && recording ? t.stopLbl : typeof window !== 'undefined' && isCoarse() ? t.recHoldLbl : t.recLbl
 
@@ -1125,7 +1130,6 @@ function Composer({
             className={`chat-send voice${rec.rec ? ' on' : ''}`}
             aria-label={micLabel}
             title={micLabel}
-            disabled={busy}
             onPointerDown={(e) => {
               if (e.pointerType === 'mouse' || e.button > 0) return
               e.preventDefault()
@@ -1179,7 +1183,7 @@ function Composer({
           </button>
         ) : (
           <button type="submit" className="chat-send icon" disabled={!canSend} aria-label={t.send} title={t.send}>
-            {busy ? '…' : <SendIcon />}
+            <SendIcon />
           </button>
         )}
       </div>

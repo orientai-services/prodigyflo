@@ -188,7 +188,8 @@ describe('composer', () => {
     expect(mentionItems({ ...base, members: [], q: 'g' }).map((x) => x.uid)).toEqual(['u7'])
     expect(mentionItems({ ...base, staff: true, q: '' })[0]).toMatchObject({ uid: '*', name: 'all', special: true })
     expect(mentionItems({ ...base, staff: true, lang: 'es', q: '' })[0]).toMatchObject({ name: 'todos' })
-    expect(mentionItems({ ...base, staff: true, q: 'ca' }).map((x) => x.name)).toEqual(['canal'])
+    expect(mentionItems({ ...base, staff: true, q: 'to' })[0]).toMatchObject({ name: 'all', special: true })
+    expect(mentionItems({ ...base, staff: true, q: 'ca' }).some((x) => x.special)).toBe(false)
     expect(mentionItems({ ...base, staff: true, kind: 'dm', q: '' }).some((x) => x.special)).toBe(false)
   })
   it('sends only the picks still in the text', () => {
