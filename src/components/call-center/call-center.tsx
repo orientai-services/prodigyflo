@@ -416,6 +416,8 @@ export function CallCenter({
   }
 
   useDeskKeys((action: DeskKeyAction) => {
+    // The Ads and Calendar tabs have no lead list on screen: lead shortcuts would act out of sight.
+    if ((view === 'ads' || view === 'calendar') && action.kind !== 'help' && action.kind !== 'close') return false
     switch (action.kind) {
       case 'help':
         setHelp((open) => !open)
