@@ -44,6 +44,23 @@ export function calendarReps(env: Record<string, string | undefined> = process.e
   return reps.length ? reps : [...DEFAULT_REPS]
 }
 
+/** Block colors, in rep-list order. The CSS defines one class per name (`cal-rep-<name>`). */
+export const REP_COLORS = ['teal', 'amber', 'violet', 'rose', 'sky', 'lime'] as const
+export type RepColor = (typeof REP_COLORS)[number]
+
+/**
+ * One fixed color per rep: the rep's place in the config list picks it, so the
+ * same rep always gets the same color. A key not in the list (legacy data)
+ * still gets a stable color from its letters.
+ */
+export function repColor(key: string, reps: readonly CalendarRep[] = calendarReps()): RepColor {
+  const index = reps.findIndex((r) => r.key === key)
+  if (index >= 0) return REP_COLORS[index % REP_COLORS.length]
+  let hash = 0
+  for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return REP_COLORS[hash % REP_COLORS.length]
+}
+
 function flagOn(value: string | undefined): boolean {
   return ['1', 'true', 'on', 'yes'].includes((value ?? '').trim().toLowerCase())
 }
