@@ -452,7 +452,7 @@ export function LeadProfile({ api, now, sheetHost }: { api: LeadHandoffApi; now:
           </div>
           {state === 'analysing' ? (
             <p className="state-line" data-testid="analysing">
-              <b>Intake received {profile.intakeAt ? agoLabel(profile.intakeAt, now) : 'just now'} · documents analysing.</b> Figures fill in as the extraction finishes.
+              <b>Intake received{profile.intakeAt ? ` ${agoLabel(profile.intakeAt, now)}` : ''} · documents analysing.</b> Figures fill in as the extraction finishes.
             </p>
           ) : null}
           {!profile.readOnly ? <a className="linkish" href={`/clients/${encodeURIComponent(file.id)}`} target="_blank" rel="noopener noreferrer">Open the full file ↗</a> : null}
