@@ -15,6 +15,7 @@ import {
   writeMeasuredEdge,
   writeRingMuted,
 } from '@/lib/telephony/ui/voice-prefs'
+import { TOKEN_ERROR_CODES, phoneIssueFrom } from '@/lib/telephony/ui/phone-status'
 import { actionFailure } from '@/lib/telephony/ui/result'
 
 /**
@@ -153,7 +154,14 @@ export type VoiceContextValue = {
   who: string | null
   answeredAt: number | null
   muted: boolean
+  /** The last call or dial attempt went wrong (plain words, shown until dismissed). */
   error: string | null
+  /**
+   * The phone itself has a problem that belongs to no call (the service
+   * dropped, the session expired, setup failed). A status for the Call
+   * Center's phone pill, never a pop-up: it clears when the phone registers.
+   */
+  phoneIssue: string | null
   incoming: IncomingVM | null
   /** The last call that ended in this tab, or null. */
   lastCall: EndedCall | null
@@ -265,6 +273,9 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
   const [answeredAt, setAnsweredAt] = useState<number | null>(null)
   const [muted, setMuted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [phoneIssue, setPhoneIssueState] = useState<string | null>(null)
+  /** The same, for a dial that needs to say why the phone didn't start. */
+  const issueRef = useRef<string | null>(null)
   const [incoming, setIncoming] = useState<IncomingVM | null>(null)
   const [lastCall, setLastCall] = useState<EndedCall | null>(null)
   const [activeTarget, setActiveTarget] = useState<string | null>(null)
@@ -282,6 +293,8 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
   const metaRef = useRef<{ target: string; direction: 'outbound' | 'inbound'; who: string | null; answeredAt: number | null; error: string | null } | null>(null)
   const seqRef = useRef(0)
   const unmountedRef = useRef(false)
+  /** This tab is the leader (for the Device's own listeners, bound once). */
+  const leaderRef = useRef(false)
 
   // Quality, failover and connection prefs. Prefs start at their defaults and
   // are read from localStorage after mount, so the server render and the
@@ -580,20 +593,27 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
 
   // ── The Device: created on first need, one per tab ───────────────────────
 
+  const setPhoneIssue = useCallback((next: string | null) => {
+    issueRef.current = next
+    setPhoneIssueState(next)
+  }, [])
+
+  // A failure here is about the phone, not a call: it goes to the pill. A dial
+  // that finds no phone repeats it as that dial's error (see `call`).
   const fetchToken = useCallback(async (): Promise<string | null> => {
     try {
       const res = await getVoiceToken()
       const failure = actionFailure(res)
       if (failure) {
-        setError(failure.error)
+        setPhoneIssue(failure.error)
         return null
       }
       return (res as { token: string }).token
     } catch {
-      setError('Could not start the phone. Reload the page and try again.')
+      setPhoneIssue('Could not start the phone. Reload the page and try again.')
       return null
     }
-  }, [])
+  }, [setPhoneIssue])
 
   const ensureDevice = useCallback(async (): Promise<SdkDevice | null> => {
     if (deviceRef.current) return deviceRef.current
@@ -605,7 +625,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       try {
         sdk = (await import('@twilio/voice-sdk')) as unknown as SdkModule
       } catch {
-        setError('Could not load the phone. Reload the page and try again.')
+        setPhoneIssue('Could not load the phone. Reload the page and try again.')
         return null
       }
       if (unmountedRef.current) return null
@@ -619,9 +639,32 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
         maxAverageBitrate: maxBitrate(conn.lowData),
       })
       device.audio?.incoming(!ringMutedRef.current)
-      device.on('registered', () => setRegistered(true))
+      device.on('registered', () => {
+        setRegistered(true)
+        setPhoneIssue(null)
+      })
       device.on('unregistered', () => setRegistered(false))
-      device.on('error', (err) => setError(plainVoiceError(err)))
+      // An error that names the call in progress is that call's; everything
+      // else is the phone's. The SDK raises those when its signalling socket
+      // drops (a Wi-Fi blip, a sleeping laptop) and then reconnects and
+      // re-registers by itself, so they go to the pill and clear on
+      // 'registered', instead of a pop-up that outlives the problem.
+      device.on('error', (err, call) => {
+        if (call && call === activeRef.current) {
+          setError(plainVoiceError(err))
+          return
+        }
+        setPhoneIssue(phoneIssueFrom(err))
+        const code = (err as { code?: number } | null)?.code
+        if (typeof code === 'number' && TOKEN_ERROR_CODES.has(code)) {
+          // A fresh token fixes an expired or refused one without a reload.
+          void fetchToken().then((next) => {
+            if (!next || deviceRef.current !== device) return
+            device.updateToken(next)
+            if (leaderRef.current) device.register().catch((e: unknown) => setPhoneIssue(phoneIssueFrom(e)))
+          })
+        }
+      })
       device.on('tokenWillExpire', () => {
         void fetchToken().then((next) => {
           if (next) device.updateToken(next)
@@ -655,7 +698,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
     } finally {
       loadingRef.current = null
     }
-  }, [fetchToken])
+  }, [fetchToken, setPhoneIssue])
 
   // Saved prefs, read once after mount (localStorage is browser-only).
   useEffect(() => {
@@ -741,11 +784,12 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
 
   // The leader registers for incoming calls; a tab that loses leadership stops.
   useEffect(() => {
+    leaderRef.current = leader
     let cancelled = false
     if (leader) {
       void ensureDevice().then((device) => {
         if (!device || cancelled) return
-        device.register().catch((err: unknown) => setError(plainVoiceError(err)))
+        device.register().catch((err: unknown) => setPhoneIssue(phoneIssueFrom(err)))
       })
     } else if (deviceRef.current) {
       void deviceRef.current.unregister().catch(() => {})
@@ -753,7 +797,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
     return () => {
       cancelled = true
     }
-  }, [leader, ensureDevice])
+  }, [leader, ensureDevice, setPhoneIssue])
 
   // Presence heartbeat while this tab can ring.
   useEffect(() => {
@@ -788,7 +832,9 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       const device = await ensureDevice()
       if (!device) {
         connectingRef.current = false
+        setError(issueRef.current ?? 'Could not start the phone. Reload the page and try again.')
         setStatus('idle')
+        setWho(null)
         return false
       }
       await takeAudio(device)
@@ -903,6 +949,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       answeredAt,
       muted,
       error,
+      phoneIssue,
       incoming,
       lastCall,
       activeTarget,
@@ -922,7 +969,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       applyConnection,
     }),
     [
-      setup, leader, registered, status, who, answeredAt, muted, error, incoming, lastCall, activeTarget, lineId,
+      setup, leader, registered, status, who, answeredAt, muted, error, phoneIssue, incoming, lastCall, activeTarget, lineId,
       call, hangup, toggleMute, sendDigits, accept, decline, clearError,
       callQuality, ringtoneMuted, setRingtoneMuted, connection, applyConnection,
     ],
