@@ -55,7 +55,8 @@ describe('call center calendar isolation', () => {
     ).trim()
     expect(diff).toBe('')
 
-    const block = (schema: string, model: string) => schema.match(new RegExp(`model ${model} \\{[\\s\\S]*?\\n\\}`))?.[0] ?? null
+    // A Windows checkout has CRLF where git's copy has LF; compare the text, not the line endings.
+    const block = (schema: string, model: string) => schema.replace(/\r\n/g, '\n').match(new RegExp(`model ${model} \\{[\\s\\S]*?\\n\\}`))?.[0] ?? null
     const before = execFileSync('git', ['show', `${base}:prisma/schema.prisma`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20 })
     const after = readFileSync(path.join(ROOT, 'prisma/schema.prisma'), 'utf8')
     for (const model of ['Appointment', 'AppointmentReceipt', 'AvailabilitySlot']) {
