@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import type { NumberWebhooks, TelephonyCredentials, TelephonyProvider } from './provider'
 import { MockTelephonyProvider } from './mock'
 import { TwilioTelephonyProvider } from './twilio'
@@ -85,8 +86,11 @@ export function isPlatformAccount(creds: TelephonyCredentials | null | undefined
  * `sub` of every voice token). Such an org rides the platform account like any
  * other tenant, with the platform's own env token, so it can't claim the
  * shared account's carrier state or sign webhooks with a token it chose.
+ *
+ * `cache` dedupes it within one page render (the layout, the page and the
+ * phone status all ask); actions and route handlers read fresh every call.
  */
-export async function telephonyCredentialsDetailed(organizationId: string): Promise<DetailedCredentials> {
+export const telephonyCredentialsDetailed = cache(async (organizationId: string): Promise<DetailedCredentials> => {
   const hasTwilioField = (c: Record<string, string>) => Boolean(c.accountSid?.trim() || c.authToken?.trim())
   const vault = await vaultCredentialsDetailed(organizationId, 'TWILIO_SMS', {
     inheritFromParent: true,
@@ -102,7 +106,7 @@ export async function telephonyCredentialsDetailed(organizationId: string): Prom
     return { creds: { accountSid, authToken }, source: 'vault', vaultOrgId: vault.organizationId }
   }
   return platform ? { creds: platform, source: 'platform' } : { creds: null, reason: 'none' }
-}
+})
 
 /**
  * Thin wrapper kept for existing callers: the credentials, or null when there

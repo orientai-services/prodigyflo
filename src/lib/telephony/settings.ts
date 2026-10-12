@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { db } from '@/lib/db'
 import { mergeOrgSettings } from '@/lib/org-settings'
 import { clampWindow, localTimeIn, type CallWindow } from './timezones'
@@ -77,10 +78,11 @@ export function readTelephonySettings(settings: unknown): TelephonySettings {
   }
 }
 
-export async function telephonySettingsFor(organizationId: string): Promise<TelephonySettings & { timezone: string }> {
+/** Deduped within one page render by `cache`; actions and route handlers read fresh every call. */
+export const telephonySettingsFor = cache(async (organizationId: string): Promise<TelephonySettings & { timezone: string }> => {
   const org = await db.organization.findUnique({ where: { id: organizationId }, select: { settings: true, timezone: true } })
   return { ...readTelephonySettings(org?.settings), timezone: org?.timezone ?? 'America/Los_Angeles' }
-}
+})
 
 export async function saveTelephonySettings(organizationId: string, patch: Record<string, unknown>): Promise<void> {
   await mergeOrgSettings(organizationId, 'telephony', patch)

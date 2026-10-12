@@ -9,7 +9,7 @@ import { dateTime } from '@/lib/format'
 import type { BillingView } from '@/lib/meta/ads/read'
 import { AccountCardView } from './overview'
 import { money } from './parts'
-import { SpendBars } from './spend-bars'
+import { SpendBars } from './lazy-islands'
 
 type LedgerRow = BillingView['ledger'][number]
 

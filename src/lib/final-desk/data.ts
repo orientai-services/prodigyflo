@@ -1,4 +1,5 @@
 import 'server-only'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { loadFilteredClients } from './filtered-clients'
 import type { ClientQuery } from './filters'
@@ -33,30 +34,60 @@ export async function loadFinalQuestionnaire(user: SessionUser, clientId: string
     revision: Number(asRecord(saved?.answers)._revision ?? 0), responseId: saved?.id ?? null }
 }
 
+/** The desk's document filter: a stored file that is not rejected or expired. */
+const DESK_DOCUMENTS = { storageKey: { not: null }, status: { notIn: ['REJECTED', 'EXPIRED'] } } satisfies Prisma.ClientDocumentWhereInput
+const DESK_DOCUMENT_SELECT = { id: true, label: true, fileName: true, internalComment: true, requirement: { select: { key: true } },
+  extractions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, detectedTypeKey: true, sourceActive:true, fields: { select: { verification: true } } } } } satisfies Prisma.ClientDocumentSelect
+/** The next live appointment. */
+const nextAppointment = () => ({ where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: new Date() } }, orderBy: { startsAt: 'asc' }, take: 1 }) satisfies Prisma.Client$appointmentsArgs
+
+function deskDocs(documents: Prisma.ClientDocumentGetPayload<{ select: typeof DESK_DOCUMENT_SELECT }>[]): FinalClient['docs'] {
+  return documents.map(d => {
+    const e = d.extractions[0], kind = classifyDeskKind({ requirementKey: d.requirement?.key, detectedType: e?.detectedTypeKey, label: d.label, fileName: d.fileName, note: d.internalComment })
+    return { id: d.id, key: kind?.key ?? 'other', label: d.fileName || d.label || 'Document', state: tileState({ hasFile: true, extractionStatus: e?.status ?? null, fieldCount: e?.fields.length ?? 0, verifiedCount: e?.fields.filter(f => ['VERIFIED', 'CORRECTED'].includes(f.verification)).length ?? 0 }) }
+  })
+}
+
+function extractionOf(docs: FinalClient['docs']): FinalClient['extraction'] {
+  const agreement = docs.filter(d => ['finance_agreement', 'signed_contract'].includes(d.key))
+  return !agreement.length ? 'none' : agreement.every(d => d.state === 'verified') ? 'verified' : 'unverified'
+}
+
+/** The Queue badge: an unverified agreement, or a booked client with no agreement on file. */
+function inQueue(c: { extraction: FinalClient['extraction']; booked: boolean }): boolean {
+  return c.extraction === 'unverified' || (c.extraction === 'none' && c.booked)
+}
+
 async function loadFinalClients(user: SessionUser): Promise<FinalClient[]> {
   const rows = await db.client.findMany({ where: clientScope(user), orderBy: [{ lastActivityAt: 'desc' }, { id: 'asc' }],
     select: { id: true, firstName: true, lastName: true, owner: { select: { name: true } }, currentStage: { select: { name: true } },
       addresses: { where: { isPrimary: true }, take: 1, select: { state: true, postalCode: true } },
-      appointments: { where: { status: { in: ['SCHEDULED', 'CONFIRMED'] }, endsAt: { gt: new Date() } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, timezone: true } },
+      appointments: { ...nextAppointment(), select: { startsAt: true, timezone: true } },
       surveyResponses: { orderBy: { updatedAt: 'desc' }, select: { answers: true, survey: { select: { name: true } } } },
-      documents: { where: { storageKey: { not: null }, status: { notIn: ['REJECTED', 'EXPIRED'] } },
-        select: { id: true, label: true, fileName: true, internalComment: true, requirement: { select: { key: true } },
-          extractions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, detectedTypeKey: true, sourceActive:true, fields: { select: { verification: true } } } } } } } })
+      documents: { where: DESK_DOCUMENTS, select: DESK_DOCUMENT_SELECT } } })
   return rows.map(c => {
     const source = asRecord(c.surveyResponses.find(r => r.survey.name !== QUESTIONNAIRE_NAME)?.answers)
     const saved = asRecord(c.surveyResponses.find(r => r.survey.name === QUESTIONNAIRE_NAME)?.answers)
-    const docs = c.documents.map(d => {
-      const e = d.extractions[0], kind = classifyDeskKind({ requirementKey: d.requirement?.key, detectedType: e?.detectedTypeKey, label: d.label, fileName: d.fileName, note: d.internalComment })
-      return { id: d.id, key: kind?.key ?? 'other', label: d.fileName || d.label || 'Document', state: tileState({ hasFile: true, extractionStatus: e?.status ?? null, fieldCount: e?.fields.length ?? 0, verifiedCount: e?.fields.filter(f => ['VERIFIED', 'CORRECTED'].includes(f.verification)).length ?? 0 }) }
-    })
-    const agreement = docs.filter(d => ['finance_agreement', 'signed_contract'].includes(d.key))
+    const docs = deskDocs(c.documents)
     const appt = c.appointments[0]
     return { id: c.id, name: str(saved.legal_name) || `${c.firstName} ${c.lastName}`, state: c.addresses[0]?.state ?? '', zip: c.addresses[0]?.postalCode ?? '',
       stage: c.currentStage.name, owner: c.owner?.name ?? null,
       appointment: appt ? appt.startsAt.toLocaleString('en-US', { timeZone: appt.timezone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : null,
-      docs, extraction: !agreement.length ? 'none' : agreement.every(d => d.state === 'verified') ? 'verified' : 'unverified',
+      docs, extraction: extractionOf(docs),
       credit: /^\d{3}$/.test(str(source.credit_score)) ? str(source.credit_score) : null }
   })
+}
+
+/**
+ * The Queue badge count without the full client list: only the documents and
+ * the next appointment it depends on. Board, Clients and the profile show the
+ * badge on every load and every 15 s refresh; the names, stages, addresses and
+ * questionnaire answers loadFinalClients also reads are not needed for it.
+ */
+async function loadQueueCount(user: SessionUser): Promise<number> {
+  const rows = await db.client.findMany({ where: clientScope(user),
+    select: { appointments: { ...nextAppointment(), select: { id: true } }, documents: { where: DESK_DOCUMENTS, select: DESK_DOCUMENT_SELECT } } })
+  return rows.filter(c => inQueue({ extraction: extractionOf(deskDocs(c.documents)), booked: c.appointments.length > 0 })).length
 }
 
 const PUBLIC_RECORD_TILES = new Set<string>(['ucc_lien', 'home_deed', 'county_permit'])
@@ -87,11 +118,12 @@ export async function loadProfileFile(user: SessionUser, clientId: string) {
 
 export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?: string, month?: string, query: ClientQuery = {}): Promise<FinalDeskPayload> {
   if ((view === 'engine' || view === 'users') && user.role !== 'SUPER_ADMIN') throw Error('Forbidden')
-  const clients = await loadFinalClients(user)
-  const queueCount = clients.filter(c => c.extraction === 'unverified' || (c.extraction === 'none' && c.appointment)).length
+  // Only these views show the client list; the rest need just the Queue badge.
+  const clients = ['queue', 'engine', 'documents', 'submissions'].includes(view) ? await loadFinalClients(user) : null
+  const queueCount = clients ? clients.filter(c => inQueue({ extraction: c.extraction, booked: c.appointment !== null })).length : await loadQueueCount(user)
   const payload: FinalDeskPayload = { user: { id: user.id, name: user.name, role: user.role as 'SUPER_ADMIN' | 'CLOSER' }, queueCount }
   if (view === 'board') payload.board = await loadDeskBoard(user, month)
-  if (['queue', 'engine', 'documents', 'submissions'].includes(view)) payload.clients = clients
+  if (clients) payload.clients = clients
   if (view === 'clients') Object.assign(payload, await loadFilteredClients(user, query))
   if ((view === 'profile' || view === 'questionnaire') && clientId) {
     const loaded = await loadProfileFile(user, clientId)
@@ -101,7 +133,7 @@ export async function loadFinalDesk(user: SessionUser, view: DeskView, clientId?
   }
   if (view === 'engine') {
     const decisions = await db.auditEvent.findMany({ where: { organizationId: user.organizationId, action: { in: ['desk.suggestion.accepted', 'desk.suggestion.dismissed'] } }, orderBy: { createdAt: 'desc' }, select: { entityId: true, action: true } })
-    payload.suggestions = clients.filter(c => c.extraction === 'unverified' || (c.extraction === 'none' && c.appointment)).map(c => {
+    payload.suggestions = (clients ?? []).filter(c => inQueue({ extraction: c.extraction, booked: c.appointment !== null })).map(c => {
       const id = `${c.id}:${c.extraction}:${c.docs.map(d => d.id + d.state).sort().join(',')}`
       const decision = decisions.find(d => d.entityId === id)
       return { id, clientId: c.id, name: c.name, title: c.extraction === 'none' ? 'Booked with empty file' : `${c.owner ? '' : 'Unassigned + '}unverified extraction`,

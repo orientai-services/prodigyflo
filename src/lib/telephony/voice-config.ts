@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { can, type SessionUser } from '@/lib/rbac'
 import { isMockTelephony, telephonyCredentialsDetailed } from './index'
 import { voiceIdentity } from './access-token'
@@ -44,8 +45,12 @@ export function voiceKeys(env: Record<string, string | undefined> = process.env)
   return apiKeySid && apiKeySecret && appSid ? { apiKeySid, apiKeySecret, appSid } : null
 }
 
-/** The VoiceSetup the UI renders from. Plain-English reason whenever it isn't ready. */
-export async function voiceSetupFor(user: SessionUser): Promise<VoiceSetup> {
+/**
+ * The VoiceSetup the UI renders from. Plain-English reason whenever it isn't ready.
+ * The app layout and the Call Center page both ask in one render: `cache`
+ * (keyed by the request's SessionUser) answers the second from the first.
+ */
+export const voiceSetupFor = cache(async (user: SessionUser): Promise<VoiceSetup> => {
   if (!voiceBrowserEnabled()) return { ready: false, reason: FLAG_OFF }
   if (!can(user, 'communications:send')) return { ready: false, reason: NO_SEND }
   if (!voiceConfig().ready) return { ready: false, reason: NOT_SET_UP }
@@ -68,4 +73,4 @@ export async function voiceSetupFor(user: SessionUser): Promise<VoiceSetup> {
     recordOutbound: settings.recordOutbound,
     mode: isMockTelephony() ? 'mock' : 'twilio',
   }
-}
+})

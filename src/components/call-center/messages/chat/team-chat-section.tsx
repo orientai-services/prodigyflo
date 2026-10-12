@@ -4,7 +4,7 @@ import type { SessionUser } from '@/lib/rbac'
 import { messagesHref } from '@/lib/call-center/messages-core'
 import { chatKey } from '@/lib/chat-bridge/config'
 import { linkedSunoffId } from '@/lib/chat-bridge/link'
-import { TeamChat } from './team-chat'
+import { TeamChat } from './team-chat-lazy'
 import './chat.css'
 
 /**
