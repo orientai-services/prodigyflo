@@ -39,6 +39,12 @@ export async function scsIntakeLink(leadId: string, mode: IntakeMode): Promise<S
   return { ok: false, reason: NOT_CONNECTED }
 }
 
+/** TEMP (PF-A): may this lead be texted the link now? The reason shows on "Text link" before the rep tries. */
+export async function scsIntakeTextStatus(leadId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  void leadId
+  return { ok: true }
+}
+
 /** TEMP (PF-A): one Client in the org with this lead's phone hash, created in the last 30 days. */
 export async function possibleMatchFor(leadId: string): Promise<PossibleMatchResult> {
   void leadId

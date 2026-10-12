@@ -180,9 +180,9 @@ function readJson(body: string): Record<string, unknown> | null {
   }
 }
 
-/** The SCS receiver's own INTAKE_LINK row (body "linked") records the link, not a send. */
+/** The receiver's (or a manual) INTAKE_LINK row, body {action:'linked', clientId, via}, records the link, not a send. */
 function isLinkedMarker(body: string): boolean {
-  return body.trim() === 'linked' || readJson(body)?.linked === true
+  return body.trim() === 'linked' || readJson(body)?.action === 'linked'
 }
 
 /** The newest intake link sent: INTAKE_LINK events (body {mode, tokenId}), else intakeLinkSentAt. */

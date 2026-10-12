@@ -81,7 +81,7 @@ describe('reading the link from stored rows', () => {
       ...row().events,
       { type: 'INTAKE_LINK', body: JSON.stringify({ mode: 'copy', tokenId: 't1' }), createdAt: new Date('2026-10-12T16:00:00.000Z') },
       { type: 'INTAKE_LINK', body: JSON.stringify({ mode: 'text', tokenId: 't2' }), createdAt: new Date('2026-10-12T17:00:00.000Z') },
-      { type: 'INTAKE_LINK', body: 'linked', createdAt: new Date('2026-10-12T17:30:00.000Z') },
+      { type: 'INTAKE_LINK', body: JSON.stringify({ label: 'Intake link', detail: 'Linked to a Client', action: 'linked', clientId: 'c1', via: 'intake_token' }), createdAt: new Date('2026-10-12T17:30:00.000Z') },
     ]
     expect(intakeOf({ events, intakeLinkSentAt: null })).toEqual({ sentAt: '2026-10-12T17:00:00.000Z', mode: 'text' })
     expect(intakeOf({ events: row().events, intakeLinkSentAt: new Date('2026-10-11T10:00:00.000Z') })).toEqual({ sentAt: '2026-10-11T10:00:00.000Z', mode: null })

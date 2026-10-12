@@ -39,6 +39,7 @@ import {
   provisionSunoffUser,
   refreshSunoffHandoff,
   scsIntakeLink,
+  scsIntakeTextStatus,
   startSunoffHandoff,
   sunoffHandoffState,
   type HandoffResult,
@@ -98,6 +99,7 @@ export function useLeadHandoff({ lead, rep, holds, admin, now, onChanged, onPrev
   const [needsSunoff, setNeedsSunoff] = useState<string | null>(null)
   const [server, setServer] = useState<{ key: string; handoff: LeadHandoff | null } | null>(null)
   const [match, setMatch] = useState<{ key: string; match: PossibleMatch | null; canLink: boolean } | null>(null)
+  const [textGate, setTextGate] = useState<{ key: string; reason: string | null } | null>(null)
 
   useEffect(() => {
     if (!leadId || !persisted) return
@@ -111,6 +113,9 @@ export function useLeadHandoff({ lead, rep, holds, admin, now, onChanged, onPrev
       possibleMatchFor(leadId).then((result) => {
         if (!cancel && result.ok) setMatch({ key, match: result.match, canLink: result.canLink })
       }).catch(() => {})
+      scsIntakeTextStatus(leadId).then((result) => {
+        if (!cancel) setTextGate({ key, reason: result.ok ? null : result.reason })
+      }).catch(() => {})
     }
     return () => { cancel = true }
   }, [leadId, clientId, persisted, key])
@@ -118,7 +123,7 @@ export function useLeadHandoff({ lead, rep, holds, admin, now, onChanged, onPrev
   const handoff = (server?.key === key ? server.handoff : null) ?? lead?.handoff ?? null
   const textBlock = !lead
     ? null
-    : lead.intakeTextBlock ?? (now && textHeldUntilMorning(lead, new Date(now).toISOString()) ?'Texts wait until 9am their time' : null)
+    : lead.intakeTextBlock ?? (textGate?.key === key ? textGate.reason : null) ?? (now && textHeldUntilMorning(lead, new Date(now).toISOString()) ?'Texts wait until 9am their time' : null)
   const say = (text: string) => setNote({ key, text })
 
   async function intake(mode: IntakeMode) {
