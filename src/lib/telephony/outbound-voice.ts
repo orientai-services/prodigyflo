@@ -23,8 +23,10 @@ import { clientCallbackUrls, type ClientWebhookContext } from './webhook'
  *   identity → user (active, in that org, communications:send)
  *   target   → the callee's number (scope-checked; never from the browser)
  *   line     → an honest caller ID that takes callbacks
- *   decideOutbound → consent, do-not-call, hours (override token verified,
- *                    its nonce single-use through VoiceCall.overrideNonce)
+ *   decideOutbound → consent, do-not-call, hours (an admin's override token
+ *                    verified against the block it was minted for, the
+ *                    decision re-run waiving only the blocks it names, its
+ *                    nonce single-use through VoiceCall.overrideNonce)
  *   then, under the account's advisory lock, the one-call-at-a-time count and
  *   the ledger insert — so two reps dialling at once can't both pass.
  *
@@ -102,14 +104,15 @@ export async function placeBrowserCall(ctx: ClientWebhookContext, now = new Date
   }
   let decision = await decideOutbound(input, { actor, now })
   let overrideNonce: string | null = null
-  if (!decision.allowed && decision.code === 'OUTSIDE_HOURS' && decision.canOverride === 'hours' && ctx.params.override && can(actor, 'telephony:manage')) {
+  if (!decision.allowed && decision.canOverride && ctx.params.override && can(actor, 'telephony:manage')) {
     const check = verifyOverride(
       ctx.params.override,
-      { orgId: actor.organizationId, userId: actor.id, target: targetKey(target), lineId: line.line.id, code: 'OUTSIDE_HOURS' },
+      { orgId: actor.organizationId, userId: actor.id, target: targetKey(target), lineId: line.line.id, code: decision.code },
       now,
     )
     if (check.ok) {
-      decision = await decideOutbound(input, { actor, now, override: true })
+      // A block the admin never saw (say, a STOP that arrived since) is not waived.
+      decision = await decideOutbound(input, { actor, now, override: { waive: check.waive } })
       if (decision.allowed) overrideNonce = check.nonce
     }
   }

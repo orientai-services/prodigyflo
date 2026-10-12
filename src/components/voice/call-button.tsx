@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Loader2, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { checkDial } from '@/lib/telephony/actions'
-import type { DialCheck, DialTarget } from '@/lib/telephony/voice-contract'
+import { OVERRIDE_REASON_MAX, OVERRIDE_REASON_MIN, type DialCheck, type DialTarget, type OverrideKind } from '@/lib/telephony/voice-contract'
 import { actionFailure, thrownMessage } from '@/lib/telephony/ui/result'
 import { ContactTimezone } from '@/components/telephony/contact-timezone'
 import { useVoice } from './voice-provider'
@@ -20,9 +20,9 @@ type Blocked = Extract<DialCheck, { ok: false }>
  * - Not ready (P0a, or the flag off): check, then open the `tel:` link.
  *
  * It never dials around a block. The only way past one is the server's own
- * hours override, which only managers are offered and which needs a reason;
- * an unknown time zone is fixed by recording where the person is, never
- * overridden.
+ * admin override (calls only): offered to telephony:manage holders for hours,
+ * do-not-call, no consent and an unknown time zone, with the server's warning
+ * and a typed reason. A person's own request to stop is never offered.
  */
 export function CallButton({
   target,
@@ -42,7 +42,7 @@ export function CallButton({
   who?: string
   label?: string
   appearance?: 'desk' | 'app'
-  /** The viewer holds telephony:manage. The server re-checks. */
+  /** The viewer holds telephony:manage, so may override hours and other call restrictions. The server re-checks. */
   canOverrideHours?: boolean
   disabled?: boolean
   /** Extra classes on the wrapper (e.g. full width on a phone). */
@@ -77,7 +77,7 @@ export function CallButton({
     window.location.assign(`tel:${number}`)
   }
 
-  const run = async (override?: { kind: 'hours'; reason: string }) => {
+  const run = async (override?: { kind: OverrideKind; reason: string }) => {
     setPending(true)
     setNotice(null)
     try {
@@ -133,7 +133,7 @@ export function CallButton({
             <ContactTimezone target={target} onSaved={() => setBlocked(null)} />
           )}
 
-          {blocked.canOverride === 'hours' && canOverrideHours && !overriding && (
+          {blocked.canOverride && canOverrideHours && !overriding && (
             <button
               type="button"
               className="text-primary mt-1.5 underline underline-offset-2"
@@ -143,25 +143,28 @@ export function CallButton({
             </button>
           )}
 
-          {blocked.canOverride === 'hours' && canOverrideHours && overriding && (
+          {blocked.canOverride && canOverrideHours && overriding && (
             <div className="mt-2 flex flex-col gap-1.5">
+              {blocked.warning && <p className="font-medium text-red-700 dark:text-red-300">{blocked.warning}</p>}
               <label className="flex flex-col gap-1">
-                <span className="text-muted-foreground">Why now? This is logged.</span>
+                <span className="text-muted-foreground">
+                  {blocked.canOverride === 'hours' ? 'Why now? This is logged.' : 'Why call anyway? This is logged.'}
+                </span>
                 <input
                   className="border-input bg-background h-8 rounded-md border px-2 text-sm"
                   value={reason}
-                  maxLength={200}
-                  placeholder="They asked us to call back at this time"
+                  maxLength={OVERRIDE_REASON_MAX}
+                  placeholder={blocked.canOverride === 'hours' ? 'They asked us to call back at this time' : 'They asked us to call them today'}
                   onChange={(e) => setReason(e.target.value)}
-                  aria-label="Reason for calling outside the window"
+                  aria-label="Reason for calling anyway"
                 />
               </label>
               <div className="flex gap-2">
                 <button
                   type="button"
                   className="bg-primary text-primary-foreground inline-flex h-7 items-center rounded-md px-2.5 font-medium disabled:opacity-50"
-                  disabled={pending || reason.trim().length < 3}
-                  onClick={() => void run({ kind: 'hours', reason: reason.trim() })}
+                  disabled={pending || reason.trim().length < OVERRIDE_REASON_MIN}
+                  onClick={() => blocked.canOverride && void run({ kind: blocked.canOverride, reason: reason.trim() })}
                 >
                   Call anyway
                 </button>

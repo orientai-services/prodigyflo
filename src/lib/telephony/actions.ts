@@ -10,7 +10,7 @@ import { toE164, formatE164 } from './provider'
 import { mintVoiceToken } from './access-token'
 import { fetchA2pStatus, getAccountState, normalizeMode, setManualAccountState, setVoiceLimitMode } from './account-status'
 import { auditOutbound, decideOutbound, signOverride } from './compliance'
-import { last4Of, phoneHash, phoneHashOrNull, PhoneHashKeyMissingError } from './compliance-core'
+import { last4Of, phoneHash, phoneHashOrNull, PhoneHashKeyMissingError, waivedLabel } from './compliance-core'
 import { resolveCallerLine } from './lines'
 import {
   applyNumberSync as applySync,
@@ -31,6 +31,7 @@ import type {
   DialTarget,
   MissedCallVM,
   MissedDisposition,
+  OverrideKind,
   SuppressionVM,
   SyncPreviewVM,
   SyncResultVM,
@@ -38,6 +39,7 @@ import type {
   VoiceSetup,
   VoiceToken,
 } from './voice-contract'
+import { OVERRIDE_REASON_MAX, OVERRIDE_REASON_MIN } from './voice-contract'
 
 /**
  * The telephony server actions (docs/TELEPHONY_LIVE.md §3). Each one re-checks
@@ -94,13 +96,15 @@ export async function getVoiceToken(): Promise<VoiceToken | Fail> {
 /**
  * The pre-check every "Call" runs: in P0a before the tel: link opens, in P0b
  * before Device.connect (and the webhook checks again, authoritatively). An
- * hours override is for telephony:manage only, needs a reason, and can only
- * widen the account window up to the legal ceiling.
+ * admin override (calls only) is for telephony:manage only and needs a typed
+ * reason of 5–500 characters. It steps past every overridable block at once
+ * (do-not-call, no consent, unknown zone, hours; §2.7), never past a
+ * person's own request to stop. The signed token names the blocks it waives.
  */
 export async function checkDial(
   target: DialTarget,
   lineId?: string,
-  override?: { kind: 'hours'; reason: string },
+  override?: { kind: OverrideKind; reason: string },
 ): Promise<DialCheck> {
   const user = await requireUser()
   if (!can(user, 'communications:send')) {
@@ -134,28 +138,61 @@ export async function checkDial(
   let decision = await decideOutbound(input, { actor: user })
   let overrideToken: string | undefined
 
-  if (!decision.allowed && decision.code === 'OUTSIDE_HOURS' && decision.canOverride === 'hours' && override?.kind === 'hours' && manager) {
-    const reason = override.reason?.trim()
-    if (!reason) return { ok: false, code: 'OUTSIDE_HOURS', reason: 'Give a reason for calling outside the window.', canOverride: 'hours' }
+  if (!decision.allowed && decision.canOverride && override && override.kind === decision.canOverride && manager) {
+    const first = decision
+    const reason = typeof override.reason === 'string' ? override.reason.trim() : ''
+    if (reason.length < OVERRIDE_REASON_MIN || reason.length > OVERRIDE_REASON_MAX) {
+      return {
+        ok: false,
+        code: first.code,
+        reason: `Give a reason (${OVERRIDE_REASON_MIN} to ${OVERRIDE_REASON_MAX} characters) for calling anyway.`,
+        canOverride: first.canOverride,
+        ...(first.warning ? { warning: first.warning } : {}),
+      }
+    }
     const now = new Date()
-    const token = signOverride(
-      { orgId: user.organizationId, userId: user.id, target: targetKey(target), lineId: line?.id ?? '', code: 'OUTSIDE_HOURS' },
-      now,
-    )
-    if (!token) return { ok: false, code: 'NOT_CONFIGURED', reason: "Hours overrides aren't set up yet.", canOverride: null }
     decision = await decideOutbound(input, { actor: user, override: true, now })
     if (decision.allowed) {
+      const token = signOverride(
+        {
+          orgId: user.organizationId,
+          userId: user.id,
+          target: targetKey(target),
+          lineId: line?.id ?? '',
+          code: first.code,
+          waive: decision.waived,
+        },
+        now,
+      )
+      if (!token) return { ok: false, code: 'NOT_CONFIGURED', reason: "Admin overrides aren't set up yet.", canOverride: null }
       overrideToken = token
+      const hoursOnly = decision.waived.length === 1 && decision.waived[0] === 'OUTSIDE_HOURS'
+      const masked = `•••${last4Of(t.phone) ?? ''}`
       await auditOutbound(input, user, {
-        action: 'telephony.hours_override',
-        summary: `Hours override for a call to •••${last4Of(t.phone) ?? ''}: ${reason.slice(0, 200)}`,
-        after: { reason: reason.slice(0, 500), target: target.kind, last4: last4Of(t.phone) },
+        action: hoursOnly ? 'telephony.hours_override' : 'telephony.restriction_override',
+        summary: hoursOnly
+          ? `Hours override for a call to ${masked}: ${reason.slice(0, 200)}`
+          : `Override (${waivedLabel(decision.waived)}) for a call to ${masked}: ${reason.slice(0, 200)}`,
+        after: {
+          reason,
+          code: first.code,
+          codes: decision.waived,
+          pastLegalHours: Boolean(first.pastLegalHours),
+          target: target.kind,
+          last4: last4Of(t.phone),
+        },
       })
     }
   }
 
   if (!decision.allowed) {
-    return { ok: false, code: decision.code, reason: decision.reason, canOverride: manager ? decision.canOverride : null }
+    return {
+      ok: false,
+      code: decision.code,
+      reason: decision.reason,
+      canOverride: manager ? decision.canOverride : null,
+      ...(manager && decision.warning ? { warning: decision.warning } : {}),
+    }
   }
   // A browser hand dial is audited by the webhook when it really goes out; the
   // tel: flow has no webhook, so its pass here is the dial.

@@ -11,7 +11,7 @@ import {
   type CallWindow,
   type ZoneHints,
 } from './timezones'
-import type { OutboundBlockCode, OutboundPurpose } from './voice-contract'
+import type { OutboundBlockCode, OutboundPurpose, OverrideKind } from './voice-contract'
 
 /**
  * The pure half of the one outbound decision (docs/TELEPHONY_LIVE.md §2.7).
@@ -21,15 +21,21 @@ import type { OutboundBlockCode, OutboundPurpose } from './voice-contract'
  * loader that gathers these facts lives in compliance.ts.
  *
  * Precedence, first match wins:
- *   1 invalid number          → INVALID_NUMBER
- *   2 suppression (channel)   → SUPPRESSED      never overridable
- *   3 SMS opt-out             → OPTED_OUT
- *   4 lead do-not-call        → SUPPRESSED
+ *   1 invalid number          → INVALID_NUMBER   never overridable
+ *   2 suppression (channel)   → SUPPRESSED       calls: admin override unless STOP-made
+ *   3 SMS opt-out             → OPTED_OUT        never overridable
+ *   4 lead do-not-call        → SUPPRESSED       calls: admin override
  *   5 own line / team number  → allow
  *   6 servicing call          → allow (hours still apply)
  *   7 consent on file         → allow (hours still apply)
- *   9 anything else           → NO_CONSENT      never overridable
+ *   9 anything else           → NO_CONSENT       calls: admin override
+ * Then UNKNOWN_TIMEZONE and OUTSIDE_HOURS (calls: admin override, any hour).
  * Hours (calls and texts) are checked on every allow path except 5.
+ *
+ * Admin overrides are for CALLS only, for telephony:manage holders, with a
+ * typed reason (checkDial). Texts are never overridable. Nobody can override
+ * a person's own request to stop (a STOP-made block, revoked consent, a
+ * possible opt-out still under review): calling them anyway breaks the TCPA.
  */
 
 export type OutboundChannel = 'CALL' | 'SMS'
@@ -175,6 +181,8 @@ export type SuppressionFact = {
   removedAt: Date | null
   /** 'sms_stop_review' = a possible opt-out held for an admin, not a decided one. */
   smsBlockedSource?: string | null
+  /** 'manual' | 'call_center' | 'import' are admin-overridable; 'sms_stop' never is. */
+  callBlockedSource?: string | null
 }
 
 export type OutboundFacts = {
@@ -207,14 +215,21 @@ export type OutboundDecision =
       calleeLocalTime: string
       calleeZone: string
       overridden: boolean
+      /** The blocks an admin override stepped past, in the order they were met. */
+      waived: OutboundBlockCode[]
     }
   | {
       allowed: false
       code: OutboundBlockCode
       reason: string
-      canOverride: 'hours' | null
+      /** Calls only, and only for telephony:manage holders (checkDial masks it for everyone else). */
+      canOverride: OverrideKind | null
+      /** Overridable blocks: what the admin must weigh before "Call anyway". */
+      warning?: string
       /** OUTSIDE_HOURS only: the next time the window opens (for deferral). */
       retryAt?: Date | null
+      /** OUTSIDE_HOURS only: also outside the legal ceiling (or a marketing Sunday / holiday). */
+      pastLegalHours?: boolean
       /** SUPPRESSED only: texts are held while an admin reviews a possible opt-out (it may be lifted). */
       held?: boolean
     }
@@ -222,14 +237,16 @@ export type OutboundDecision =
 function block(
   code: OutboundBlockCode,
   reason: string,
-  extra: { canOverride?: 'hours' | null; retryAt?: Date | null; held?: boolean } = {},
+  extra: { canOverride?: OverrideKind | null; warning?: string; retryAt?: Date | null; pastLegalHours?: boolean; held?: boolean } = {},
 ): OutboundDecision {
   return {
     allowed: false,
     code,
     reason,
     canOverride: extra.canOverride ?? null,
+    ...(extra.canOverride && extra.warning ? { warning: extra.warning } : {}),
     ...(extra.retryAt !== undefined ? { retryAt: extra.retryAt } : {}),
+    ...(extra.pastLegalHours ? { pastLegalHours: true } : {}),
     ...(extra.held ? { held: true } : {}),
   }
 }
@@ -241,6 +258,50 @@ export function suppressionBlocks(row: SuppressionFact | null, channel: Outbound
   return channel === 'CALL' ? Boolean(row.callBlockedAt) : Boolean(row.smsBlockedAt)
 }
 
+/** Call-block sources an admin may step past. A legacy row (both pairs empty) reads as 'import'. */
+const OVERRIDABLE_CALL_SOURCES = new Set(['manual', 'call_center', 'import'])
+
+function callBlockSource(row: SuppressionFact): string | null {
+  if (!row.smsBlockedAt && !row.callBlockedAt) return 'import'
+  return row.callBlockedSource ?? null
+}
+
+/**
+ * The person themselves asked us to stop: a STOP-made block on either
+ * channel, a lead's revoked consent (only STOP or a confirmed opt-out sets
+ * it), or a client's STOP / revoked TCPA consent.
+ */
+export function personOptedOut(facts: Pick<OutboundFacts, 'suppression' | 'smsOptedOut' | 'consent'>): boolean {
+  const s = facts.suppression
+  if (s && !s.removedAt) {
+    if (s.smsBlockedAt && s.smsBlockedSource === 'sms_stop') return true
+    if (s.callBlockedAt && s.callBlockedSource === 'sms_stop') return true
+  }
+  if (facts.smsOptedOut) return true
+  const c = facts.consent
+  if (c?.kind === 'lead' && c.consentRevokedAt) return true
+  if (c?.kind === 'client') {
+    const latest = [...c.consents].sort((a, b) => b.grantedAt.getTime() - a.grantedAt.getTime())[0]
+    if (latest?.revokedAt) return true
+  }
+  return false
+}
+
+function optOutUnderReview(s: SuppressionFact | null): boolean {
+  return Boolean(s && !s.removedAt && s.smsBlockedAt && s.smsBlockedSource === 'sms_stop_review')
+}
+
+const WAIVED_LABEL: Partial<Record<OutboundBlockCode, string>> = {
+  SUPPRESSED: 'do-not-call',
+  NO_CONSENT: 'no consent',
+  UNKNOWN_TIMEZONE: 'unknown time zone',
+  OUTSIDE_HOURS: 'hours',
+}
+
+export function waivedLabel(codes: readonly OutboundBlockCode[]): string {
+  return codes.map((c) => WAIVED_LABEL[c] ?? c).join(', ')
+}
+
 export const REASONS = {
   INVALID_NUMBER: "That isn't a valid phone number.",
   SUPPRESSED_CALL: 'This number is on the do-not-call list.',
@@ -249,79 +310,135 @@ export const REASONS = {
   OPTED_OUT: 'They replied STOP. Texts to this number are off.',
   NO_CONSENT: 'No consent on file for this number.',
   UNKNOWN_TIMEZONE: "We don't know their time zone. Press Call and pick where they are, then try again.",
+  PERSON_OPTED_OUT: "This person asked us to stop contacting them. It can't be overridden.",
+  OPTOUT_REVIEW: "This person may have asked us to stop. An admin must review the possible opt-out on the do-not-call list first. It can't be overridden.",
+} as const
+
+export const WARNINGS = {
+  DNC: 'Only override if this person did NOT ask us to stop calling.',
+  NO_CONSENT: 'Only override if you know they want this call. Calling a marketing lead without consent can break telemarketing law.',
+  UNKNOWN_TIMEZONE: "Only override if you know it's a reasonable hour where they are.",
+  PAST_LEGAL_HOURS: 'This is outside the legal calling hours (8 am to 9 pm their time, no marketing calls on Sundays or federal holidays). Only call if they asked you to call now.',
 } as const
 
 /**
- * `override` is set only after a manager asked for an hours override; it lets
- * the decision widen the account window up to the legal ceiling, never past
- * it, never on a marketing Sunday or holiday, never for texts.
+ * `override` is set only after an admin (telephony:manage) asked to call
+ * anyway with a reason. `true` steps past every overridable block (checkDial);
+ * `{ waive }` only past the listed codes (the TwiML side, from the signed
+ * token). It never reaches texts, an invalid number, or a person's own
+ * request to stop.
  */
-export function evaluateOutbound(facts: OutboundFacts, now: Date, opts: { override?: boolean } = {}): OutboundDecision {
+export function evaluateOutbound(
+  facts: OutboundFacts,
+  now: Date,
+  opts: { override?: boolean | { waive: readonly OutboundBlockCode[] } } = {},
+): OutboundDecision {
   const e164 = facts.phone ? toE164(facts.phone) : null
   if (!e164) return block('INVALID_NUMBER', REASONS.INVALID_NUMBER)
 
-  if (suppressionBlocks(facts.suppression, facts.channel)) {
-    if (facts.channel === 'SMS' && facts.suppression?.smsBlockedSource === 'sms_stop_review') {
-      return block('SUPPRESSED', REASONS.HELD_SMS, { held: true })
-    }
-    return block('SUPPRESSED', facts.channel === 'CALL' ? REASONS.SUPPRESSED_CALL : REASONS.SUPPRESSED_SMS)
+  const call = facts.channel === 'CALL'
+  const waived: OutboundBlockCode[] = []
+  const waives = (code: OutboundBlockCode): boolean => {
+    if (!call || !opts.override) return false
+    return opts.override === true || opts.override.waive.includes(code)
   }
-  if (facts.channel === 'SMS' && facts.smsOptedOut) return block('OPTED_OUT', REASONS.OPTED_OUT)
-  if (facts.leadDoNotCall) return block('SUPPRESSED', REASONS.SUPPRESSED_CALL)
+  // The person's own stop request locks the consent and do-not-call overrides.
+  const lock = !call
+    ? null
+    : personOptedOut(facts)
+      ? REASONS.PERSON_OPTED_OUT
+      : optOutUnderReview(facts.suppression)
+        ? REASONS.OPTOUT_REVIEW
+        : null
+  /** An overridable call block: waived (null, carry on) or returned. */
+  const restriction = (
+    code: OutboundBlockCode,
+    reason: string,
+    warning: string,
+    extra: { lockable?: boolean; kind?: OverrideKind; retryAt?: Date | null; pastLegalHours?: boolean } = {},
+  ): OutboundDecision | null => {
+    if (extra.lockable && lock) return block(code, lock)
+    if (waives(code)) {
+      if (!waived.includes(code)) waived.push(code)
+      return null
+    }
+    return block(code, reason, {
+      canOverride: extra.kind ?? 'restriction',
+      warning,
+      retryAt: extra.retryAt,
+      pastLegalHours: extra.pastLegalHours,
+    })
+  }
+
+  const allowed = (basis: string, zones: string[], local: string): OutboundDecision => ({
+    allowed: true,
+    basis:
+      waived.length === 0
+        ? basis
+        : waived.length === 1 && waived[0] === 'OUTSIDE_HOURS'
+          ? `${basis}; hours override`
+          : `${basis}; admin override (${waivedLabel(waived)})`,
+    purpose: facts.purpose,
+    e164,
+    zones,
+    calleeLocalTime: local,
+    calleeZone: zones.length === 1 ? zones[0] : zones.length ? 'several zones' : 'unknown',
+    overridden: waived.length > 0,
+    waived: [...waived],
+  })
+
+  if (suppressionBlocks(facts.suppression, facts.channel)) {
+    if (!call) {
+      if (facts.suppression?.smsBlockedSource === 'sms_stop_review') return block('SUPPRESSED', REASONS.HELD_SMS, { held: true })
+      return block('SUPPRESSED', REASONS.SUPPRESSED_SMS)
+    }
+    const source = callBlockSource(facts.suppression!)
+    if (source === 'sms_stop') return block('SUPPRESSED', REASONS.PERSON_OPTED_OUT)
+    // An unknown source fails closed: not overridable.
+    if (!source || !OVERRIDABLE_CALL_SOURCES.has(source)) return block('SUPPRESSED', REASONS.SUPPRESSED_CALL)
+    const stop = restriction('SUPPRESSED', REASONS.SUPPRESSED_CALL, WARNINGS.DNC, { lockable: true })
+    if (stop) return stop
+  }
+  if (!call && facts.smsOptedOut) return block('OPTED_OUT', REASONS.OPTED_OUT)
+  if (facts.leadDoNotCall) {
+    if (!call) return block('SUPPRESSED', REASONS.SUPPRESSED_CALL)
+    const stop = restriction('SUPPRESSED', REASONS.SUPPRESSED_CALL, WARNINGS.DNC, { lockable: true })
+    if (stop) return stop
+  }
 
   if (facts.ownNumber) {
     const zones = calleeZones({ ...facts.zoneHints, e164 }).zones
-    const local = zones[0] ? localTimeIn(zones[0], now).label : ''
-    return {
-      allowed: true,
-      basis: 'Own team number',
-      purpose: facts.purpose,
-      e164,
-      zones,
-      calleeLocalTime: local,
-      calleeZone: zones.length === 1 ? zones[0] : zones.length ? 'several zones' : 'unknown',
-      overridden: false,
-    }
+    return allowed('Own team number', zones, zones[0] ? localTimeIn(zones[0], now).label : '')
   }
 
   let basis: string | null = null
-  if (facts.channel === 'CALL' && facts.purpose === 'servicing' && facts.servicingBasis) basis = facts.servicingBasis
+  if (call && facts.purpose === 'servicing' && facts.servicingBasis) basis = facts.servicingBasis
   if (!basis) basis = consentBasis(facts.consent, now)
-  if (!basis) return block('NO_CONSENT', REASONS.NO_CONSENT)
+  if (!basis) {
+    if (!call) return block('NO_CONSENT', REASONS.NO_CONSENT)
+    const stop = restriction('NO_CONSENT', REASONS.NO_CONSENT, WARNINGS.NO_CONSENT, { lockable: true })
+    if (stop) return stop
+    basis = 'No consent on file'
+  }
 
   // A person who texted us in the last 30 minutes may get a reply at any hour.
   const { zones, states } = calleeZones({ ...facts.zoneHints, e164 })
-  if (facts.channel === 'SMS' && facts.replyWindowOpen) {
+  if (!call && facts.replyWindowOpen) {
     const local = zones[0] ? localTimeIn(zones[0], now).label : ''
-    return {
-      allowed: true,
-      basis: `${basis}; replying within 30 minutes of their text`,
-      purpose: facts.purpose,
-      e164,
-      zones,
-      calleeLocalTime: local,
-      calleeZone: zones.length === 1 ? zones[0] : zones.length ? 'several zones' : 'unknown',
-      overridden: false,
-    }
+    return allowed(`${basis}; replying within 30 minutes of their text`, zones, local)
   }
-  if (zones.length === 0) return block('UNKNOWN_TIMEZONE', REASONS.UNKNOWN_TIMEZONE)
+  if (zones.length === 0) {
+    if (!call) return block('UNKNOWN_TIMEZONE', REASONS.UNKNOWN_TIMEZONE)
+    const stop = restriction('UNKNOWN_TIMEZONE', REASONS.UNKNOWN_TIMEZONE, WARNINGS.UNKNOWN_TIMEZONE)
+    if (stop) return stop
+    // No zone means no hours to check: the override covers the time of day too.
+    return allowed(basis, zones, '')
+  }
 
   const account = facts.callWindow ?? DEFAULT_WINDOW
   const inAccount = windowOk(zones, now, account, facts.purpose, states)
-  const allow = (overridden: boolean): OutboundDecision => {
-    const first = localTimeIn(zones[0], now)
-    return {
-      allowed: true,
-      basis: overridden ? `${basis}; hours override` : basis!,
-      purpose: facts.purpose,
-      e164,
-      zones,
-      calleeLocalTime: first.label,
-      calleeZone: zones.length === 1 ? zones[0] : 'several zones',
-      overridden,
-    }
-  }
-  if (inAccount.ok) return allow(false)
+  const allow = (): OutboundDecision => allowed(basis!, zones, localTimeIn(zones[0], now).label)
+  if (inAccount.ok) return allow()
 
   const fail = inAccount.failures[0]
   const what = facts.channel === 'CALL' ? 'Calls' : 'Texts'
@@ -338,25 +455,42 @@ export function evaluateOutbound(facts: OutboundFacts, now: Date, opts: { overri
     reason = `It's ${fail.local.label} for them. ${what} can go out after ${opens} their time.`
   }
 
-  // Only calls can be overridden, only inside the legal ceiling, only on an
-  // ordinary day: the ceiling check runs the same day rules again.
-  let canOverride: 'hours' | null = null
-  if (facts.channel === 'CALL' && inAccount.failures.every((f) => f.reason === 'hours')) {
-    const inCeiling = windowOk(zones, now, LEGAL_WINDOW, facts.purpose, states)
-    if (inCeiling.ok) canOverride = 'hours'
-  }
-  if (canOverride && opts.override) return allow(true)
-  return block('OUTSIDE_HOURS', reason, { canOverride, retryAt })
+  if (!call) return block('OUTSIDE_HOURS', reason, { retryAt })
+  // An admin may call at any hour. Inside the legal ceiling on an ordinary day
+  // (the ceiling check runs the same day rules again) it is a plain stretch of
+  // the account window; past it, the prompt says so and the audit records it.
+  const pastLegalHours = !withinLegalCeiling(zones, now, facts.purpose, states, inAccount.failures)
+  const stop = restriction('OUTSIDE_HOURS', reason, pastLegalHours ? WARNINGS.PAST_LEGAL_HOURS : '', {
+    kind: 'hours',
+    retryAt,
+    pastLegalHours,
+  })
+  return stop ?? allow()
 }
 
-// ── Hours-override tokens ───────────────────────────────────────────────────
+/** Outside the account window only by the hour, and inside the federal 8:00–21:00 ceiling (plus state rules). */
+export function withinLegalCeiling(
+  zones: readonly string[],
+  now: Date,
+  purpose: OutboundPurpose,
+  states: readonly string[],
+  failures: readonly { reason: string }[],
+): boolean {
+  if (!failures.every((f) => f.reason === 'hours')) return false
+  return windowOk(zones, now, LEGAL_WINDOW, purpose, states).ok
+}
+
+// ── Override tokens ─────────────────────────────────────────────────────────
 
 export type OverrideClaims = {
   orgId: string
   userId: string
   target: string
   lineId: string
+  /** The first block the admin saw. */
   code: OutboundBlockCode
+  /** Every block the override may step past (checkDial's decision). Defaults to [code]. */
+  waive?: OutboundBlockCode[]
   /** Expiry, ms since epoch. */
   exp: number
   nonce: string
@@ -385,7 +519,7 @@ export function signOverride(
   return `${body}.${sig}`
 }
 
-export type OverrideCheck = { ok: true; nonce: string } | { ok: false; reason: string }
+export type OverrideCheck = { ok: true; nonce: string; waive: OutboundBlockCode[] } | { ok: false; reason: string }
 
 /** Every field must match what the webhook is about to do. The nonce is single-use (VoiceCall.overrideNonce @unique). */
 export function verifyOverride(
@@ -411,5 +545,7 @@ export function verifyOverride(
     if (claims[field] !== expect[field]) return { ok: false, reason: `Override does not match (${field}).` }
   }
   if (typeof claims.nonce !== 'string' || !/^[0-9a-f]{32}$/.test(claims.nonce)) return { ok: false, reason: 'Malformed override.' }
-  return { ok: true, nonce: claims.nonce }
+  const waive = claims.waive ?? [claims.code]
+  if (!Array.isArray(waive) || !waive.every((c) => typeof c === 'string')) return { ok: false, reason: 'Malformed override.' }
+  return { ok: true, nonce: claims.nonce, waive }
 }
