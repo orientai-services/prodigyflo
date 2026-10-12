@@ -25,9 +25,12 @@ type Props = {
   actions: ChatActions
   onBack: () => void
   onPins: () => void
+  /** 🔍 search inside this channel and ⚙ channel details (team-chat.tsx owns both sheets). */
+  onSearch?: () => void
+  onDetails?: () => void
 }
 
-export function Conversation({ api, t, lang, me, channel, pane, thread, typing, online, actions, onBack, onPins }: Props) {
+export function Conversation({ api, t, lang, me, channel, pane, thread, typing, online, actions, onBack, onPins, onSearch, onDetails }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const [stick, setStick] = useState(true)
   const [lastRead] = useState(channel.last_read_msg_id)
@@ -66,18 +69,22 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
               : `${t.members(channel.member_count)}${onlineCount ? ` · ${onlineCount} ${t.online}` : ''}`}
           </span>
         </div>
-        {channel.pins ? (
-          <button type="button" className="chat-pill" onClick={onPins}>📌 {t.pins(channel.pins)}</button>
-        ) : (
-          <button type="button" className="chat-icon" onClick={onPins} aria-label={t.pinned} title={t.pinned}>📌</button>
-        )}
+        <button type="button" className="chat-icon chat-head-btn" onClick={onPins} aria-label={channel.pins ? `${t.pinned} (${channel.pins})` : t.pinned} title={t.pinned}>
+          📌{channel.pins ? <span className="chat-head-n">{channel.pins}</span> : null}
+        </button>
+        {onSearch ? <button type="button" className="chat-icon chat-head-btn" onClick={onSearch} aria-label={t.searchIn} title={t.searchIn}>🔍</button> : null}
+        {onDetails ? (
+          <button type="button" className="chat-icon chat-head-btn" onClick={onDetails} aria-label={t.details} title={t.details}>
+            {channel.muted || channel.notify === 'none' ? '🔕' : channel.notify === 'mentions' ? '@' : '🔔'}
+          </button>
+        ) : null}
       </header>
       {channel.case ? <CaseCard c={channel} t={t} lang={lang} /> : null}
       <div
         className="chat-scroll"
         ref={scroller}
         role="log"
-        aria-live="polite"
+        aria-live="off"
         aria-label={channelLabel(channel)}
         onScroll={(e) => {
           const el = e.currentTarget
@@ -171,7 +178,7 @@ function MessageItem({ api, t, lang, me, m, grouped, actions, inThread }: { api:
   }
 
   return (
-    <article className={`chat-msg${grouped ? ' grouped' : ''}${mine ? ' mine' : ''}${sms ? ` sms sms-${sms.dir}` : ''}${m.pending ? ' pending' : ''}${m.failed ? ' failed' : ''}${m.pinned ? ' pinned' : ''}`} aria-label={`${m.name}, ${clock(m.created_at, lang)}`}>
+    <article data-id={m.id} className={`chat-msg${grouped ? ' grouped' : ''}${mine ? ' mine' : ''}${sms ? ` sms sms-${sms.dir}` : ''}${m.pending ? ' pending' : ''}${m.failed ? ' failed' : ''}${m.pinned ? ' pinned' : ''}`} aria-label={`${m.name}, ${clock(m.created_at, lang)}`}>
       {!grouped ? <span className={`chat-av${sms?.dir === 'in' ? ' client' : ''}`} aria-hidden="true">{initials(m.name)}</span> : <span className="chat-av-gap" aria-hidden="true" />}
       <div className="chat-msg-body">
         {!grouped ? (
