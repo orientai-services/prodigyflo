@@ -8,22 +8,27 @@ import { TeamChat } from './team-chat-lazy'
 import './chat.css'
 
 /**
- * The Messages section's switch, "Leads (SMS)" | "Team chat", and the Team
- * chat slot (docs/CYS_BRIDGE.md §B4). `?view=team` picks the team chat; the
- * SMS inbox stays the default. Server-rendered, so the screen never reads env.
+ * The Messages section's switch, "Team chat" | "Leads (SMS)", and the Team
+ * chat slot (docs/CYS_BRIDGE.md §B4). Team chat is the default; `?view=sms`
+ * picks the lead text inbox. Server-rendered, so the screen never reads env.
  */
-export function MessagesSwitch({ base, view, teamUnread }: { base: string; view: 'sms' | 'team'; teamUnread: number }): JSX.Element {
+export function MessagesSwitch({ base, view, teamUnread, smsUnread }: { base: string; view: 'sms' | 'team'; teamUnread: number; smsUnread: number }): JSX.Element {
   return (
     <nav className="chat-switch" aria-label="Messages view">
-      <Link href={messagesHref(base, { view: null, t: null })} aria-current={view === 'sms' ? 'page' : undefined} className={view === 'sms' ? 'on' : ''} scroll={false}>
-        Leads (SMS)
-      </Link>
-      <Link href={messagesHref(base, { view: 'team', t: null, q: null })} aria-current={view === 'team' ? 'page' : undefined} className={view === 'team' ? 'on' : ''} scroll={false}>
+      <Link href={messagesHref(base, { view: null, t: null, q: null })} aria-current={view === 'team' ? 'page' : undefined} className={view === 'team' ? 'on' : ''} scroll={false}>
         Team chat
-        {teamUnread > 0 ? <span className="chat-badge" aria-label={`${teamUnread} unread`}>{teamUnread > 99 ? '99+' : teamUnread}</span> : null}
+        <Badge n={teamUnread} />
+      </Link>
+      <Link href={messagesHref(base, { view: 'sms', t: null })} aria-current={view === 'sms' ? 'page' : undefined} className={view === 'sms' ? 'on' : ''} scroll={false}>
+        Leads (SMS)
+        <Badge n={smsUnread} />
       </Link>
     </nav>
   )
+}
+
+function Badge({ n }: { n: number }): JSX.Element | null {
+  return n > 0 ? <span className="chat-badge" aria-label={`${n} unread`}>{n > 99 ? '99+' : n}</span> : null
 }
 
 export async function TeamChatSection({ user }: { user: SessionUser }): Promise<JSX.Element> {
