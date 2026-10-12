@@ -1,0 +1,130 @@
+/* History section (docs/DIALER_APP.md §3). Scoped under the desk; the
+   `.final-desk *` reset zeroes margin and padding, so every gap is explicit. */
+
+.final-desk.call-center .hist { display: grid; gap: 12px; min-width: 0; max-width: 960px; width: 100%; margin: 0 auto; align-content: start; }
+
+/* Sub-tabs: a two-way segmented control. */
+.final-desk.call-center .hist-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: #ece5d7; border-radius: 12px; }
+.final-desk.call-center .hist-tabs a {
+  display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 12px;
+  border-radius: 9px; color: var(--muted); font-weight: 600; font-size: 14px; text-decoration: none;
+}
+.final-desk.call-center .hist-tabs a.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(18, 32, 44, .12); }
+
+/* Search */
+.final-desk.call-center .hist-search { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.final-desk.call-center .hist-field {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px; color: var(--muted);
+}
+.final-desk.call-center .hist-field:focus-within { border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal2); }
+.final-desk.call-center .hist-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 16px; padding: 10px 0; }
+.final-desk.call-center .hist-search .btn { min-height: 44px; padding: 0 16px; }
+.final-desk.call-center .hist-clear { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; color: var(--teal); font-size: 14px; }
+
+/* Filter chips: one row that scrolls sideways, never wraps. */
+.final-desk.call-center .hist-chips {
+  display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+  margin: 0 -16px; padding: 2px 16px;
+}
+.final-desk.call-center .hist-chips::-webkit-scrollbar { display: none; }
+.final-desk.call-center .hist-chips a {
+  flex: none; scroll-snap-align: start; display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px;
+  background: #fff; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); font-size: 14px; text-decoration: none; white-space: nowrap;
+}
+.final-desk.call-center .hist-chips a.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+
+/* Rows */
+.final-desk.call-center .hist-list { list-style: none; background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.final-desk.call-center .hist-row + .hist-row { border-top: 1px solid #eee8dc; }
+.final-desk.call-center .hist-row.playing { background: #fbf9f4; }
+.final-desk.call-center .hist-line {
+  display: grid; grid-template-columns: 36px minmax(0, 1fr) auto 44px 32px; align-items: center; gap: 8px;
+  min-height: 64px; padding: 8px 4px 8px 12px;
+}
+.final-desk.call-center .hist-activity .hist-line { grid-template-columns: 36px minmax(0, 1fr); padding-right: 12px; }
+.final-desk.call-center .hist-ico {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%;
+  background: var(--teal2); color: var(--teal);
+}
+.final-desk.call-center .k-in .hist-ico { background: var(--greenbg); color: var(--green); }
+.final-desk.call-center .k-missed .hist-ico,
+.final-desk.call-center .a-dnc .hist-ico { background: #fbe4e1; color: #a12a1c; }
+.final-desk.call-center .k-voicemail .hist-ico,
+.final-desk.call-center .a-hold .hist-ico { background: var(--amberbg); color: var(--amber); }
+.final-desk.call-center .k-sms-in .hist-ico,
+.final-desk.call-center .k-sms-out .hist-ico,
+.final-desk.call-center .a-note .hist-ico { background: #e8edf3; color: #2c4a66; }
+.final-desk.call-center .a-confirm .hist-ico,
+.final-desk.call-center .a-visit .hist-ico { background: var(--greenbg); color: var(--green); }
+
+.final-desk.call-center .hist-main {
+  display: grid; gap: 2px; min-width: 0; text-align: left; color: inherit; background: none; border: 0; font: inherit;
+}
+.final-desk.call-center button.hist-main { min-height: 44px; align-content: center; border-radius: 8px; }
+.final-desk.call-center button.hist-main:focus-visible,
+.final-desk.call-center .hist-play:focus-visible,
+.final-desk.call-center .hist-go:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.final-desk.call-center .hist-name { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.final-desk.call-center .hist-activity .hist-name { white-space: normal; }
+.final-desk.call-center .hist-name a { color: var(--teal); text-decoration: none; }
+.final-desk.call-center .hist-name a:hover { text-decoration: underline; }
+.final-desk.call-center .hist-meta { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.final-desk.call-center .k-missed .hist-meta { color: #8f2a1e; }
+.final-desk.call-center .hist-detail { font-size: 13.5px; color: var(--ink); line-height: 1.4; overflow-wrap: anywhere; }
+.final-desk.call-center .hist-snip { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.final-desk.call-center .hist-dur { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.6em; text-align: right; }
+
+.final-desk.call-center .hist-play {
+  display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%;
+  border: 0; background: var(--teal); color: #fff;
+}
+.final-desk.call-center .hist-play svg { margin-left: 2px; }
+.final-desk.call-center .playing .hist-play { background: var(--navy); }
+.final-desk.call-center .playing .hist-play svg { margin-left: 0; }
+.final-desk.call-center .hist-play-none { width: 44px; height: 44px; }
+.final-desk.call-center .hist-go { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 44px; color: var(--muted); border-radius: 8px; }
+.final-desk.call-center .hist-go:hover { color: var(--teal); }
+
+.final-desk.call-center .hist-text {
+  margin: 0 12px 12px 56px; padding: 10px 12px; background: var(--teal2); border-radius: 4px 12px 12px 12px;
+  font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.final-desk.call-center .k-sms-out .hist-text { background: #e8edf3; }
+.final-desk.call-center .hist-text.transcript { background: #f4efe4; color: var(--muted); font-style: italic; }
+
+.final-desk.call-center .hist-player { display: grid; gap: 8px; padding: 0 12px 12px 56px; }
+.final-desk.call-center .hist-player audio { width: 100%; height: 40px; }
+.final-desk.call-center .hist-speeds { display: flex; gap: 8px; }
+.final-desk.call-center .hist-speeds button {
+  min-width: 52px; min-height: 44px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line);
+  background: #fff; color: var(--ink); font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.final-desk.call-center .hist-speeds button.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+.final-desk.call-center .hist-empty { padding: 28px 16px; text-align: center; color: var(--muted); background: #fff; border: 1px dashed var(--line); border-radius: 14px; }
+.final-desk.call-center .hist-error { color: #a12a1c; font-size: 14px; }
+.final-desk.call-center .hist-more { justify-self: center; min-height: 44px; min-width: 160px; }
+
+@media (max-width: 479px) {
+  .final-desk.call-center .hist-line { gap: 6px; padding-left: 10px; }
+  .final-desk.call-center .hist-text,
+  .final-desk.call-center .hist-player { margin-left: 0; padding-left: 12px; }
+  .final-desk.call-center .hist-text { margin-left: 12px; }
+  .final-desk.call-center .hist-more { justify-self: stretch; }
+  .final-desk.call-center .hist-search .btn { padding: 0 12px; }
+}
+
+@media (min-width: 1024px) {
+  .final-desk.call-center .hist { gap: 14px; }
+  .final-desk.call-center .hist-tabs { width: 360px; }
+  .final-desk.call-center .hist-chips { margin: 0; padding: 0; flex-wrap: wrap; overflow: visible; }
+  .final-desk.call-center .hist-chips a { min-height: 36px; padding: 0 14px; font-size: 13px; }
+  .final-desk.call-center .hist-line { grid-template-columns: 40px minmax(0, 1fr) 64px 44px 36px; padding: 10px 8px 10px 16px; gap: 12px; }
+  .final-desk.call-center .hist-activity .hist-line { grid-template-columns: 40px minmax(0, 1fr); }
+  .final-desk.call-center .hist-ico { width: 40px; height: 40px; }
+  .final-desk.call-center .hist-list li:hover { background: #fcfaf5; }
+  .final-desk.call-center .hist-text,
+  .final-desk.call-center .hist-player { margin-left: 68px; }
+  .final-desk.call-center .hist-player { padding-left: 0; padding-right: 16px; max-width: 620px; }
+}
