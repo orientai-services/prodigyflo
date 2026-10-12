@@ -4,7 +4,7 @@ import type { ReactNode, RefObject } from 'react'
 import { CATS, badgeText, byActivity, catOf, channelLabel, filterChannels, initials, listTime, listable, rowPreview, tickOf, unseen, type Cat } from './format'
 import { Skeleton } from './sheets'
 import type { T } from './strings'
-import type { Channel, Lang, Me, RoomsAnswer } from './types'
+import type { Channel, ChatFeatures, Lang, Me, RoomsAnswer } from './types'
 
 const CAT_ICON: Record<Cat, string> = { dms: '💬', clients: '👤', chans: '#' }
 const catLabel = (t: T, k: Cat) => (k === 'dms' ? t.secDms : k === 'clients' ? t.secClients : t.secChannels)
@@ -25,6 +25,8 @@ type Props = {
   live: Live
   net: boolean
   rooms: RoomsAnswer | null
+  /** SunOff-side tools this front door may show (format.ts chatFeatures); all off on ProdigyFlo. */
+  features: Required<ChatFeatures>
   searchRef: RefObject<HTMLInputElement | null>
   syncing: boolean
   onRetry: () => void
@@ -50,13 +52,13 @@ export function ChatList({ searchRef, ...p }: Props) {
   const sorted = (q ? filterChannels(all, q) : all).slice().sort(byActivity)
   const groups: Record<Cat, Channel[]> = { dms: [], clients: [], chans: [] }
   for (const c of sorted) groups[catOf(c)].push(c)
-  const inCat = !q && p.cat && groups[p.cat].length ? p.cat : ''
+  const inCat = !q && p.cat ? p.cat : ''
+  const emptyText = (k: Cat) => (k === 'clients' ? t.clientsEmpty : t.noChannels)
 
   const row = (c: Channel) => <li key={c.id}><ChannelRow c={c} t={t} lang={lang} me={me!.uid} on={c.id === p.active} online={c.dm_uid ? p.online[c.dm_uid] ?? c.members.find((m) => m.uid === c.dm_uid)?.online ?? false : false} onOpen={() => p.onOpen(c.id)} /></li>
 
   let body: ReactNode
   if (!me) body = <Skeleton rows={7} />
-  else if (!all.length) body = <p className="chat-empty">{t.noChannels}</p>
   else if (q) {
     body = (
       <>
@@ -78,15 +80,16 @@ export function ChatList({ searchRef, ...p }: Props) {
           <span className="chat-cat-name">{CAT_ICON[inCat]} {catLabel(t, inCat)} · {groups[inCat].length}</span>
           {b ? <span className={`chat-badge${b.mention ? ' mention' : ''}`} aria-hidden="true">{b.text}</span> : null}
         </button>
-        <ul>{groups[inCat].map(row)}</ul>
+        {groups[inCat].length ? <ul>{groups[inCat].map(row)}</ul> : <p className="chat-empty">{emptyText(inCat)}</p>}
       </>
     )
   } else {
+    // Every category shows, an empty one with 0 (a ProdigyFlo team may have no groups or client chats yet).
     body = (
+      <>
       <ul className="chat-cats">
         {CATS.map((k) => {
           const g = groups[k]
-          if (!g.length) return null
           const u = unseen(g)
           const b = badgeText(u)
           return (
@@ -102,6 +105,8 @@ export function ChatList({ searchRef, ...p }: Props) {
           )
         })}
       </ul>
+      {!all.length ? <p className="chat-empty">{t.noChannels}</p> : null}
+      </>
     )
   }
 
@@ -148,7 +153,7 @@ export function ChatList({ searchRef, ...p }: Props) {
           </span>
           <span className={`chat-live ${p.live}`} title={liveTxt}>{liveTxt}</span>
           <span className="chat-foot-btns">
-            {p.rooms && (p.rooms.rooms.length || p.rooms.can_create) ? (
+            {p.features.rooms && p.rooms && (p.rooms.rooms.length || p.rooms.can_create) ? (
               <button type="button" className={`chat-fb${inside ? ' on' : ''}`} onClick={p.onRooms} aria-label={t.roomsAl(inside)} title={t.roomsAl(inside)}>
                 🎥 {t.roomsShort}
                 {inside ? <span className="chat-fb-n">{t.roomIn(inside)}</span> : null}
@@ -157,8 +162,8 @@ export function ChatList({ searchRef, ...p }: Props) {
             {me.staff ? (
               <>
                 <button type="button" className="chat-fb" onClick={p.onFlagged}>🚩 {t.flaggedS}</button>
-                <button type="button" className="chat-fb" onClick={p.onAnnounce}>📣 {t.announce}</button>
-                <button type="button" className="chat-fb" onClick={p.onSync} disabled={p.syncing} aria-busy={p.syncing}>↻ {t.syncNow}</button>
+                {p.features.announce ? <button type="button" className="chat-fb" onClick={p.onAnnounce}>📣 {t.announce}</button> : null}
+                {p.features.sync ? <button type="button" className="chat-fb" onClick={p.onSync} disabled={p.syncing} aria-busy={p.syncing}>↻ {t.syncNow}</button> : null}
               </>
             ) : null}
             <button type="button" className="chat-fb" onClick={p.onSettings}>⚙ {t.prefsShort}</button>
