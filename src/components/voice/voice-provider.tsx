@@ -16,6 +16,7 @@ import {
   writeRingMuted,
 } from '@/lib/telephony/ui/voice-prefs'
 import { TOKEN_ERROR_CODES, phoneIssueFrom } from '@/lib/telephony/ui/phone-status'
+import { tokenRetryDelay } from '@/lib/telephony/ui/token-backoff'
 import { actionFailure } from '@/lib/telephony/ui/result'
 
 /**
@@ -310,6 +311,10 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
   const returnWatchRef = useRef<(() => void) | null>(null)
   const lostWatchRef = useRef<(() => void) | null>(null)
   const failoversRef = useRef(0)
+  /** One token request at a time per tab; refusals retry on a backoff (token-backoff.ts). */
+  const tokenInFlightRef = useRef<Promise<string | null> | null>(null)
+  const tokenAttemptRef = useRef(0)
+  const tokenRetryRef = useRef<number | null>(null)
 
   // ── Microphone: taken at call start, released at call end ────────────────
 
@@ -600,19 +605,26 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
 
   // A failure here is about the phone, not a call: it goes to the pill. A dial
   // that finds no phone repeats it as that dial's error (see `call`).
-  const fetchToken = useCallback(async (): Promise<string | null> => {
-    try {
-      const res = await getVoiceToken()
-      const failure = actionFailure(res)
-      if (failure) {
-        setPhoneIssue(failure.error)
+  const fetchToken = useCallback((): Promise<string | null> => {
+    if (tokenInFlightRef.current) return tokenInFlightRef.current
+    const request = (async () => {
+      try {
+        const res = await getVoiceToken()
+        const failure = actionFailure(res)
+        if (failure) {
+          setPhoneIssue(failure.error)
+          return null
+        }
+        return (res as { token: string }).token
+      } catch {
+        setPhoneIssue('Could not start the phone. Reload the page and try again.')
         return null
+      } finally {
+        tokenInFlightRef.current = null
       }
-      return (res as { token: string }).token
-    } catch {
-      setPhoneIssue('Could not start the phone. Reload the page and try again.')
-      return null
-    }
+    })()
+    tokenInFlightRef.current = request
+    return request
   }, [setPhoneIssue])
 
   const ensureDevice = useCallback(async (): Promise<SdkDevice | null> => {
@@ -640,6 +652,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
       })
       device.audio?.incoming(!ringMutedRef.current)
       device.on('registered', () => {
+        tokenAttemptRef.current = 0
         setRegistered(true)
         setPhoneIssue(null)
       })
@@ -656,13 +669,19 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
         }
         setPhoneIssue(phoneIssueFrom(err))
         const code = (err as { code?: number } | null)?.code
-        if (typeof code === 'number' && TOKEN_ERROR_CODES.has(code)) {
+        if (typeof code === 'number' && TOKEN_ERROR_CODES.has(code) && tokenRetryRef.current === null) {
           // A fresh token fixes an expired or refused one without a reload.
-          void fetchToken().then((next) => {
-            if (!next || deviceRef.current !== device) return
-            device.updateToken(next)
-            if (leaderRef.current) device.register().catch((e: unknown) => setPhoneIssue(phoneIssueFrom(e)))
-          })
+          // Repeated refusals back off (2 s, 4 s … 60 s) until the phone registers.
+          const delay = tokenRetryDelay(tokenAttemptRef.current++)
+          tokenRetryRef.current = window.setTimeout(() => {
+            tokenRetryRef.current = null
+            if (unmountedRef.current || deviceRef.current !== device) return
+            void fetchToken().then((next) => {
+              if (!next || deviceRef.current !== device) return
+              device.updateToken(next)
+              if (leaderRef.current) device.register().catch((e: unknown) => setPhoneIssue(phoneIssueFrom(e)))
+            })
+          }, delay)
         }
       })
       device.on('tokenWillExpire', () => {
@@ -771,6 +790,7 @@ export function VoiceProvider({ setup, children }: { setup: ReadyVoiceSetup; chi
     return () => {
       unmountedRef.current = true
       window.clearInterval(timer)
+      if (tokenRetryRef.current !== null) window.clearTimeout(tokenRetryRef.current)
       window.removeEventListener('pagehide', leave)
       leave()
       channel?.close()
