@@ -1,6 +1,6 @@
 import { Building2 } from 'lucide-react'
 import { StatGrid, StatTile } from '@/components/stat-tile'
-import { TrendChart } from './lazy-charts'
+import { TrendChart } from './lazy-islands'
 import { Card, CardContent } from '@/components/ui/card'
 import type { AdsDashboard, AdsWindow } from '@/lib/meta/ads/read'
 import { WindowTabs } from '../window-tabs'
