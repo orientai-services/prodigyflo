@@ -2785,6 +2785,8 @@ model CallCenterEvent {
   @@index([leadId, createdAt])
   @@index([type, direction, readAt])
   @@index([externalRef])
+  @@index([type, createdAt])
+  @@index([createdAt])
 }
 
 /// docs/CYS_BRIDGE.md Â§B3: where a desk lead stands after "CYS Sign up".
