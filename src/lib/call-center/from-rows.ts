@@ -93,6 +93,15 @@ function readCopy(body: string): EventCopy | null {
   }
 }
 
+function readSmsStatus(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { status?: unknown }
+    return typeof parsed?.status === 'string' ? parsed.status : null
+  } catch {
+    return null
+  }
+}
+
 function safeText(value: string): string {
   return value.replace(/\d{5,}/g, '····').trim()
 }
@@ -168,7 +177,8 @@ function reached(row: StoredCallCenterLead): boolean {
   // Tries alone are not contact: a dial nobody picked up is a try.
   if (row.doNotCallAt != null || row.status === 'BOOKED') return true
   return row.events.some((event) => {
-    if (event.type === 'SMS') return true
+    // A text the carrier refused (Messages keeps it, marked failed) is not contact.
+    if (event.type === 'SMS') return readSmsStatus(event.body) !== 'failed'
     // An unanswered result (no answer, busy, voicemail) schedules a cadence step; it isn't contact.
     if (event.type === 'OUTCOME') return readCopy(event.body)?.followUp !== 'cadence'
     if (event.type !== 'CALL') return false

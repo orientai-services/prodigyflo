@@ -1,0 +1,145 @@
+/* Messages, the dialer's text inbox (docs/DIALER_APP.md §4). Everything is
+   scoped under `.final-desk.call-center`, which also beats the desk's
+   margin/padding reset. Phone first: the list fills the page and an open
+   thread covers it full screen; from 1024 px the two sit side by side. */
+
+.final-desk.call-center .msg { display: grid; gap: 16px; min-width: 0; }
+.final-desk.call-center .msg-list-pane { display: grid; gap: 12px; align-content: start; min-width: 0; }
+
+.final-desk.call-center .msg-search input {
+  width: 100%; min-height: 44px; padding: 10px 14px; font-size: 16px;
+  border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink);
+}
+.final-desk.call-center .msg-search input:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+
+.final-desk.call-center .msg-threads {
+  list-style: none; background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+}
+.final-desk.call-center .msg-threads li + li { border-top: 1px solid var(--line); }
+.final-desk.call-center .msg-row {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  min-height: 64px; padding: 10px 14px; color: var(--ink); text-decoration: none;
+}
+.final-desk.call-center .msg-row:hover { background: var(--paper); }
+.final-desk.call-center .msg-row:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+.final-desk.call-center .msg-row.on { background: var(--teal2); }
+.final-desk.call-center .msg-avatar {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%;
+  background: #e8e2d6; color: var(--navy); font-weight: 600; font-size: 14px;
+}
+.final-desk.call-center .msg-avatar-client { background: var(--teal2); color: var(--teal); }
+.final-desk.call-center .msg-row-main { min-width: 0; display: grid; gap: 2px; }
+.final-desk.call-center .msg-row-main b { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.final-desk.call-center .msg-snippet { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.final-desk.call-center .msg-row.unread b { font-weight: 700; }
+.final-desk.call-center .msg-row.unread .msg-snippet { color: var(--ink); font-weight: 500; }
+.final-desk.call-center .msg-row-side { display: grid; justify-items: end; gap: 6px; }
+.final-desk.call-center .msg-row-side time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.final-desk.call-center .msg-row.unread .msg-row-side time { color: var(--teal); font-weight: 600; }
+.final-desk.call-center .msg-dot {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px; background: var(--teal); color: #fff; font-size: 11px; font-weight: 700;
+}
+.final-desk.call-center .msg-kind { font-size: 11px; color: var(--teal); font-weight: 600; }
+.final-desk.call-center .msg-empty { padding: 18px 4px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.final-desk.call-center .msg-pick { display: none; }
+
+/* ── Thread ── */
+.final-desk.call-center .msg-thread-pane { display: none; min-width: 0; }
+.final-desk.call-center .msg-has-thread .msg-thread-pane { display: block; }
+.final-desk.call-center .msg-thread { display: flex; flex-direction: column; min-height: 0; background: var(--cream); }
+.final-desk.call-center .msg-head {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; min-height: 60px;
+  background: var(--card); border-bottom: 1px solid var(--line);
+}
+.final-desk.call-center .msg-back {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border-radius: 12px;
+  color: var(--ink); font-size: 30px; line-height: 1; text-decoration: none;
+}
+.final-desk.call-center .msg-back:hover { background: var(--paper); }
+.final-desk.call-center .msg-who { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.final-desk.call-center .msg-who b {
+  font-family: var(--font-fraunces), serif; font-weight: 500; font-size: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.final-desk.call-center .msg-who span { font-size: 12px; color: var(--muted); }
+.final-desk.call-center .msg-open {
+  display: inline-flex; align-items: center; flex: none; min-height: 44px; padding: 0 14px; border: 1px solid var(--line);
+  border-radius: 10px; background: #fff; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.final-desk.call-center .msg-open:hover { border-color: var(--teal); color: var(--teal); }
+
+.final-desk.call-center .msg-scroll {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px 16px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.final-desk.call-center .msg-day { display: flex; justify-content: center; margin: 10px 0 4px; }
+.final-desk.call-center .msg-day span {
+  padding: 3px 10px; border-radius: 999px; background: #e8e2d6; color: var(--muted); font-size: 12px; font-weight: 600;
+}
+.final-desk.call-center .msg-bubble-row { display: grid; gap: 3px; max-width: min(78%, 520px); }
+.final-desk.call-center .msg-bubble-row.in { justify-self: start; justify-items: start; align-self: flex-start; }
+.final-desk.call-center .msg-bubble-row.out { justify-self: end; justify-items: end; align-self: flex-end; }
+.final-desk.call-center .msg-bubble {
+  padding: 9px 13px; border-radius: 18px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.final-desk.call-center .msg-bubble.in { background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+.final-desk.call-center .msg-bubble.out { background: var(--teal); color: #fff; border-bottom-right-radius: 6px; }
+.final-desk.call-center .msg-bubble.out.failed { background: #fff; color: var(--ink); border: 1.5px solid #b3261e; }
+.final-desk.call-center .msg-meta { font-size: 11px; color: var(--muted); padding: 0 4px; }
+.final-desk.call-center .msg-fail { font-size: 12px; color: #b3261e; font-weight: 600; padding: 0 4px; text-align: right; }
+
+.final-desk.call-center .msg-compose {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end;
+  padding: 10px 12px; background: var(--card); border-top: 1px solid var(--line);
+}
+.final-desk.call-center .msg-input textarea {
+  display: block; width: 100%; min-height: 44px; max-height: 160px; padding: 10px 14px; resize: none; field-sizing: content;
+  font-size: 16px; line-height: 1.35; border: 1px solid var(--line); border-radius: 22px; background: #fff; color: var(--ink);
+}
+.final-desk.call-center .msg-input textarea:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.final-desk.call-center .msg-send {
+  min-height: 44px; min-width: 76px; padding: 0 18px; border: 0; border-radius: 22px;
+  background: var(--teal); color: #fff; font-size: 15px; font-weight: 600;
+}
+.final-desk.call-center .msg-send:disabled { opacity: .45; cursor: not-allowed; }
+.final-desk.call-center .msg-send:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.final-desk.call-center .msg-compose-off { display: block; font-size: 14px; color: var(--muted); }
+
+/* ── Phones and tablets: an open thread covers the page, like the lead panel. ── */
+@media (max-width: 1023.98px) {
+  .final-desk.call-center .msg-has-thread .msg-thread-pane {
+    position: fixed; inset: 0; z-index: 40; height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--voice-dock-h, 0px) env(safe-area-inset-left);
+    background: var(--cream);
+  }
+  .final-desk.call-center .msg-has-thread .msg-thread { height: 100%; }
+  .final-desk.call-center .msg-compose { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 420px) {
+  .final-desk.call-center .msg-open { padding: 0 10px; font-size: 13px; }
+  .final-desk.call-center .msg-who b { font-size: 18px; }
+  .final-desk.call-center .msg-bubble-row { max-width: 86%; }
+}
+
+/* ── Desktop: list and thread side by side, the thread scrolling on its own. ── */
+@media (min-width: 1024px) {
+  .final-desk.call-center .msg {
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); align-items: stretch;
+    height: min(calc(100dvh - 220px), 820px); min-height: 480px;
+  }
+  .final-desk.call-center .msg-list-pane { grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+  .final-desk.call-center .msg-threads { overflow-y: auto; align-self: stretch; }
+  .final-desk.call-center .msg-list-pane > .msg-empty { align-self: start; }
+  .final-desk.call-center .msg-thread-pane {
+    display: block; min-height: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--cream);
+  }
+  .final-desk.call-center .msg-thread { height: 100%; }
+  .final-desk.call-center .msg-back { display: none; }
+  .final-desk.call-center .msg-pick {
+    display: flex; align-items: center; justify-content: center; height: 100%; padding: 24px; color: var(--muted); font-size: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .final-desk.call-center .msg-scroll { scroll-behavior: auto; }
+}
