@@ -7,6 +7,7 @@ import { maskPhone } from '@/lib/messaging/send'
 import { formatE164, toE164 } from './provider'
 import { last4Of, phoneHashOrNull } from './compliance-core'
 import { linkVoiceCall, startInboundCall } from './voice-calls'
+import { notifyTeam } from './notify'
 
 /**
  * Inbound calls, from the carrier's webhook to the client timeline.
@@ -269,17 +270,16 @@ async function notifyUnknownCaller(input: RecordInboundCallInput, voiceCallId: s
   })
   if (admins.length === 0) return 0
 
-  await db.notification.createMany({
-    data: admins.map((a) => ({
-      organizationId: input.number.organizationId,
-      userId: a.id,
-      kind: 'MESSAGE' as const,
-      title: 'Call from an unknown number',
-      body: `${maskPhone(input.fromE164)} called ${input.number.friendlyName} (${formatE164(input.number.e164)}). It is on the Call Center desk.`,
-      href: `/call-center?missed=${voiceCallId}`,
-    })),
+  // In-app row, plus email and (once A2P is approved) a text to each admin.
+  const r = await notifyTeam({
+    organizationId: input.number.organizationId,
+    userIds: admins.map((a) => a.id),
+    kind: 'MESSAGE',
+    title: 'Call from an unknown number',
+    body: `${maskPhone(input.fromE164)} called ${input.number.friendlyName} (${formatE164(input.number.e164)}). It is on the Call Center desk.`,
+    href: `/call-center?missed=${voiceCallId}`,
   })
-  return admins.length
+  return r.notified
 }
 
 /** Twilio DialCallStatus -> the CRM's own outcome vocabulary. Only for a DIAL result. */

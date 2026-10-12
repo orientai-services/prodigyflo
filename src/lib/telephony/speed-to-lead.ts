@@ -4,6 +4,7 @@ import { effectivePermissions } from '@/lib/permissions'
 import { db } from '@/lib/db'
 import { PRESENT_WITHIN_MS } from './presence'
 import { SPEED_ALERT_MINUTES, SPEED_ESCALATE_MINUTES, SPEED_LOOKBACK_MS, speedAlertsDue, speedClockOpen } from './speed-clock'
+import { notifyTeam } from './notify'
 
 /**
  * Speed-to-lead (docs/DIALER_POWER.md Lane C, item 4), run from the 5-minute
@@ -127,10 +128,8 @@ export async function runSpeedToLead(
         : `${leadLabel(one.phoneLast4)} has waited ${one.minutes} minutes of calling time and nobody has called yet.`
       : `Nobody has called them yet. The longest has waited ${Math.max(...list.map((l) => l.minutes))} minutes. They're at the top of Today.`
     const href = one ? `/call-center?lead=${encodeURIComponent(one.id)}` : '/call-center'
-    await db.notification.createMany({
-      data: userIds.map((userId) => ({ organizationId, userId, kind: 'SLA_WARNING' as const, title, body, href })),
-    })
-    summary.notified += userIds.length
+    const r = await notifyTeam({ organizationId, userIds, kind: 'SLA_WARNING', title, body, href })
+    summary.notified += r.notified
   }
 
   for (const [orgId, b] of byOrg) {

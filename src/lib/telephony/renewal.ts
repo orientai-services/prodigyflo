@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { applyMovement, InsufficientFundsError } from './billing'
 import { formatE164 } from './provider'
 import { money } from './pricing'
+import { notifyTeam } from './notify'
 
 /**
  * The monthly rent on every line, charged by the job runner.
@@ -111,15 +112,13 @@ async function notifySuspension(
     select: { id: true },
   })
   if (admins.length === 0) return
-  await db.notification.createMany({
-    data: admins.map((a) => ({
-      organizationId,
-      userId: a.id,
-      kind: 'SYSTEM' as const,
-      title: 'A phone line is suspended',
-      body: `${formatE164(e164)} (${friendlyName}) needs ${money(amountCents)} to renew. Calls and texts to it stop until the balance is topped up — the number is still yours.`,
-      href: '/settings/phone-numbers',
-    })),
+  await notifyTeam({
+    organizationId,
+    userIds: admins.map((a) => a.id),
+    kind: 'SYSTEM',
+    title: 'A phone line is suspended',
+    body: `${formatE164(e164)} (${friendlyName}) needs ${money(amountCents)} to renew. Calls and texts to it stop until the balance is topped up — the number is still yours.`,
+    href: '/settings/phone-numbers',
   })
   await db.auditEvent.create({
     data: {
