@@ -14,6 +14,7 @@ import {
   resendStaleHandoffs,
   startSunoffHandoffFor,
   sunoffHandoffStateFor,
+  sunoffUserIdFor,
 } from './handoff'
 import { signBridgeRequest, verifyBridgeRequest } from './sign'
 
@@ -282,7 +283,7 @@ describe('SunOff CYS hand-off', () => {
   })
 
   it('marks the hand-off stale after the Client changes, and the cron re-sends it', async () => {
-    expect(await sunoffHandoffStateFor(repA.actor, leadId)).toMatchObject({ status: 'STANDBY', sunoffLeadId: 4242, stale: false })
+    expect(await sunoffHandoffStateFor(repA.actor, leadId)).toMatchObject({ status: 'STANDBY', sunoffLeadId: 4242, stale: false, lastError: null })
     await new Promise((r) => setTimeout(r, 20))
     await db.client.update({ where: { id: clientId }, data: { email: `mara.new.${run}@example.test` } })
     expect(await sunoffHandoffStateFor(repB.actor, leadId)).toMatchObject({ stale: true })
@@ -321,15 +322,22 @@ describe('SunOff CYS hand-off', () => {
   it('applies signed status hooks monotonically and refuses replays', async () => {
     const path = '/api/bridge/sunoff/status'
     const pf = `pf:${orgId}:${leadId}`
-    const send = async (status: string, idem: string, extra: Record<string, unknown> = {}) => {
-      const res = await postStatus(signedPost(path, { pf_lead_id: pf, sunoff_lead_id: 4242, status, at: '2026-10-12T19:00:00.000Z', ...extra }, idem))
+    const send = async (status: string, idem: string, extra: Record<string, unknown> = {}, signedAt = new Date()) => {
+      const res = await postStatus(signedPost(path, { pf_lead_id: pf, sunoff_lead_id: 4242, status, at: '2026-10-12T19:00:00.000Z', ...extra }, idem, signedAt))
       return { http: res.status, body: (await res.json()) as Record<string, unknown> }
     }
     expect(await send('started', 'st-1')).toEqual({ http: 200, body: { ok: true, status: 'started', changed: true } })
-    expect(await send('started', 'st-1')).toMatchObject({ http: 409, body: { error: 'replay' } })
+    // SunOff's retry: same Idempotency-Key, freshly signed: an idempotent no-op.
+    expect(await send('started', 'st-1', {}, new Date(Date.now() + 2000))).toEqual({ http: 200, body: { ok: true, status: 'started', changed: false } })
+    // The identical signed request again: a replay.
+    const once = signedPost(path, { pf_lead_id: pf, status: 'standby' }, 'st-1b')
+    const twin = new Request(once.url, { method: 'POST', headers: once.headers, body: JSON.stringify({ pf_lead_id: pf, status: 'standby' }) })
+    expect((await postStatus(once)).status).toBe(200)
+    const replayed = await postStatus(twin)
+    expect([replayed.status, ((await replayed.json()) as { error: string }).error]).toEqual([409, 'replay'])
     expect(await send('standby', 'st-2')).toEqual({ http: 200, body: { ok: true, status: 'started', changed: false } })
     expect(await send('submitted', 'st-3')).toEqual({ http: 200, body: { ok: true, status: 'submitted', changed: true } })
-    expect(await send('started', 'st-4')).toEqual({ http: 200, body: { ok: true, status: 'submitted', changed: false } })
+    expect(await send('started', 'st-4', {}, new Date(Date.now() + 3000))).toEqual({ http: 200, body: { ok: true, status: 'submitted', changed: false } })
     expect(await send('started', 'st-5', { sunoff_lead_id: 999 })).toMatchObject({ http: 409, body: { error: 'lead_mismatch' } })
     expect(await send('bogus', 'st-6')).toMatchObject({ http: 400 })
     const row = await db.sunoffHandoff.findUniqueOrThrow({ where: { callCenterLeadId: leadId } })
@@ -349,6 +357,7 @@ describe('SunOff CYS hand-off', () => {
     const doc = await getDocument(signedGet(`/api/bridge/sunoff/files/${row.id}/${contractDocId}`), { params: Promise.resolve({ handoffId: row.id, documentId: contractDocId }) } as never)
     expect(doc.status).toBe(404)
     const pfTrail = await db.callCenterEvent.findMany({ where: { leadId, type: 'HANDOFF' }, orderBy: { createdAt: 'asc' } })
+    expect(pfTrail.map((e) => JSON.parse(e.body).status)).toEqual(expect.arrayContaining(['STARTED', 'SUBMITTED', 'WITHDRAWN']))
     expect(pfTrail.map((e) => JSON.parse(e.body).detail)).toEqual(expect.arrayContaining(['In SunOff · Started', 'In SunOff · Submitted', 'Withdrawn in SunOff']))
 
     // A fresh send revives a withdrawn hand-off.
@@ -359,7 +368,11 @@ describe('SunOff CYS hand-off', () => {
   it('provisions the signed-in user in SunOff (decision D2)', async () => {
     const sunoff = mockSunoff(() => ({ status: 200, json: { ok: true, user_id: 77, created: true, invite_sent: true } }))
     const res = await provisionSunoffUserFor(repA.actor, { fetchImpl: sunoff.fetchImpl })
-    expect(res).toMatchObject({ ok: true, created: true })
+    expect(res).toMatchObject({ ok: true, created: true, email: repA.actor.email, sunoffUserId: 77 })
+    const lookup = mockSunoff((body) => (body.create === false ? { status: 200, json: { ok: true, user_id: 77, created: false } } : { status: 500, json: {} }))
+    expect(await sunoffUserIdFor(repA.actor, { fetchImpl: lookup.fetchImpl })).toBe(77)
+    const none = mockSunoff(() => ({ status: 422, json: { ok: false, error: 'no_sunoff_user', message: 'Ask the owner to link your SunOff account' } }))
+    expect(await sunoffUserIdFor(repA.actor, { fetchImpl: none.fetchImpl })).toBeNull()
     expect(sunoff.sent[0]).toMatchObject({ path: '/api/internal/pf-provision', body: { pf_user_id: repA.id, email: repA.actor.email, name: 'Gatsby Rep' } })
     const refused = mockSunoff(() => ({ status: 409, json: { ok: false, error: 'ambiguous_email', message: 'More than one SunOff account uses that email.' } }))
     expect(await provisionSunoffUserFor(repA.actor, { fetchImpl: refused.fetchImpl })).toEqual({ ok: false, reason: 'More than one SunOff account uses that email.', code: 'NOT_ALLOWED' })

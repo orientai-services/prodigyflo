@@ -30,10 +30,12 @@ export type HandoffState = {
   lastSentAt: string | null
   /** The Client changed after the last send: offer "Re-send profile". */
   stale: boolean
+  /** SunOff's error code from the last failed send, null after a success. */
+  lastError: string | null
 } | null
 
 export type ProvisionResult =
-  | { ok: true; created: boolean; message: string }
+  | { ok: true; created: boolean; message: string; email: string; sunoffUserId: number | null }
   | { ok: false; reason: string; code?: HandoffCode }
 
 type Deps = { fetchImpl?: typeof fetch; now?: Date }
@@ -153,7 +155,7 @@ async function send(user: SessionUser, leadId: string, mode: 'start' | 'refresh'
         where: { id: row.id },
         data: { lastError, ...(accepted ? {} : { status: 'ERROR' }) },
       })
-      await tx.callCenterEvent.create({ data: { leadId: lead.id, type: 'HANDOFF', body: handoffTrailBody('CYS Sign up', code === 'SUNOFF_DOWN' ? "SunOff didn't answer" : 'SunOff refused the hand-off') } })
+      await tx.callCenterEvent.create({ data: { leadId: lead.id, type: 'HANDOFF', body: handoffTrailBody('CYS Sign up', code === 'SUNOFF_DOWN' ? "SunOff didn't answer" : 'SunOff refused the hand-off', accepted ? prior.status : 'ERROR') } })
     })
     await recordAudit(user, {
       action: 'sunoff.handoff_failed',
@@ -195,7 +197,7 @@ async function send(user: SessionUser, leadId: string, mode: 'start' | 'refresh'
     })
     if (purpose === 'handoff' || status !== prior.status) {
       await tx.callCenterEvent.create({
-        data: { leadId: lead.id, type: 'HANDOFF', body: handoffTrailBody('CYS Sign up', purpose === 'handoff' && prior.revision ? `Profile re-sent · ${STATUS_LABEL[status]}` : STATUS_LABEL[status]) },
+        data: { leadId: lead.id, type: 'HANDOFF', body: handoffTrailBody('CYS Sign up', purpose === 'handoff' && prior.revision ? `Profile re-sent · ${STATUS_LABEL[status]}` : STATUS_LABEL[status], status) },
       })
     }
   })
@@ -233,7 +235,7 @@ async function clientChangedAt(clientId: string): Promise<Date | null> {
 export async function sunoffHandoffStateFor(user: SessionUser, leadId: string): Promise<HandoffState> {
   const row = await db.sunoffHandoff.findFirst({
     where: { callCenterLeadId: leadId, organizationId: user.organizationId },
-    select: { status: true, sunoffLeadId: true, lastSentAt: true, clientId: true },
+    select: { status: true, sunoffLeadId: true, lastSentAt: true, clientId: true, lastError: true },
   })
   if (!row) return null
   const lead = await db.callCenterLead.findFirst({ where: { id: leadId, organizationId: user.organizationId }, select: { clientId: true } })
@@ -241,7 +243,7 @@ export async function sunoffHandoffStateFor(user: SessionUser, leadId: string): 
   const stale = Boolean(
     row.lastSentAt && (lead?.clientId !== row.clientId || (changed && changed.getTime() > row.lastSentAt.getTime())),
   )
-  return { status: row.status, sunoffLeadId: row.sunoffLeadId, lastSentAt: row.lastSentAt?.toISOString() ?? null, stale }
+  return { status: row.status, sunoffLeadId: row.sunoffLeadId, lastSentAt: row.lastSentAt?.toISOString() ?? null, stale, lastError: row.lastError }
 }
 
 /**
@@ -250,7 +252,7 @@ export async function sunoffHandoffStateFor(user: SessionUser, leadId: string): 
  */
 export async function provisionSunoffUserFor(user: SessionUser, deps: Deps = {}): Promise<ProvisionResult> {
   if (user.portalClientId) return { ok: false, reason: 'Not allowed', code: 'NOT_ALLOWED' }
-  const call = await postToSunoff<{ created?: unknown; invite_sent?: unknown }>(
+  const call = await postToSunoff<{ created?: unknown; invite_sent?: unknown; user_id?: unknown }>(
     PROVISION_PATH,
     { version: PAYLOAD_VERSION, pf_user_id: user.id, name: user.name, email: user.email, org_id: user.organizationId },
     { idempotencyKey: `provision:${user.id}:${(deps.now ?? new Date()).getTime()}`, fetchImpl: deps.fetchImpl, now: deps.now },
@@ -262,11 +264,30 @@ export async function provisionSunoffUserFor(user: SessionUser, deps: Deps = {})
   }
   const created = call.data.created === true
   await recordAudit(user, { action: 'sunoff.user_provisioned', entityType: 'User', entityId: user.id, summary: created ? 'SunOff account created' : 'SunOff account linked', after: { created } })
+  const id = Number(call.data.user_id)
   return {
     ok: true,
     created,
+    email: user.email,
+    sunoffUserId: Number.isInteger(id) && id > 0 ? id : null,
     message: created ? `SunOff account created. Check ${user.email} for the link to set a password.` : 'Your SunOff account is linked.',
   }
+}
+
+/**
+ * The signed-in user's SunOff user id without creating anything (chat lane):
+ * the provision endpoint with `create: false`; SunOff answers 422
+ * no_sunoff_user when nobody matches (link row, then unique email). Nothing
+ * is stored on the ProdigyFlo side.
+ */
+export async function sunoffUserIdFor(user: SessionUser, deps: Deps = {}): Promise<number | null> {
+  const call = await postToSunoff<{ user_id?: unknown }>(
+    PROVISION_PATH,
+    { version: PAYLOAD_VERSION, pf_user_id: user.id, name: user.name, email: user.email, org_id: user.organizationId, create: false },
+    { idempotencyKey: `lookup:${user.id}:${(deps.now ?? new Date()).getTime()}`, fetchImpl: deps.fetchImpl, now: deps.now },
+  )
+  const id = call.ok ? Number(call.data.user_id) : NaN
+  return Number.isInteger(id) && id > 0 ? id : null
 }
 
 /**

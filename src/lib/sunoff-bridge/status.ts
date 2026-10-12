@@ -53,9 +53,9 @@ export const STATUS_LABEL: Record<SunoffHandoffStatus, string> = {
   ERROR: "SunOff didn't answer",
 }
 
-/** A desk trail line (CallCenterEvent HANDOFF) in the desk's { label, detail } shape. Never carries PII. */
-export function handoffTrailBody(label: string, detail: string): string {
-  return JSON.stringify({ label, detail: detail.replace(/\d{5,}/g, '····').slice(0, 300) })
+/** A desk trail line (CallCenterEvent HANDOFF): the desk's { label, detail } plus the row status. Never carries PII. */
+export function handoffTrailBody(label: string, detail: string, status?: SunoffHandoffStatus): string {
+  return JSON.stringify({ label, detail: detail.replace(/\d{5,}/g, '····').slice(0, 300), ...(status ? { status } : {}) })
 }
 
 /** System audit row (no session): the bridge acts, not a person. */
@@ -85,12 +85,17 @@ export type StatusHookResult =
 
 /**
  * Applies a signed status hook from SunOff. The signature is checked by the
- * route; this checks the body, the replay key and monotonicity, then writes
- * the row, a HANDOFF trail line and an audit row in one transaction.
+ * route; this checks the body, replay and monotonicity, then writes the row,
+ * a HANDOFF trail line and an audit row in one transaction.
+ *
+ * Replay = the identical signed request (same signature) seen within 24 h:
+ * refused with 409. SunOff keeps one Idempotency-Key across its retries, each
+ * freshly signed; a retry of an applied status is a no-op 200 by monotonicity.
  */
 export async function applySunoffStatus(
   body: unknown,
   idempotencyKey: string,
+  signature: string,
   now: Date = new Date(),
 ): Promise<StatusHookResult> {
   const b = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null
@@ -104,7 +109,7 @@ export async function applySunoffStatus(
   }
   const atRaw = typeof b.at === 'number' ? new Date(b.at * 1000) : typeof b.at === 'string' ? new Date(b.at) : now
   const at = Number.isNaN(atRaw.getTime()) ? now : atRaw
-  const detail = typeof b.detail === 'string' ? b.detail.slice(0, 200) : ''
+  const detail = typeof b.detail === 'string' ? b.detail.slice(0, 200) : b.detail && typeof b.detail === 'object' ? JSON.stringify(b.detail).slice(0, 500) : ''
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const row = await db.sunoffHandoff.findFirst({ where: { callCenterLeadId: ids.leadId, organizationId: ids.organizationId } })
@@ -112,7 +117,7 @@ export async function applySunoffStatus(
     if (sunoffLeadId != null && row.sunoffLeadId != null && row.sunoffLeadId !== sunoffLeadId) {
       return { ok: false, httpStatus: 409, error: 'lead_mismatch', message: 'sunoff_lead_id does not match this hand-off.' }
     }
-    const nonces = rememberNonce((row.nonces ?? {}) as Record<string, number>, idempotencyKey, now)
+    const nonces = rememberNonce((row.nonces ?? {}) as Record<string, number>, signature, now)
     if (!nonces) return { ok: false, httpStatus: 409, error: 'replay', message: 'This request was already received.' }
     const next = nextStatus(row.status, incoming)
     const done = await db.$transaction(async (tx) => {
@@ -135,14 +140,14 @@ export async function applySunoffStatus(
       if (updated.count === 0) return false
       if (next) {
         await tx.callCenterEvent.create({
-          data: { leadId: row.callCenterLeadId, type: 'HANDOFF', body: handoffTrailBody('CYS Sign up', STATUS_LABEL[next]) },
+          data: { leadId: row.callCenterLeadId, type: 'HANDOFF', body: handoffTrailBody('CYS Sign up', STATUS_LABEL[next], next) },
         })
         await bridgeAudit(tx, row.organizationId, {
           action: 'sunoff.handoff_status',
           entityId: row.id,
           summary: `${STATUS_LABEL[row.status]} → ${STATUS_LABEL[next]}`,
           before: { status: row.status },
-          after: { status: next, at: at.toISOString(), detail: detail || undefined },
+          after: { status: next, at: at.toISOString(), key: idempotencyKey, detail: detail || undefined },
         })
       }
       return true
