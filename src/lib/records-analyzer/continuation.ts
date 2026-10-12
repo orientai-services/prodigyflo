@@ -15,7 +15,9 @@ export async function requestRecordsContinuation(scope:{documentId?:string;clien
     importsAllowed=cohort!==null&&!(process.env.SCS_IMPORT_REQUIRE_COHORT==='true'&&cohort===undefined)
     if(cohort) importScope={organizationId:cohort.organizationId,intakeSubmission:{sourceId:cohort.sourceId},OR:cohort.cases.map(c=>({sourceLeadId:c.leadId,sourceDocumentId:{in:c.documentIds}}))}
   } catch { /* invalid or expired cohort is not runnable */ }
-  const imports=scope.clientId&&importsAllowed?await db.externalDocumentImport.count({where:{AND:[importScope,{clientId:scope.clientId,OR:[{status:{in:['PENDING','FAILED']},attempts:{lt:8}},{status:'IMPORTED',analysisPending:true,analysisAttempts:{lt:3},analysisNextAttemptAt:{lte:new Date()}}]}]}}):0
+  // FAILED imports are retried by the 5-min cron with backoff, never by self-chaining
+  // (a self-chain retried instantly, hit Vercel 508 loop detection and burned all 8 attempts).
+  const imports=scope.clientId&&importsAllowed?await db.externalDocumentImport.count({where:{AND:[importScope,{clientId:scope.clientId,OR:[{status:'PENDING',attempts:{lt:8}},{status:'IMPORTED',analysisPending:true,analysisAttempts:{lt:3},analysisNextAttemptAt:{lte:new Date()}}]}]}}):0
   const property=scope.clientId&&process.env.PROPERTY_RECORDS_PROVIDER==='records'?await db.propertyRecordsJob.findFirst({where:{clientId:scope.clientId,status:'PENDING'}}):null
   if(!due&&!imports&&!property) return {scheduled:false,reason:'No immediately due work'}
   const bypass=process.env.PF_VERCEL_PROTECTION_BYPASS??process.env.VERCEL_AUTOMATION_BYPASS_SECRET
