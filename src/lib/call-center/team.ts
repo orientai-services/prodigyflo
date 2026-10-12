@@ -1,5 +1,6 @@
 import 'server-only'
 import { db } from '@/lib/db'
+import { STAFF_ROLES } from '@/lib/permissions'
 import type { SessionUser } from '@/lib/rbac'
 import { addDays, dayKeyOf, dayStartUtc, weekStart } from './calendar/planner'
 import { durationLabel, firstName, maskedNumber, timeLabel } from './history-format'
@@ -106,7 +107,8 @@ export async function loadTeamToday(user: SessionUser, now = new Date()): Promis
 
   const [users, presence, calls, events, slots] = await Promise.all([
     db.user.findMany({
-      where: { organizationId: org, isActive: true, deletedAt: null },
+      // Staff only: portal client logins are users too, but not the team.
+      where: { organizationId: org, isActive: true, deletedAt: null, role: { key: { in: STAFF_ROLES } } },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, role: { select: { name: true } } },
     }),

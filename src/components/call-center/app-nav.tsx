@@ -45,9 +45,9 @@ export function SectionNav({
           <Link key={id} href={sectionHref(id)} className={here ? 'on' : undefined} aria-current={here ? 'page' : undefined}>
             <span className="cc-tab-icon">
               <Icon aria-hidden="true" />
-              {badge ? <span className="cc-badge" aria-hidden="true">{badge}</span> : null}
             </span>
             <span className="cc-tab-label">{SECTION_TITLE[id]}</span>
+            {badge ? <span className="cc-badge" aria-hidden="true">{badge}</span> : null}
             {badge ? <span className="sr">{`, ${badge} ${id === 'messages' ? 'unread' : 'waiting'}`}</span> : null}
           </Link>
         )

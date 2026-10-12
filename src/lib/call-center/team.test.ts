@@ -63,12 +63,14 @@ describe('team loaders', () => {
     const closerRole = await db.role.create({ data: { organizationId: orgId, key: 'CLOSER', name: 'Closer' } })
     const mk = (name: string, roleId: string, tag: string, extra: Record<string, unknown> = {}) =>
       db.user.create({ data: { organizationId: orgId, roleId, name, email: `${tag}-${run}@example.test`, passwordHash: 'x', ...extra } })
-    const [h, g, gone] = await Promise.all([
+    const clientRole = await db.role.create({ data: { organizationId: orgId, key: 'CLIENT', name: 'Client' } })
+    const [h, g, gone, portal] = await Promise.all([
       mk('Hector Owner', superRole.id, 'h'),
       mk('Gatsby Rep', closerRole.id, 'g'),
       mk('Former Rep', closerRole.id, 'f', { isActive: false }),
+      mk('Portal Client', clientRole.id, 'c'),
     ])
-    userIds.push(h.id, g.id, gone.id)
+    userIds.push(h.id, g.id, gone.id, portal.id)
     admin = sessionUser(h.id, orgId, superRole.id, 'SUPER_ADMIN', h.name)
     closer = sessionUser(g.id, orgId, closerRole.id, 'CLOSER', g.name)
 
