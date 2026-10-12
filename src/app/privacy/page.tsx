@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   description: 'How Solar Contract Services collects, uses, and protects lead information.',
 }
 
-const UPDATED = 'August 29, 2026'
+const UPDATED = 'October 12, 2026'
 const CONTACT = 'privacy@prodigyflo.ai'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -62,7 +62,32 @@ export default function PrivacyPolicyPage() {
           We do not sell your personal information. We share it only with service providers that help us operate our
           business — such as our customer-relationship-management (CRM) software, communication providers, and hosting
           providers — who are permitted to use it only to provide services to us, and with Meta as the source of the lead.
-          We may also disclose information where required by law.
+          If you ask us to help cancel your solar contract, we also share your client file with our cancellation partner,
+          as described below. We may also disclose information where required by law.
+        </p>
+      </Section>
+
+      <Section title="Sharing with our cancellation partner">
+        <p>
+          When you choose to move forward with cancelling or getting out of your solar contract, we send your client file
+          to SunOff and Cancel Your Solar, the partner companies that prepare and carry out the cancellation work. The
+          file includes:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>Your contact details: name, phone number, email, mailing and property address, and preferred language</li>
+          <li>Your solar contract and loan details, such as the installer, lender, agreement type, payment, rate, and balance</li>
+          <li>The documents you gave us, such as your contract, loan papers, utility bills, and property records</li>
+          <li>Your answers to our intake questions and questionnaire, and any upcoming appointment</li>
+        </ul>
+        <p>
+          We share this so they can prepare your cancellation paperwork without asking you for everything again. They may
+          use it only to provide cancellation services to you, and it is sent over an encrypted connection. Signing the
+          cancellation agreement, giving your consent to their services, and any payment stay your own steps, done
+          directly with them. If you do not want your file shared, tell us before we start your cancellation, or email{' '}
+          <a className="text-foreground underline" href={`mailto:${CONTACT}`}>
+            {CONTACT}
+          </a>
+          .
         </p>
       </Section>
 
