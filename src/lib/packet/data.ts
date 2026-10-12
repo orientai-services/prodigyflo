@@ -130,7 +130,20 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     sale_or_refi: (confirmed('sale_or_refi') || str(answers.sale_or_refi)),
     has_contract: hasContract || hasFinance,
   })
-  const financed = isPpaOrLease ? '' : confirmed('contract_value') || extracted(docs, 'finance_agreement', 'amount_financed') || loanAmount('Total / amount financed')
+  const isCash = product === 'cash' || product === 'cpa'
+  const statedContract = confirmed('contract_value')
+    || extracted(docs, 'solar_contract', 'cash_price')
+    || extracted(docs, 'finance_agreement', 'cash_price')
+    || extracted(docs, 'solar_contract', 'amount_financed')
+    || extracted(docs, 'finance_agreement', 'amount_financed')
+  const financed = isPpaOrLease || isCash
+    ? statedContract
+    : statedContract || loanAmount('Total / amount financed')
+  const statedPayoff = confirmed('current_payoff')
+    || extracted(docs, 'payoff_letter', 'payoff_amount')
+    || ((isPpaOrLease || isCash)
+      ? extracted(docs, 'solar_contract', 'remaining_balance') || extracted(docs, 'finance_agreement', 'remaining_balance')
+      : '')
   const trench = feeTrench(financed)
 
   const dashFields = {
@@ -148,7 +161,7 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     Product: product,
     'Account or loan #': isPpaOrLease ? 'Not a loan' : confirmed('account_number') || extracted(docs, 'finance_agreement', 'account_number') || 'MISSING',
     'Original contract value': financed,
-    'Current payoff': confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount') || 'MISSING',
+    'Current payoff': statedPayoff || 'MISSING',
     'Monthly payment': monthly,
     APR: isPpaOrLease ? 'Not applicable to PPA / lease' : apr || 'MISSING',
     'First-year monthly payment': firstYearMonthly,
@@ -187,10 +200,10 @@ export async function assemblePacket(clientId: string, opts?: { persist?: boolea
     effectiveDate,
     apr,
     contractValue: financed,
-    payoff: confirmed('current_payoff') || extracted(docs, 'payoff_letter', 'payoff_amount') || loanAmount('Remaining balance') || loanAmount('Estimated remaining balance'),
+    payoff: statedPayoff || loanAmount('Remaining balance') || loanAmount('Estimated remaining balance'),
     firstPayDate: loanText('First payment date'),
     interestPaid: isPpaOrLease ? '' : loanAmount('Interest paid to date') || loanAmount('Estimated interest paid'),
-    payoffEstimated: !confirmed('current_payoff') && !extracted(docs, 'payoff_letter', 'payoff_amount') && !loanAmount('Remaining balance') && Boolean(loanAmount('Estimated remaining balance')),
+    payoffEstimated: !statedPayoff && !loanAmount('Remaining balance') && Boolean(loanAmount('Estimated remaining balance')),
     lienQuote: disclosedLien(docs),
     signedDate: signatureDate,
     painType: (confirmed('pain_type') || str(answers.pain_type)),

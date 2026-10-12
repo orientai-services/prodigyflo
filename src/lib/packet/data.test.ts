@@ -58,6 +58,7 @@ describe('closing packet PPA provenance', () => {
     expect(packet?.payload).toContain('Contract effective date: 2018-05-30')
     expect(packet?.payload).toContain('Actual in-service date: MISSING')
     expect(packet?.payload).toContain('Current payoff: MISSING')
+    expect(packet?.payload).not.toContain('Original contract value: 49588.85')
     expect(Number(packet?.closerInput.payoff)).toBeGreaterThan(0)
     const sheet = composeMasterCallSheet(packet!.closerInput)
     const numbers = sheet.sections.find(section => section.title === 'The money')
@@ -67,6 +68,25 @@ describe('closing packet PPA provenance', () => {
     expect(sheet.sections.find(section => section.title === 'Two options')?.facts.find(fact => fact.label === 'Lien')?.value).toMatch(/Nevada/)
     expect(sheet.sections.find(section => section.title === 'Two options')?.facts.find(fact => fact.label === 'Lien')?.value).toMatch(/do not disclose a UCC lien/)
     expect(packet?.trench).toBe('unknown')
+  })
+
+  it('uses a stated contract price and remaining amount for cash, PPA, and lease', async () => {
+    for (const product_type of ['cash', 'Power Purchase Agreement', 'lease']) {
+      const fixture = client('VERIFIED')
+      const extraction = fixture.documents[0].extractions[0]
+      extraction.fields = extraction.fields.filter(field => field.key !== 'product_type')
+      extraction.fields.push(
+        { key: 'product_type', value: product_type, correctedValue: null, verification: 'VERIFIED', sourcePage: 1 },
+        { key: 'cash_price', value: '49588.85', correctedValue: null, verification: 'VERIFIED', sourcePage: 1 },
+        { key: 'remaining_balance', value: '12000.00', correctedValue: null, verification: 'VERIFIED', sourcePage: 2 },
+      )
+      mock.findClient.mockResolvedValue(fixture)
+      const packet = await assemblePacket('client-test')
+      expect(packet?.payload).toContain('Original contract value: 49588.85')
+      expect(packet?.payload).toContain('Current payoff: 12000.00')
+      expect(packet?.closerInput.contractValue).toBe('49588.85')
+      expect(packet?.closerInput.payoff).toBe('12000.00')
+    }
   })
 
   it('routes a loan install agreement and a typed monthly into the packet without a lender name', async () => {
