@@ -2,7 +2,7 @@ import 'server-only'
 import { db } from '@/lib/db'
 import { readFacebookFormEvent } from '@/lib/call-center/meta-route'
 import { readSmsEvent } from '@/lib/call-center/messages-core'
-import { linkedUsers } from './link'
+import { linkedSunoffIdById } from './link'
 
 /**
  * The case feed the chat Worker pulls (docs/CYS_BRIDGE.md §B4 "PF case chats",
@@ -67,31 +67,11 @@ function shortName(name: string | null | undefined): string | null {
 }
 
 export async function buildCaseFeed(since: string | null, now = new Date()): Promise<Feed> {
-  const links = await linkedUsers()
   const cursor = parseCursor(since, now)
-  if (!links.size) return { ok: true, full: true, cases: [], msgs: [], cursor: String(cursor.getTime()) }
-
-  const users = await db.user.findMany({
-    where: { id: { in: [...links.keys()] }, isActive: true, deletedAt: null },
-    select: { id: true, name: true, organizationId: true, role: { select: { key: true } } },
-  })
-  const byId = new Map(users.map((u) => [u.id, u]))
-  const uidOf = (pfUserId: string | null | undefined) => {
-    const id = pfUserId ? links.get(pfUserId) : undefined
-    return id && byId.has(pfUserId!) ? `u${id}` : null
-  }
-  const linkedIds = users.map((u) => u.id)
-
-  const ownedClients = await db.client.findMany({
-    where: { ownerId: { in: linkedIds }, deletedAt: null },
-    select: { id: true, ownerId: true },
-  })
-  const ownerOf = new Map(ownedClients.map((c) => [c.id, c.ownerId]))
-
+  // Candidates: recently active desk leads someone holds or whose Client has an owner. Links are looked up forward
+  // (ProdigyFlo stores none), once per distinct person, cached in ./link.
   const leads = await db.callCenterLead.findMany({
-    where: {
-      OR: [{ lockedBy: { in: linkedIds } }, ...(ownedClients.length ? [{ clientId: { in: ownedClients.map((c) => c.id) } }] : [])],
-    },
+    where: { OR: [{ lockedBy: { not: null } }, { clientId: { not: null } }] },
     orderBy: { updatedAt: 'desc' },
     take: FEED_CASE_LIMIT,
     select: {
@@ -113,7 +93,26 @@ export async function buildCaseFeed(since: string | null, now = new Date()): Pro
       },
     },
   })
+  const clientIds = [...new Set(leads.flatMap((l) => (l.clientId ? [l.clientId] : [])))]
+  const owners = clientIds.length
+    ? await db.client.findMany({ where: { id: { in: clientIds }, deletedAt: null, ownerId: { not: null } }, select: { id: true, ownerId: true } })
+    : []
+  const ownerOf = new Map(owners.map((c) => [c.id, c.ownerId]))
+  const orgIds = [...new Set(leads.map((l) => l.organizationId))]
+  const admins = orgIds.length
+    ? await db.user.findMany({ where: { organizationId: { in: orgIds }, isActive: true, deletedAt: null, role: { key: 'SUPER_ADMIN' } }, select: { id: true } })
+    : []
+  const people = [...new Set([...leads.flatMap((l) => (l.lockedBy ? [l.lockedBy] : [])), ...owners.flatMap((c) => (c.ownerId ? [c.ownerId] : [])), ...admins.map((a) => a.id)])]
+  const resolved = (await Promise.all(people.slice(0, 300).map((id) => linkedSunoffIdById(id)))).filter((x): x is NonNullable<typeof x> => Boolean(x))
+  const byId = new Map(resolved.map((r) => [r.user.id, r]))
+  const uidOf = (pfUserId: string | null | undefined) => {
+    const r = pfUserId ? byId.get(pfUserId) : undefined
+    return r ? `u${r.sunoffUserId}` : null
+  }
+  const users = resolved.map((r) => ({ id: r.user.id, name: r.user.name, organizationId: r.user.organizationId, role: { key: r.user.role } }))
+  if (!users.length) return { ok: true, full: true, cases: [], msgs: [], cursor: String(cursor.getTime()) }
 
+  const userById = new Map(users.map((u) => [u.id, u]))
   const superAdminsByOrg = new Map<string, string[]>()
   for (const u of users) {
     if (u.role.key !== 'SUPER_ADMIN') continue
@@ -124,13 +123,14 @@ export async function buildCaseFeed(since: string | null, now = new Date()): Pro
   const cases: FeedCase[] = []
   for (const lead of leads) {
     // The rep must be in the lead's own workspace: a link never crosses organizations.
-    const lockRep = lead.lockedBy && byId.get(lead.lockedBy)?.organizationId === lead.organizationId ? lead.lockedBy : null
+    const lockRep = lead.lockedBy && userById.get(lead.lockedBy)?.organizationId === lead.organizationId ? lead.lockedBy : null
     const owner = lead.clientId ? ownerOf.get(lead.clientId) ?? null : null
-    const ownerRep = owner && byId.get(owner)?.organizationId === lead.organizationId ? owner : null
+    const ownerRep = owner && userById.get(owner)?.organizationId === lead.organizationId ? owner : null
     const repId = (lockRep && uidOf(lockRep) ? lockRep : null) ?? (ownerRep && uidOf(ownerRep) ? ownerRep : null)
     const repUid = uidOf(repId)
     const watchers = (superAdminsByOrg.get(lead.organizationId) ?? []).filter((w) => w !== repUid)
-    if (!repUid && !watchers.length) continue
+    // §B4: only leads whose holder or Client owner is linked; Super Admins watch those, never the rest.
+    if (!repUid) continue
     let name: string | null = null
     for (const e of lead.events) name = name ?? readFacebookFormEvent(e.body).name
     const last4 = lead.phoneLast4 && /^\d{4}$/.test(lead.phoneLast4) ? lead.phoneLast4 : ''
@@ -138,7 +138,7 @@ export async function buildCaseFeed(since: string | null, now = new Date()): Pro
       lead_id: lead.id,
       name: (name ?? '').trim().slice(0, 80) || (last4 ? `Lead ••${last4}` : 'Lead'),
       rep_uid: repUid,
-      rep_name: repId ? shortName(byId.get(repId)?.name) : null,
+      rep_name: repId ? shortName(userById.get(repId)?.name) : null,
       watchers,
       stage: STAGE[lead.status] ?? lead.status,
       closed: Boolean(lead.doNotCallAt),
@@ -169,7 +169,7 @@ export async function buildCaseFeed(since: string | null, now = new Date()): Pro
       body: (copy?.detail ?? '').slice(0, 2000),
       at: r.createdAt.getTime(),
       rep_uid: authorUid,
-      rep_name: authorUid && copy?.userId ? shortName(byId.get(copy.userId)?.name) : null,
+      rep_name: authorUid && copy?.userId ? shortName(userById.get(copy.userId)?.name) : null,
     }
   })
   const newest = rows.length ? rows[rows.length - 1].createdAt.getTime() : cursor.getTime()

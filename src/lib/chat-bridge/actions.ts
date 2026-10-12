@@ -12,14 +12,14 @@ import { provisionLink } from './link'
  */
 export async function linkSunoffAccount(): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireUser()
-  const res = await provisionLink(user.id)
+  const res = await provisionLink(user)
   if (!res.ok) return { ok: false, error: res.error }
   await recordAudit(user, {
     action: 'chat.account_linked',
     entityType: 'User',
     entityId: user.id,
     summary: res.created ? 'Created and linked a SunOff account for the team chat' : 'Linked a SunOff account for the team chat',
-    after: { sunoffUser: `u${res.sunoffUserId}`, created: res.created },
+    after: { sunoffUser: res.sunoffUserId ? `u${res.sunoffUserId}` : null, created: res.created },
   }).catch(() => undefined)
   return { ok: true }
 }

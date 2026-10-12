@@ -92,9 +92,13 @@ describe('chat bridge', () => {
 
   it('refuses unlinked, non-holder, no consent, do-not-call and mock texting', async () => {
     const req = (o: Record<string, string> = {}) =>
-      parseCaseSms({ pf_lead_id: heldLead, uid: 'u16', body: 'Hi Paula', request_id: `req_${Math.random().toString(36).slice(2, 10)}`, ...o })!
-    expect(parseCaseSms({ pf_lead_id: heldLead, uid: '16', body: 'x', request_id: 'abcdefg' })).toBeNull()
+      parseCaseSms({ pf_lead_id: heldLead, uid: 'u16', pf_user_id: rep.id, body: 'Hi Paula', request_id: `req_${Math.random().toString(36).slice(2, 10)}`, ...o })!
+    expect(parseCaseSms({ pf_lead_id: heldLead, uid: '16', pf_user_id: rep.id, body: 'x', request_id: 'abcdefg' })).toBeNull()
+    expect(parseCaseSms({ pf_lead_id: heldLead, uid: 'u16', body: 'x', request_id: 'abcdefg' })).toBeNull()
+    // The PF user the chat names must really link to the uid it claims.
     expect((await sendCaseSms(req({ uid: 'u999' }), OPEN)).body).toMatchObject({ ok: false, error: 'not_linked' })
+    expect((await sendCaseSms(req({ uid: 'u1' }), OPEN)).body).toMatchObject({ ok: false, error: 'not_linked' })
+    expect((await sendCaseSms(req({ pf_user_id: other.id }), OPEN)).body).toMatchObject({ ok: false, error: 'not_linked' })
     expect((await sendCaseSms(req({ pf_lead_id: otherLead }), OPEN)).body).toMatchObject({ ok: false, error: 'not_holder' })
     expect((await sendCaseSms(req(), OPEN)).body).toMatchObject({ ok: false, error: 'sms_off' })
     mockMode.on = false
@@ -113,7 +117,7 @@ describe('chat bridge', () => {
   it('sends through the lead path once per request id (a Super Admin may text a held lead)', async () => {
     mockMode.on = false
     try {
-      const request = parseCaseSms({ pf_lead_id: heldLead, uid: 'u1', body: 'Hi Paula, this is the office', request_id: `req_${run}_once` })!
+      const request = parseCaseSms({ pf_lead_id: heldLead, uid: 'u1', pf_user_id: admin.id, body: 'Hi Paula, this is the office', request_id: `req_${run}_once` })!
       const first = await sendCaseSms(request, OPEN)
       const second = await sendCaseSms(request, OPEN)
       expect(first.status).toBe(200)

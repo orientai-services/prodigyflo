@@ -1,7 +1,7 @@
 import 'server-only'
 import type { SessionUser } from '@/lib/rbac'
 import { chatBase, chatKey } from './config'
-import { sunoffUserIdFor } from './link'
+import { linkedSunoffId } from './link'
 import { signedHeaders } from './sign'
 
 /**
@@ -37,7 +37,7 @@ export async function pingChatCases(leadIds: string[] = []): Promise<boolean> {
 
 /** Unread team-chat messages for the shell badge. 0 when unlinked, never opened, or the chat is unreachable. */
 export async function teamChatUnread(user: SessionUser): Promise<number> {
-  const sunoffId = await sunoffUserIdFor(user.id)
+  const sunoffId = await linkedSunoffId(user)
   if (!sunoffId) return 0
   const res = await signedFetch('GET', `/api/internal/pf/unread?uid=u${sunoffId}`)
   if (!res?.ok) return 0

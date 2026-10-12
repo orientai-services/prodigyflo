@@ -3,7 +3,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/lib/rbac'
 import { messagesHref } from '@/lib/call-center/messages-core'
 import { chatKey } from '@/lib/chat-bridge/config'
-import { sunoffUserIdFor } from '@/lib/chat-bridge/link'
+import { linkedSunoffId } from '@/lib/chat-bridge/link'
 import { TeamChat } from './team-chat'
 import './chat.css'
 
@@ -27,6 +27,6 @@ export function MessagesSwitch({ base, view, teamUnread }: { base: string; view:
 }
 
 export async function TeamChatSection({ user }: { user: SessionUser }): Promise<JSX.Element> {
-  const linked = Boolean(await sunoffUserIdFor(user.id))
+  const linked = Boolean(await linkedSunoffId(user))
   return <TeamChat configured={Boolean(chatKey())} linked={linked} initialLang="en" />
 }

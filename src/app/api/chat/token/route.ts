@@ -3,7 +3,7 @@ import { staffRouteAllowed } from '@/lib/staff-routes'
 import { recordAudit } from '@/lib/audit'
 import { chatBase, chatKey } from '@/lib/chat-bridge/config'
 import { CHAT_TOKEN_TTL_SECONDS, mintChatToken } from '@/lib/chat-bridge/jwt'
-import { sunoffUserIdFor } from '@/lib/chat-bridge/link'
+import { linkedSunoffId } from '@/lib/chat-bridge/link'
 
 /**
  * GET /api/chat/token: the signed-in user's chat SSO token (docs/CYS_BRIDGE.md
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   if (!staffRouteAllowed(user.role, '/api/chat/token')) return Response.json({ ok: false, error: 'forbidden' }, { status: 403, headers: NO_STORE })
   const key = chatKey()
   if (!key) return Response.json({ ok: false, error: 'not_configured' }, { status: 503, headers: NO_STORE })
-  const sunoffUserId = await sunoffUserIdFor(user.id)
+  const sunoffUserId = await linkedSunoffId(user)
   if (!sunoffUserId) return Response.json({ ok: false, error: 'not_linked' }, { status: 200, headers: NO_STORE })
   const lang = new URL(request.url).searchParams.get('lang') === 'es' ? 'es' : 'en'
   const now = Date.now()
