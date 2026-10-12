@@ -5,16 +5,15 @@
  * §B3). The screen imports only from here, so swapping a stub for the real
  * action is a one-line change in this file and nothing on the screen moves.
  *
- * TEMP: every function below is a stub until its lane lands.
- *   - scsIntakeLink, possibleMatchFor, linkLeadToClient → lane PF-A (link)
+ * Each function forwards to its lane's real server action:
+ *   - scsIntakeLink, scsIntakeTextStatus, possibleMatchFor, linkLeadToClient → '@/lib/call-center/actions'
  *   - startSunoffHandoff, refreshSunoffHandoff, sunoffHandoffState,
- *     provisionSunoffUser → lane PF-B (handoff): '@/lib/call-center/sunoff-actions'
- *     (feat/cys-handoff 9f04ff8, df791eb; its shapes are supersets of these)
- * Replace each body with `return <real action>(...)` (or re-export it) and
- * delete its TEMP line.
+ *     provisionSunoffUser → '@/lib/call-center/sunoff-actions'
  */
 
 import type { HandoffStatus, IntakeMode } from '@/lib/call-center/model'
+import * as desk from '@/lib/call-center/actions'
+import * as bridge from '@/lib/call-center/sunoff-actions'
 
 export type ScsIntakeResult = { ok: true; url?: string; sent?: boolean } | { ok: false; reason: string }
 
@@ -33,51 +32,50 @@ export type HandoffState = { status: HandoffStatus; lastSentAt: string | null; s
 /** PF-B returns more (created, sunoffUserId, code); `message` is ready to show. */
 export type ProvisionResult = { ok: true; email: string; message?: string } | { ok: false; reason: string }
 
-const NOT_CONNECTED = 'Not connected yet'
-
-/** TEMP (PF-A): build the signed SCS /begin URL; 'text' sends it, 'copy' and 'open' return it. */
+/** Build the signed SCS /begin URL; 'text' sends it, 'copy' and 'open' return it. */
 export async function scsIntakeLink(leadId: string, mode: IntakeMode): Promise<ScsIntakeResult> {
-  void leadId; void mode
-  return { ok: false, reason: NOT_CONNECTED }
+  return desk.scsIntakeLink(leadId, mode)
 }
 
-/** TEMP (PF-A): may this lead be texted the link now? The reason shows on "Text link" before the rep tries. */
+/** May this lead be texted the link now? The reason shows on "Text link" before the rep tries. */
 export async function scsIntakeTextStatus(leadId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
-  void leadId
-  return { ok: true }
+  return desk.scsIntakeTextStatus(leadId)
 }
 
-/** TEMP (PF-A): one Client in the org with this lead's phone hash, created in the last 30 days. */
+/** One Client in the org with this lead's phone hash, created in the last 30 days. */
 export async function possibleMatchFor(leadId: string): Promise<PossibleMatchResult> {
-  void leadId
-  return { ok: false, reason: NOT_CONNECTED }
+  const r = await desk.possibleMatchFor(leadId)
+  if (!r.ok) return r
+  return {
+    ok: true,
+    canLink: r.canLink,
+    match: r.match ? { clientId: r.match.clientId, firstName: r.match.firstName, createdAt: String(r.match.createdAt) } : null,
+  }
 }
 
-/** TEMP (PF-A): link the lead to that Client (clients:reassign or SUPER_ADMIN; audited). */
+/** Link the lead to that Client (clients:reassign or SUPER_ADMIN; audited). */
 export async function linkLeadToClient(leadId: string, clientId: string): Promise<LinkResult> {
-  void leadId; void clientId
-  return { ok: false, reason: NOT_CONNECTED }
+  return desk.linkLeadToClient(leadId, clientId)
 }
 
-/** TEMP (PF-B): send the profile to SunOff (standby) and return a one-time SSO url. */
+/** Send the profile to SunOff (standby) and return a one-time SSO url. */
 export async function startSunoffHandoff(leadId: string): Promise<HandoffResult> {
-  void leadId
-  return { ok: false, reason: NOT_CONNECTED }
+  return bridge.startSunoffHandoff(leadId)
 }
 
-/** TEMP (PF-B): re-send a newer revision of the profile. */
+/** Re-send the current revision of the profile. */
 export async function refreshSunoffHandoff(leadId: string): Promise<HandoffResult> {
-  void leadId
-  return { ok: false, reason: NOT_CONNECTED }
+  return bridge.refreshSunoffHandoff(leadId)
 }
 
-/** TEMP (PF-B): the SunoffHandoff row for this lead, or null before the first send. */
+/** The SunoffHandoff row for this lead, or null before the first send. */
 export async function sunoffHandoffState(leadId: string): Promise<HandoffState | null> {
-  void leadId
-  return null
+  const r = await bridge.sunoffHandoffState(leadId)
+  return r ? { status: r.status, lastSentAt: r.lastSentAt, stale: r.stale, lastError: r.lastError ?? null } : null
 }
 
-/** TEMP (PF-B): create the signed-in user's SunOff account and email them a set-password link. */
+/** Create or link the signed-in user's SunOff account (decision D2). */
 export async function provisionSunoffUser(): Promise<ProvisionResult> {
-  return { ok: false, reason: NOT_CONNECTED }
+  const r = await bridge.provisionSunoffUser()
+  return r.ok ? { ok: true, email: r.email, message: r.message } : { ok: false, reason: r.reason }
 }
