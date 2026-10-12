@@ -2767,10 +2767,19 @@ model CallCenterEvent {
   /// can't both write the line.
   voiceCallId String?
 
+  /// SMS rows written by Messages: 'in' | 'out'. Null on every other row.
+  direction   String?
+  /// When an inbound text was opened in Messages (unread badges).
+  readAt      DateTime?
+  /// The carrier message id of an SMS row (delivery callbacks find their row).
+  externalRef String?
+
   lead CallCenterLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@unique([voiceCallId, type])
   @@index([leadId, createdAt])
+  @@index([type, direction, readAt])
+  @@index([externalRef])
 }
 
 model CallCenterSuppression {
