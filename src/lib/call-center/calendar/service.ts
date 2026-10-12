@@ -2,6 +2,8 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getEmailProvider, getSmsProvider } from '@/lib/messaging'
+import { decideOutbound } from '@/lib/telephony/compliance'
+import { toE164 } from '@/lib/telephony/provider'
 import { readSecret } from '../contact'
 import { callLeadFromRow } from '../from-rows'
 import { visibleOnGrid } from './planner'
@@ -361,7 +363,7 @@ function repEmail(repKey: string): string | null {
 export async function runCalendarReminders(now = new Date()): Promise<{ sent: number; failed: number }> {
   const slots = await db.callCenterSlot.findMany({
     where: { status: { in: ACTIVE }, startsAt: { gt: now, lte: new Date(now.getTime() + 24 * 3_600_000) } },
-    include: { lead: { select: { emailSecret: true, phoneSecret: true } } },
+    include: { lead: { select: { emailSecret: true, phoneSecret: true, timeZone: true, leadAttribution: true, outOfArea: true } } },
     take: 200,
   })
   const byId = new Map(slots.map((s) => [s.id, s]))
@@ -371,7 +373,7 @@ export async function runCalendarReminders(now = new Date()): Promise<{ sent: nu
     const slot = byId.get(job.slotId)!
     try {
       const msg = reminderMessage(job, slot, reps.get(slot.repKey) ?? slot.repKey, slot.leadId)
-      const result = await deliver(job, slot.organizationId, msg, slot.repKey, slot.lead)
+      const result = await deliver(job, slot.organizationId, msg, slot.repKey, { id: slot.leadId, ...slot.lead }, now)
       if (result === 'SENT') {
         await db.callCenterSlot.update({ where: { id: slot.id }, data: { [job.kind]: now } })
         totals.sent += 1
@@ -387,12 +389,28 @@ export async function runCalendarReminders(now = new Date()): Promise<{ sent: nu
   return totals
 }
 
+type ReminderLead = {
+  id: string
+  emailSecret: unknown
+  phoneSecret: unknown
+  timeZone: string | null
+  leadAttribution: unknown
+  outOfArea: boolean
+}
+
+function attributionState(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const state = (raw as { state?: unknown }).state
+  return typeof state === 'string' ? state : null
+}
+
 async function deliver(
   job: ReminderJob,
   organizationId: string,
   msg: { subject: string; body: string },
   repKey: string,
-  lead: { emailSecret: unknown; phoneSecret: unknown },
+  lead: ReminderLead,
+  now: Date,
 ): Promise<string> {
   if (job.to === 'rep') {
     const to = repEmail(repKey)
@@ -402,7 +420,21 @@ async function deliver(
   if (job.channel === 'SMS') {
     const to = readSecret(lead.phoneSecret)
     if (!to) return 'no phone'
-    return (await getSmsProvider().send({ to, body: msg.body, organizationId })).status
+    // Same gate as every other text: consent, STOP, suppression, do-not-call, quiet hours.
+    const decision = await decideOutbound(
+      {
+        organizationId,
+        channel: 'SMS',
+        purpose: 'servicing',
+        phone: to,
+        leadId: lead.id,
+        automated: true,
+        zoneHints: { leadZone: lead.timeZone, states: [attributionState(lead.leadAttribution)], e164: toE164(to), outOfArea: lead.outOfArea },
+      },
+      { now },
+    )
+    if (!decision.allowed) return `blocked ${decision.code}`
+    return (await getSmsProvider().send({ to: decision.e164, body: msg.body, organizationId })).status
   }
   const to = readSecret(lead.emailSecret)
   if (!to) return 'no email'
