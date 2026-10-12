@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Phone } from 'lucide-react'
+import { MessageSquare, Phone } from 'lucide-react'
 import {
   recordCallCenterAttempt,
   recordCallCenterText,
@@ -84,6 +84,8 @@ import { TeamView } from './team-view'
 import { TodayView, type TodayServer } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
 import { usePowerMode } from './use-power-mode'
+import { useChatHost } from './use-chat-host'
+import { chatHref } from './messages/chat/host-bus'
 import '../final-desk/final-desk.css'
 import './call-center.css'
 
@@ -159,6 +161,7 @@ export function CallCenter({
   calendarAllowed = false,
   slot = null,
   unread = 0,
+  unreadSplit = null,
   today = null,
   team = null,
   viewer = null,
@@ -179,6 +182,8 @@ export function CallCenter({
   slot?: React.ReactNode
   /** Unread inbound texts (the Messages badge). */
   unread?: number
+  /** The same badge split into lead texts and team chat, so the shell can keep each live (use-chat-host.ts). */
+  unreadSplit?: { sms: number; team: number } | null
   /** Today's server numbers and team feed (Today only). */
   today?: TodayServer | null
   /** The team list (Team only). */
@@ -190,6 +195,8 @@ export function CallCenter({
   const router = useRouter()
   const voice = useVoice()
   const section = route.section
+  // The Messages badge, the "(n) " title prefix, the open conversation's name and chat notification taps.
+  const chatHost = useChatHost({ sms: unreadSplit?.sms ?? unread, team: unreadSplit?.team ?? 0, onMessages: section === 'messages' })
   const leadsList = section === 'leads' && !route.ads
   /** Today and Leads hold the lead panel, the tools and the shortcuts. */
   const deskSection = section === 'today' || leadsList
@@ -599,7 +606,17 @@ export function CallCenter({
           <span className="cc-word">Prodigy<span className="flo">Flo</span></span>
           <span className="cc-glyph" aria-hidden="true">P</span>
         </Link>
-        <h1 className="cc-title">{shellTitle(route)}</h1>
+        <h1 className="cc-title">
+          {chatHost.chatTitle ? (
+            <>
+              {/* Below 1024 px the open conversation names the page, like the SunOff dialer's top bar. */}
+              <span className="cc-title-desk">{shellTitle(route)}</span>
+              <span className="cc-title-chat">{chatHost.chatTitle}</span>
+            </>
+          ) : (
+            shellTitle(route)
+          )}
+        </h1>
         <div className="cc-head-right">
           {/* The phone's state at a glance; its sheet holds the settings and the test. */}
           <span ref={pillSlotRef} className="phone-anchor">
@@ -637,7 +654,7 @@ export function CallCenter({
       </header>
       <SectionNav
         route={route}
-        badges={{ today: todayBadge(counts), messages: unread }}
+        badges={{ today: todayBadge(counts), messages: chatHost.total }}
         moreOpen={moreOpen}
         onMore={() => {
           setPadOpen(false)
@@ -938,6 +955,15 @@ export function CallCenter({
                       : null}
                     <h3>Handoff</h3>
                     <HandoffGroup api={handoff} onOpenProfile={openProfile} />
+                    {selected.persisted ? (
+                      <div className="actions solo">
+                        {/* The lead's case chat in Team chat (docs/TEAM_CHAT_PARITY.md A4); Messages finds it by lead id. */}
+                        <Link className="btn secondary cc-teamchat" href={chatHref({ lead: selected.id })} scroll={false}>
+                          <MessageSquare aria-hidden="true" />
+                          Team chat
+                        </Link>
+                      </div>
+                    ) : null}
                     <h3>Note</h3>
                     <textarea
                       ref={noteRef}

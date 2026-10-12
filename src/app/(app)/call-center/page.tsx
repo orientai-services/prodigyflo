@@ -70,8 +70,8 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
     listMissedCalls().catch(() => [] as MissedCallVM[]),
     owner ? loadPhoneSetup(user).catch(() => null) : Promise.resolve(null),
     owner ? getTwilioStatus(false).catch(() => null) : Promise.resolve(null),
-    // Lead texts plus the team chat: one Messages badge.
-    Promise.all([unreadMessageCount(user).catch(() => 0), teamChatUnread(user).catch(() => 0)]).then(([a, b]) => a + b),
+    // Lead texts plus the team chat: one Messages badge (the shell keeps both live between renders, use-chat-host.ts).
+    Promise.all([unreadMessageCount(user).catch(() => 0), teamChatUnread(user).catch(() => 0)]).then(([sms, team]) => ({ sms, team })),
     route.section === 'today' ? soft(loadTodayStats(user, now), 'today stats') : Promise.resolve(null),
     route.section === 'today' || route.section === 'team' ? soft(loadTeamToday(user, now), 'team today') : Promise.resolve(null),
   ])
@@ -106,7 +106,8 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       adsAllowed={adsAllowed}
       calendarAllowed={calendarOn}
       slot={slot}
-      unread={unread}
+      unread={unread.sms + unread.team}
+      unreadSplit={unread}
       today={route.section === 'today' ? { stats, feed: team?.feed ?? null, count: team?.count ?? 0 } : null}
       team={route.section === 'team' ? (team?.members ?? []) : null}
       viewer={{ name: user.name, role: user.roleName }}

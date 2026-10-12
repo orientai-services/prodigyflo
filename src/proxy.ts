@@ -50,6 +50,9 @@ const PUBLIC_PREFIXES = [
   '/brand/',
   // PDF.js worker + decoder assets for Quick look (copied from pdfjs-dist; no client data).
   '/pdfjs/',
+  // Team chat's push-only service worker (public/chat-sw.js; no client data). A worker's update check must never be
+  // redirected to /login, or the browser drops it.
+  '/chat-sw.js',
 ]
 
 export function proxy(request: NextRequest) {

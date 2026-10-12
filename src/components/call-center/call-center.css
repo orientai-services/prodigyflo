@@ -836,3 +836,13 @@
 @media (prefers-reduced-motion: reduce) {
   .final-desk.call-center .lead-profile .skeleton i { animation: none; }
 }
+
+/* Team chat host (docs/TEAM_CHAT_PARITY.md A3, A4): the open conversation names the phone's top bar; the lead
+   panel's Team chat link. */
+.final-desk.call-center .cc-title-chat { display: none; }
+@media (max-width: 1023.98px) {
+  .final-desk.call-center.s-messages .cc-title-desk { display: none; }
+  .final-desk.call-center.s-messages .cc-title-chat { display: inline; }
+}
+.final-desk.call-center .btn.cc-teamchat { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; text-decoration: none; }
+.final-desk.call-center .btn.cc-teamchat svg { width: 16px; height: 16px; color: var(--teal); flex: none; }

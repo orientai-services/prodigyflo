@@ -35,13 +35,21 @@ export async function pingChatCases(leadIds: string[] = []): Promise<boolean> {
   return Boolean(res?.ok)
 }
 
+/** Unread team-chat messages and @mentions for the shell badge. Zeros when unlinked, never opened, or the chat is unreachable. */
+export async function teamChatCounts(user: SessionUser): Promise<{ total: number; mentions: number }> {
+  const sunoffId = await linkedSunoffId(user)
+  if (!sunoffId) return { total: 0, mentions: 0 }
+  const res = await signedFetch('GET', `/api/internal/pf/unread?uid=u${sunoffId}`)
+  if (!res?.ok) return { total: 0, mentions: 0 }
+  const data = (await res.json().catch(() => null)) as { unread_total?: unknown; mentions?: unknown } | null
+  const count = (v: unknown) => {
+    const n = Number(v)
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 999) : 0
+  }
+  return { total: count(data?.unread_total), mentions: count(data?.mentions) }
+}
+
 /** Unread team-chat messages for the shell badge. 0 when unlinked, never opened, or the chat is unreachable. */
 export async function teamChatUnread(user: SessionUser): Promise<number> {
-  const sunoffId = await linkedSunoffId(user)
-  if (!sunoffId) return 0
-  const res = await signedFetch('GET', `/api/internal/pf/unread?uid=u${sunoffId}`)
-  if (!res?.ok) return 0
-  const data = (await res.json().catch(() => null)) as { unread_total?: unknown } | null
-  const n = Number(data?.unread_total)
-  return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 999) : 0
+  return (await teamChatCounts(user)).total
 }

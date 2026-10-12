@@ -6,6 +6,8 @@ import { ChatApi, ChatError, clientId } from './api'
 import { Conversation } from './conversation'
 import { channelLabel, filterChannels, initials, listTime, preview, sectionOf, upsertMessage, type Section } from './format'
 import { NewChatSheet, PinsSheet, SearchSheet } from './sheets'
+import { useHostBridge } from './host-bridge'
+import { PushMenu } from './push-toggle'
 import { strings, type T } from './strings'
 import type { Channel, ChatEvent, Lang, Me, Message } from './types'
 import './chat.css'
@@ -226,8 +228,6 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         if (!live) return
         setPhase('ready')
         void api.connect()
-        const hash = /#c=(c_[0-9a-z]{15})/.exec(window.location.hash)
-        if (hash) setActive(hash[1])
       } catch {
         if (live) setPhase('error')
       }
@@ -422,6 +422,29 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
     [api, toast, t.failed, t.notSent, t.tooBig],
   )
 
+  // Shell seam (./host-bridge.ts): badge counts, live state, the phone title, and #c= / #case= / #m= / #thread= links.
+  const activeChannel = s.channels.find((c) => c.id === active) ?? null
+  useHostBridge({
+    api,
+    lang,
+    ready: phase === 'ready',
+    live: status === 'live',
+    channels: s.channels,
+    panes: s.panes,
+    active,
+    activeLabel: activeChannel ? channelLabel(activeChannel) : null,
+    openChannel: (id) => {
+      setActive(id)
+      dispatch({ type: 'thread', thread: null })
+      const url = new URL(window.location.href)
+      url.hash = `c=${id}`
+      window.history.replaceState({ chat: id }, '', url)
+    },
+    openThread: (m) => actions.openThread(m),
+    loadOlder: (ch) => actions.loadOlder(ch),
+    toast,
+  })
+
   async function switchLang() {
     const next: Lang = lang === 'en' ? 'es' : 'en'
     setLang(next)
@@ -466,6 +489,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         <div className="chat-side-meta">
           <span className={`chat-status chat-status-${status}`}>{status === 'live' ? t.live : status === 'offline' ? t.offline : t.polling}</span>
           <button type="button" className="chat-lang" onClick={() => void switchLang()}>{t.lang}</button>
+          <PushMenu api={api} lang={lang} />
         </div>
         <nav className="chat-list" aria-label={t.title}>
           {shown.length === 0 ? <p className="chat-empty">{t.noChannels}</p> : null}
