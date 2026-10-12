@@ -7,6 +7,17 @@
  * empty list.
  */
 
+/**
+ * A dial check answer, refused or not. A refused one carries `code` and
+ * `reason` (and maybe `canOverride`), never `error`, so it must not be read
+ * through `actionFailure`, which would replace its reason with a generic line.
+ */
+export function isDialCheckAnswer(res: unknown): boolean {
+  if (!res || typeof res !== 'object' || !('ok' in res)) return false
+  const r = res as { ok: unknown; reason?: unknown; code?: unknown }
+  return r.ok === true || (typeof r.reason === 'string' && typeof r.code === 'string')
+}
+
 export type ActionFailure = { ok: false; error: string; code?: string }
 
 export function actionFailure(res: unknown): ActionFailure | null {

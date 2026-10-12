@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { checkDial } from '@/lib/telephony/actions'
 import type { DialCheck } from '@/lib/telephony/voice-contract'
-import { actionFailure, thrownMessage } from '@/lib/telephony/ui/result'
+import { actionFailure, isDialCheckAnswer, thrownMessage } from '@/lib/telephony/ui/result'
 import { nextPowerLead, type Ranked } from '@/lib/call-center/priority'
 import type { CallLead } from '@/lib/call-center/model'
 import type { VoiceContextValue } from '@/components/voice/voice-provider'
@@ -187,7 +187,7 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
         let check: DialCheck
         try {
           const res = await checkDial({ kind: 'lead', id: lead.id }, voice.lineId ?? undefined)
-          const failure = actionFailure(res)
+          const failure = isDialCheckAnswer(res) ? null : actionFailure(res)
           if (failure) {
             stop(failure.error, lead.id)
             return
