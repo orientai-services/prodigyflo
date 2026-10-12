@@ -96,6 +96,22 @@ Server loader `loadHistory(user, { filter, q, cursor })` in
 
 ## 4. Messages (lane C)
 
+**Team chat comes first.** Messages opens on the internal team chat (the one
+SunOff team chat, drawn natively, docs/CYS_BRIDGE.md §B4 and
+docs/TEAM_CHAT_PARITY.md); a switch at the top reads "Team chat | Leads (SMS)",
+each with its unread pill. `?view=sms`, `?t=` and `?q=` open the lead text
+inbox below, and every inbox link keeps `view=sms`. The Messages tab badge is
+lead texts plus team chat: the server render and the 20 s refresh bring both,
+the chat's socket keeps the team count live while it is on screen, and
+`GET /api/chat/unread` covers the rest (every 45 s while visible); the page
+title carries a "(n) " prefix while it is above zero. Below 1024 px the top
+bar shows the open conversation's name. Deep links: `#c=<channel>`,
+`#m=<message>`, `#thread=<root>`, `#case=<lead id>` (the lead panel's
+**Team chat** button). Device notifications: Team chat › 🔔 Notifications
+(push-only `public/chat-sw.js`).
+
+The lead text inbox (the rest of this section):
+
 Server: `src/lib/call-center/messages.ts`; UI
 `src/components/call-center/messages/`.
 

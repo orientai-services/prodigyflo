@@ -60,6 +60,27 @@ describe('Call Center dialer render', () => {
     expect(html).toContain('>Follow-ups<')
   })
 
+  it('offers the lead’s Team chat and badges Messages with texts plus team chat', () => {
+    const [first, ...rest] = seedLeads()
+    const lead = { ...first, id: 'meta:org1:123', persisted: true }
+    const html = renderToString(
+      createElement(CallCenter, {
+        initialLeads: [lead, ...rest],
+        viewerId: 'usr_1',
+        renderedAt: AT,
+        route: { section: 'leads', ads: false, filter: null },
+        phone: { openLeadId: lead.id },
+        unread: 5,
+        unreadSplit: { sms: 2, team: 3, cases: { 'meta:org1:123': 4, other: 9 } },
+      }),
+    )
+    // docs/TEAM_CHAT_PARITY.md A4: the lead's case chat, found by lead id in Messages.
+    expect(html).toMatch(/<a class="btn secondary cc-teamchat" href="\/call-center\?s=messages#case=meta%3Aorg1%3A123">/)
+    // That lead's case-chat unread, from the one badge call per page load.
+    expect(html).toMatch(/cc-teamchat"[^>]*>.*?Team chat<span class="cc-badge" aria-hidden="true">4<\/span><span class="sr">, 4 unread<\/span><\/a>/)
+    expect(html).toMatch(/href="\/call-center\?s=messages"[^>]*>.*?<span class="cc-badge" aria-hidden="true">5<\/span>/)
+  })
+
   it('renders a server slot for History and the Team list for Team', () => {
     const history = renderToString(
       createElement(CallCenter, {

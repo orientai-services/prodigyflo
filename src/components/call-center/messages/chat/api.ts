@@ -37,6 +37,9 @@ export class ChatApi {
   private lang: Lang
   private listeners = new Set<Listener>()
   private statusListeners = new Set<(s: Status) => void>()
+  private netListeners = new Set<(ok: boolean) => void>()
+  /** False after a request failed to reach the chat at all (the offline banner); true again on the next answer. */
+  net = true
   private ws: WebSocket | null = null
   private wsTimer: ReturnType<typeof setTimeout> | null = null
   private pingTimer: ReturnType<typeof setInterval> | null = null
@@ -76,13 +79,20 @@ export class ChatApi {
 
   async req<T>(method: string, path: string, body?: unknown, retry = true): Promise<T> {
     await this.ensureSession()
-    const res = await fetch(this.base + path, {
-      method,
-      headers: { authorization: `Bearer ${this.session}`, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      credentials: 'omit',
-      cache: 'no-store',
-    })
+    let res: Response
+    try {
+      res = await fetch(this.base + path, {
+        method,
+        headers: { authorization: `Bearer ${this.session}`, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        credentials: 'omit',
+        cache: 'no-store',
+      })
+    } catch {
+      this.setNet(false)
+      throw new ChatError(0, 'network', this.lang === 'es' ? 'Sin conexión. Reintentando…' : 'Offline. Retrying…')
+    }
+    this.setNet(true)
     if (res.status === 401 && retry) {
       this.session = ''
       return this.req<T>(method, path, body, false)
@@ -128,6 +138,30 @@ export class ChatApi {
     this.listeners.add(fn)
     return () => this.listeners.delete(fn)
   }
+  onNet(fn: (ok: boolean) => void): () => void {
+    this.netListeners.add(fn)
+    return () => this.netListeners.delete(fn)
+  }
+  private setNet(ok: boolean) {
+    if (this.net === ok) return
+    this.net = ok
+    for (const fn of this.netListeners) fn(ok)
+  }
+  /** The chat's language for the few words this client writes itself (errors). */
+  setLang(lang: Lang) {
+    this.lang = lang
+  }
+  /** Reconnect now (the offline banner's Retry; the browser coming back online). */
+  retryNow() {
+    if (this.closed) return
+    this.retries = 0
+    if (this.wsTimer) clearTimeout(this.wsTimer)
+    if (!this.ws) void this.connect()
+  }
+  get live(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN
+  }
+
   onStatus(fn: (s: Status) => void): () => void {
     this.statusListeners.add(fn)
     return () => this.statusListeners.delete(fn)
@@ -143,11 +177,16 @@ export class ChatApi {
     return true
   }
 
+  private connecting = false
+
   async connect(): Promise<void> {
-    if (this.closed) return
+    if (this.closed || this.connecting || this.ws) return
     this.setStatus(this.retries ? 'polling' : 'connecting')
+    this.connecting = true
     try {
-      const { ticket } = await this.req<{ ticket: string }>('POST', '/api/ws-ticket')
+      const { ticket } = await this.req<{ ticket: string }>('POST', '/api/ws-ticket').finally(() => {
+        this.connecting = false
+      })
       const ws = new WebSocket(`${this.base.replace(/^http/, 'ws')}/ws?ticket=${encodeURIComponent(ticket)}`)
       this.ws = ws
       ws.onopen = () => {

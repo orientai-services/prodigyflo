@@ -56,6 +56,9 @@ type Props = {
   actions: ChatActions
   onBack: () => void
   onPins: () => void
+  /** 🔍 search inside this channel and ⚙ channel details (team-chat.tsx owns both sheets). */
+  onSearch?: () => void
+  onDetails?: () => void
 }
 
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches
@@ -78,7 +81,7 @@ type Ctx = {
   openPicker: (anchor: HTMLElement, pick: (e: string) => void) => void
 }
 
-export function Conversation({ api, t, lang, me, channel, pane, thread, typing, online, actions, onBack, onPins }: Props) {
+export function Conversation({ api, t, lang, me, channel, pane, thread, typing, online, actions, onBack, onPins, onSearch, onDetails }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const [stick, setStick] = useState(true)
   // The "New" line is placed once, from where I had read up to when I opened the chat; my own send clears it.
@@ -262,15 +265,19 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
               : `${t.members(channel.member_count)}${onlineCount ? ` · ${onlineCount} ${t.online}` : ''}`}
           </span>
         </div>
-        {channel.pins ? (
-          <button type="button" className="chat-pill" onClick={onPins}>📌 {t.pins(channel.pins)}</button>
-        ) : (
-          <button type="button" className="chat-icon" onClick={onPins} aria-label={t.pinned} title={t.pinned}>📌</button>
-        )}
+        <button type="button" className="chat-icon chat-head-btn" onClick={onPins} aria-label={channel.pins ? `${t.pinned} (${channel.pins})` : t.pinned} title={t.pinned}>
+          📌{channel.pins ? <span className="chat-head-n">{channel.pins}</span> : null}
+        </button>
+        {onSearch ? <button type="button" className="chat-icon chat-head-btn" onClick={onSearch} aria-label={t.searchIn} title={t.searchIn}>🔍</button> : null}
+        {onDetails ? (
+          <button type="button" className="chat-icon chat-head-btn" onClick={onDetails} aria-label={t.details} title={t.details}>
+            {channel.muted || channel.notify === 'none' ? '🔕' : channel.notify === 'mentions' ? '@' : '🔔'}
+          </button>
+        ) : null}
       </header>
       {channel.case ? <CaseCard c={channel} t={t} lang={lang} /> : null}
       <div className="chat-wrapm">
-        <div className="chat-scroll" ref={scroller} role="log" aria-live="polite" aria-label={channelLabel(channel)} onScroll={onScroll}>
+        <div className="chat-scroll" ref={scroller} role="log" aria-live="off" aria-label={channelLabel(channel)} onScroll={onScroll}>
           {pane.hasMore ? (
             <button type="button" className="chat-older" onClick={() => void loadOlder()}>
               {t.older}
