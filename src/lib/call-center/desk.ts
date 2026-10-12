@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { isUniqueViolation, recordingPath } from '@/lib/telephony/voice-calls'
 import { last4Of, phoneHashOrNull } from '@/lib/telephony/compliance-core'
 import { readSecret } from './contact'
-import { callLeadsForDesk, type StoredCallCenterLead } from './from-rows'
+import { callLeadsForDesk, type DeskLinkRow, type StoredCallCenterLead } from './from-rows'
 import { validateCallbackAt } from './cadence'
 import { CALL_RESULT_UNKNOWN, planCarrierCall } from './carrier'
 import {
@@ -131,8 +131,11 @@ async function deskCallExtras(organizationId: string, leadIds: string[]) {
   return { recordings, missedByLead, missedAtByLead, callbackByLead }
 }
 
-/** Desk list for one org. Secrets stay on the server. */
-export async function loadCallCenterLeadsFor(organizationId: string, viewerId: string): Promise<CallLead[]> {
+/**
+ * Desk list for one org plus each row's link fields (clientId, intake, texting
+ * gate) from the same read. Secrets stay on the server.
+ */
+export async function loadCallCenterDeskFor(organizationId: string, viewerId: string): Promise<{ leads: CallLead[]; links: DeskLinkRow[] }> {
   const rows = await db.callCenterLead.findMany({
     where: { organizationId },
     orderBy: { createdAt: 'desc' },
@@ -149,16 +152,34 @@ export async function loadCallCenterLeadsFor(organizationId: string, viewerId: s
       phoneLast4: true,
       createdAt: true,
       timeZone: true,
+      clientId: true,
+      intakeLinkSentAt: true,
+      consentAt: true,
+      consentRevokedAt: true,
       events: { orderBy: { createdAt: 'asc' }, select: { type: true, body: true, createdAt: true } },
     },
   })
-  const names = await lockNames(organizationId, rows.map((row) => row.lockedBy || ''))
-  const extras = await deskCallExtras(organizationId, rows.map((row) => row.id)).catch((err) => {
-    // An unmigrated VoiceCall table must not take the desk down.
-    if (missingRelation(err)) return undefined
-    throw err
+  const [names, extras] = await Promise.all([
+    lockNames(organizationId, rows.map((row) => row.lockedBy || '')),
+    deskCallExtras(organizationId, rows.map((row) => row.id)).catch((err) => {
+      // An unmigrated VoiceCall table must not take the desk down.
+      if (missingRelation(err)) return undefined
+      throw err
+    }),
+  ])
+  // The link fields stay out of the stored rows, so the leads read exactly as
+  // they do for every other caller of loadCallCenterLeadsFor.
+  const links: DeskLinkRow[] = []
+  const stored = rows.map(({ clientId, intakeLinkSentAt, consentAt, consentRevokedAt, ...row }) => {
+    links.push({ id: row.id, clientId, intakeLinkSentAt, consentAt, consentRevokedAt, doNotCallAt: row.doNotCallAt })
+    return toStored(row)
   })
-  return callLeadsForDesk(rows.map(toStored), viewerId, names, extras)
+  return { leads: callLeadsForDesk(stored, viewerId, names, extras), links }
+}
+
+/** Desk list for one org. Secrets stay on the server. */
+export async function loadCallCenterLeadsFor(organizationId: string, viewerId: string): Promise<CallLead[]> {
+  return (await loadCallCenterDeskFor(organizationId, viewerId)).leads
 }
 
 async function publicLead(organizationId: string, viewerId: string, leadId: string): Promise<CallLead | null> {
