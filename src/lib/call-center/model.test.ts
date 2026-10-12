@@ -118,8 +118,14 @@ describe('call center door', () => {
     const page = readFileSync(path.join(root, 'app/(app)/call-center/page.tsx'), 'utf8')
     const bundle = `${screen}\n${model}\n${page}`
     expect(bundle).toContain('Ad form fills and inbound on the ad number. Not the SCS intake journey.')
-    expect(bundle).toContain('Preview. Twilio is not connected.')
-    expect(bundle).toContain('Voice not connected')
+    // The trail still marks preview-only actions; the screen has no banner or header note for it:
+    // the phone pill (top right) carries the phone's state, and its sheet the reason (voiceNote).
+    expect(model).toContain('Preview. Twilio is not connected.')
+    expect(screen).not.toContain('PREVIEW_BANNER')
+    expect(screen).not.toContain('Voice not connected')
+    expect(screen).not.toContain('Browser calling on')
+    expect(screen).toContain('<PhonePill')
+    expect(screen).toContain('usePhoneStatus(phone.voiceNote)')
     expect(bundle).toContain('Working language')
     expect(bundle).not.toMatch(/\bfetch\s*\(/)
     expect(bundle).not.toMatch(/from ['"]twilio|graph\.facebook|meta\.com|process\.env|\bSES\b|\$\d/)

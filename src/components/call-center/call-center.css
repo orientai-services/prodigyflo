@@ -24,7 +24,6 @@
 .final-desk.call-center .top-right { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 .final-desk.call-center .lang { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .final-desk.call-center .lang select { width: auto; }
-.final-desk.call-center .voice { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .final-desk.call-center .page-title { margin-bottom: 14px; }
 .final-desk.call-center .page-title h2 { font-family: var(--font-fraunces), serif; font-size: 34px; font-weight: 500; }
 .final-desk.call-center .page-title p { margin-top: 6px; max-width: 640px; }
@@ -98,7 +97,6 @@
   .final-desk.call-center .top { height: auto; flex-wrap: wrap; align-items: stretch; padding: 12px 16px; gap: 10px; }
   .final-desk.call-center .search { max-width: none; min-width: 0; width: 100%; }
   .final-desk.call-center .top-right { width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: space-between; }
-  .final-desk.call-center .voice { white-space: normal; }
   .final-desk.call-center .split,
   .final-desk.call-center .facts { grid-template-columns: 1fr; }
   .final-desk.call-center .card { overflow-x: auto; }
@@ -242,11 +240,11 @@
 }
 
 @media (max-width: 767.98px) {
-  .final-desk.call-center .main { padding: 14px 16px 32px; }
-  .final-desk.call-center.power-on .main { padding-bottom: 150px; }
+  .final-desk.call-center .main { padding: 14px 16px calc(32px + var(--cc-bar-h, 0px)); }
+  .final-desk.call-center.power-on .main { padding-bottom: calc(150px + var(--cc-bar-h, 0px)); }
 
-  /* Header: search on its own row, then language · power · help, then the
-     calling note beside Phone setup. */
+  /* Header: search beside the phone pill, then language · power. Dial pad and
+     Phone setup move to the bottom bar. */
   .final-desk.call-center .top { padding: 10px 16px 12px; gap: 8px; }
   .final-desk.call-center .search input { min-height: 44px; font-size: 16px; }
   .final-desk.call-center .top-right { flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-start; }
@@ -259,7 +257,6 @@
   .final-desk.call-center .power-toggle { min-height: 44px; padding: 0 14px; font-size: 14px; }
   /* Phones have no keyboard for the shortcuts; the keys still work if one is attached. */
   .final-desk.call-center .keys-btn { display: none; }
-  .final-desk.call-center .voice { flex: 1 1 52%; min-width: 0; font-size: 12px; line-height: 1.35; }
   .final-desk.call-center .top-right > .btn { flex: 0 0 auto; min-height: 44px; padding: 0 12px; font-size: 14px; white-space: nowrap; }
 
   .final-desk.call-center .page-title { margin-bottom: 12px; }
@@ -312,8 +309,7 @@
   .final-desk.call-center .detail.open {
     position: fixed; inset: 0; z-index: 40; height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
     border: 0; border-radius: 0; box-shadow: none; background: var(--paper);
-    /* 72px at the bottom keeps the last row clear of the folded phone pill. */
-    padding: 0 16px calc(var(--voice-dock-h, 0px) + 72px);
+    padding: 0 16px calc(var(--voice-dock-h, 0px) + 32px);
   }
   .final-desk.call-center.power-on .detail.open { padding-bottom: calc(var(--voice-dock-h, 0px) + 150px); }
   .final-desk.call-center .detail-bar {
@@ -350,12 +346,10 @@
 
   /* Power mode: pinned just above the call bar, buttons in thumb reach. */
   .final-desk.call-center .power-bar {
-    position: fixed; left: 0; right: 0; bottom: var(--voice-dock-h, 0px); z-index: 45; margin: 0;
+    position: fixed; left: 0; right: 0; bottom: calc(var(--voice-dock-h, 0px) + var(--cc-bar-h, 0px)); z-index: 45; margin: 0;
     flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 16px 12px;
     border-radius: 16px 16px 0 0; border-width: 1px 0 0; box-shadow: 0 -6px 18px rgba(18, 32, 44, .12);
   }
-  /* The folded phone pill sits in the bottom-right corner; keep the last button out from under it. */
-  .final-desk.call-center .power-bar { padding-right: 72px; }
   .final-desk.call-center .power-acts { flex-wrap: nowrap; }
   .final-desk.call-center .power-acts .btn { flex: 1; min-height: 44px; }
 
@@ -466,13 +460,12 @@
 }
 .final-desk.call-center .pad-recent button:hover { background: var(--teal2); }
 
-/* The header gained a button: on a desk the calling note wraps and the tools
-   drop to a second row before the search shrinks or the page scrolls sideways. */
+/* The header gained a button: on a desk the tools drop to a second row
+   before the search shrinks or the page scrolls sideways. */
 @media (min-width: 980.02px) {
   .final-desk.call-center .top { height: auto; min-height: 64px; padding-block: 10px; }
   .final-desk.call-center .search { min-width: 180px; }
   .final-desk.call-center .top-right { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; min-width: 0; }
-  .final-desk.call-center .voice { white-space: normal; max-width: 230px; line-height: 1.35; }
 }
 
 @media (max-width: 767.98px) {
@@ -492,4 +485,80 @@
   .final-desk.call-center .pad-key b { font-size: 19px; }
   .final-desk.call-center .pad-call .btn { min-height: 48px; font-size: 16px; }
   .final-desk.call-center .pad-recent button { min-height: 36px; padding: 0 12px; font-size: 14px; }
+}
+
+/* ── Phone status pill (top right of the header) and its sheet: settings and
+   Test connection. A popover under the pill on a desk, a bottom sheet on a
+   phone. ── */
+.final-desk.call-center .phone-anchor { position: relative; display: inline-flex; flex: none; margin-left: 14px; }
+.final-desk.call-center .phone-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px 7px 11px; border: 1px solid var(--line); border-radius: 999px;
+  background: #fff; color: var(--ink); font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.final-desk.call-center .phone-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #9aa3ab; }
+.final-desk.call-center .phone-pill.green { background: var(--greenbg); border-color: #bcd9c2; color: var(--green); }
+.final-desk.call-center .phone-pill.amber { background: var(--amberbg); border-color: #ebc790; color: var(--amber); }
+.final-desk.call-center .phone-pill.red { background: #fbe4e1; border-color: #eec0ba; color: #9b1c1c; }
+.final-desk.call-center .green .phone-dot { background: #1f9d55; box-shadow: 0 0 0 3px rgba(31, 157, 85, .18); }
+.final-desk.call-center .amber .phone-dot { background: #d97706; box-shadow: 0 0 0 3px rgba(217, 119, 6, .18); }
+.final-desk.call-center .red .phone-dot { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .18); }
+.final-desk.call-center .phone-pill.on { box-shadow: 0 0 0 2px var(--teal2); }
+.final-desk.call-center .phone-pill:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.final-desk.call-center .phone-backdrop { display: none; }
+.final-desk.call-center .phone-sheet {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 340px;
+  max-height: calc(100dvh - 96px); overflow-y: auto; overscroll-behavior: contain;
+  display: grid; gap: 12px; padding: 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(18, 32, 44, .18);
+}
+.final-desk.call-center .phone-state { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
+.final-desk.call-center .phone-state .phone-dot { margin-top: 5px; }
+.final-desk.call-center .phone-state b { display: block; }
+.final-desk.call-center .phone-state .muted { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; }
+.final-desk.call-center .phone-settings { border-top: 1px solid var(--line); padding-top: 12px; }
+.final-desk.call-center .phone-setup-open { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.final-desk.call-center .phone-setup-open svg { width: 15px; height: 15px; }
+
+/* ── Bottom button bar: phones only. ── */
+.final-desk.call-center .cc-bottom-bar { display: none; }
+
+/* Tablets and phones: the pill shares the search row. */
+@media (max-width: 980px) {
+  .final-desk.call-center .search { flex: 1 1 0; width: auto; }
+  .final-desk.call-center .phone-anchor { order: 1; margin-left: 0; align-self: center; }
+  .final-desk.call-center .top-right { order: 2; }
+}
+
+@media (max-width: 767.98px) {
+  .final-desk.call-center .phone-pill { min-height: 44px; padding: 0 14px 0 12px; font-size: 14px; }
+  .final-desk.call-center .phone-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
+  .final-desk.call-center .phone-sheet {
+    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto;
+    max-height: 92dvh; gap: 12px; padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
+    border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
+  }
+  .final-desk.call-center .phone-setup-open { min-height: 48px; font-size: 15px; }
+
+  /* Dial pad, Phone setup, Ads and Calendar live in the bottom bar here. */
+  .final-desk.call-center .top .pad-toggle,
+  .final-desk.call-center .top .setup-btn,
+  .final-desk.call-center .filters .wide-only { display: none; }
+
+  /* The bar steps aside for a lead (it has its own actions) and for the call bar. */
+  .final-desk.call-center.bar-on:not(.detail-open) { --cc-bar-h: calc(62px + env(safe-area-inset-bottom)); }
+  .final-desk.call-center.bar-on:not(.detail-open) .cc-bottom-bar {
+    display: flex; gap: 4px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 46;
+    padding: 6px max(8px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -6px 18px rgba(18, 32, 44, .08);
+  }
+  .final-desk.call-center .cc-bottom-bar :is(button, a) {
+    flex: 1 1 0; min-width: 0; min-height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    border: 0; border-radius: 12px; background: none; color: var(--ink); font-size: 12px; line-height: 1.1; text-align: center; text-decoration: none;
+    touch-action: manipulation;
+  }
+  .final-desk.call-center .cc-bottom-bar svg { width: 20px; height: 20px; color: var(--teal); }
+  .final-desk.call-center .cc-bottom-bar .on { background: var(--teal2); color: var(--teal); font-weight: 600; }
+  .final-desk.call-center .cc-bottom-bar :is(button, a):focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
 }

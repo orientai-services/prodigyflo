@@ -17,13 +17,18 @@ export function PhoneSetupSheet({
   setup,
   status,
   triggerClassName = 'btn secondary',
+  open,
+  onOpenChange,
 }: {
   setup: PhoneSetupVM
   status: TwilioStatusVM | null
   triggerClassName?: string
+  /** Controlled, so other buttons (the Call Center's phone pill and bottom bar) can open it too. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={onOpenChange ? (next) => onOpenChange(next) : undefined}>
       <SheetTrigger
         render={
           <button type="button" className={triggerClassName}>

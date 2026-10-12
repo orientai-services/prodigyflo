@@ -16,7 +16,10 @@ describe('Call Center desk render', () => {
     const html = renderToString(
       createElement(CallCenter, { initialLeads: seedLeads(), viewerId: '', renderedAt: '2026-09-28T18:30:00.000Z' }),
     )
-    expect(html).toContain('Preview. Twilio is not connected.')
+    // No voice provider: the phone pill is red, and no preview banner or header note.
+    expect(html).toMatch(/class="phone-pill red"[^>]*aria-label="Phone off. Phone settings and test."/)
+    expect(html).not.toContain('Preview. Twilio is not connected.')
+    expect(html).not.toContain('Voice not connected')
     expect(html).toContain('New not contacted')
     expect(html).toContain('Call first')
     expect(html).toContain('Callbacks requested / missed')
