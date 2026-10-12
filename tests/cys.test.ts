@@ -71,6 +71,22 @@ describe('CYS field resolution', () => {
     expect(resolveField(def({ key: 'first_payment_or_install', sourcePath: 'document.finance_agreement.first_payment_date' }), record).status).toBe('MISSING')
     expect(resolveField(def({ key: 'contract_value', sourcePath: 'document.finance_agreement.amount_financed' }), record).status).toBe('MISSING')
   })
+
+  it('fills contract value and current payoff from cash, PPA, and lease readings', () => {
+    for (const product of ['cash', 'Power Purchase Agreement', 'lease']) {
+      const record = sources({ documentFields: [
+        docField({ key: 'product_type', value: product, documentTypeKey: 'solar_contract' }),
+        docField({ key: 'cash_price', value: '49588.85', documentTypeKey: 'solar_contract', extractedFieldId: 'price' }),
+        docField({ key: 'remaining_balance', value: '12000.00', documentTypeKey: 'solar_contract', extractedFieldId: 'left' }),
+      ] })
+      const price = resolveField(def({ key: 'contract_value', sourcePath: 'document.finance_agreement.amount_financed' }), record)
+      const payoff = resolveField(def({ key: 'current_payoff', sourcePath: 'document.payoff_letter.payoff_amount' }), record)
+      expect(price).toMatchObject({ value: '49588.85', status: 'SUGGESTED' })
+      expect(price.note).toMatch(/Contract price/)
+      expect(payoff).toMatchObject({ value: '12000.00', status: 'SUGGESTED' })
+      expect(payoff.note).toMatch(/not a lender payoff quote/)
+    }
+  })
   it('resolves a non-empty CRM client field to VERIFIED', () => {
     const d = def({ sourceType: 'CLIENT_FIELD', sourcePath: 'client.email', key: 'homeowner_email' })
     const r = resolveField(d, sources({ client: { email: 'ana@example.com' } }))

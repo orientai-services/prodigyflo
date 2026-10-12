@@ -161,6 +161,25 @@ function resolveDocumentField(def: CysDefinitionInput, sources: SourceRecord): R
   } else if (def.key === 'first_payment_or_install' && isPpaOrLease) {
     candidates = at('solar_contract', 'in_service_date')
     derivation = 'Actual in-service date; never inferred from signing or the effective date.'
+  } else if ((def.key === 'contract_value' || def.key === 'current_payoff') && (isPpaOrLease || product === 'cash' || product === 'cpa')) {
+    // Cash, PPA, and lease state a contract price and a remaining amount.
+    // Those are not a loan amount financed and not a lender payoff letter.
+    if (def.key === 'contract_value') {
+      candidates = [
+        ...at('solar_contract', 'cash_price'),
+        ...at('finance_agreement', 'cash_price'),
+        ...at('solar_contract', 'amount_financed'),
+        ...at('finance_agreement', 'amount_financed'),
+      ]
+      derivation = 'Contract price stated on the agreement.'
+    } else {
+      candidates = [
+        ...at('payoff_letter', 'payoff_amount'),
+        ...at('solar_contract', 'remaining_balance'),
+        ...at('finance_agreement', 'remaining_balance'),
+      ]
+      derivation = 'Remaining amount stated on the agreement; not a lender payoff quote.'
+    }
   }
   if (def.key === 'product_confirmed') candidates = candidates.map(field => ({ ...field, value: field.value ? normalizeProduct(field.value) : null, correctedValue: field.correctedValue ? normalizeProduct(field.correctedValue) : null }))
 
