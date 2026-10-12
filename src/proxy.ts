@@ -32,6 +32,8 @@ const PUBLIC_PREFIXES = [
   // authentication. Gating them here would answer a real customer's call with
   // a redirect to /login. See src/lib/telephony/signature.ts.
   '/api/telephony',
+  // SunOff team chat bridge: the chat Worker signs every call with PF_CHAT_KEY (src/lib/chat-bridge/sign.ts).
+  '/api/bridge/chat/',
   '/_next',
   '/favicon',
   // PWA manifests. Browsers fetch a manifest with `crossorigin="anonymous"`
