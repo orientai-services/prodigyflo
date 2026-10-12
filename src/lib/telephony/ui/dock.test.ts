@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { dockVisible, onCallDesk } from './dock'
 
 describe('call bar visibility', () => {
-  it('always shows on the Call Center desk', () => {
-    expect(dockVisible({ pathname: '/call-center', status: 'idle' })).toBe(true)
-    expect(dockVisible({ pathname: '/call-center/anything', status: 'idle' })).toBe(true)
+  it('folds away on the Call Center desk while idle: the header pill holds the phone there', () => {
+    expect(dockVisible({ pathname: '/call-center', status: 'idle' })).toBe(false)
+    expect(dockVisible({ pathname: '/call-center/anything', status: 'idle' })).toBe(false)
+  })
+
+  it('shows on the desk for a call, and for a dial error until it is dismissed', () => {
+    for (const status of ['connecting', 'ringing', 'in-call'] as const) {
+      expect(dockVisible({ pathname: '/call-center', status })).toBe(true)
+    }
+    expect(dockVisible({ pathname: '/call-center', status: 'idle', error: true })).toBe(true)
+    expect(dockVisible({ pathname: '/call-center', status: 'idle', callError: true })).toBe(true)
   })
 
   it('hides elsewhere while idle', () => {
@@ -22,6 +30,8 @@ describe('call bar visibility', () => {
   it('stays elsewhere until the error of the call that just ended is dismissed', () => {
     expect(dockVisible({ pathname: '/board', status: 'idle', callError: true })).toBe(true)
     expect(dockVisible({ pathname: '/board', status: 'idle', callError: false })).toBe(false)
+    // A dial error with no call behind it belongs to the page that dialed.
+    expect(dockVisible({ pathname: '/board', status: 'idle', error: true })).toBe(false)
   })
 
   it('matches the desk path exactly, not a prefix of another word', () => {

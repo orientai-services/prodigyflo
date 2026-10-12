@@ -1,16 +1,5 @@
 .final-desk.call-center .brand .flo { color: #55bac2; }
 .final-desk.call-center a.btn { display: inline-flex; align-items: center; text-decoration: none; }
-.final-desk.call-center .nav a {
-  display: block;
-  text-align: left;
-  padding: 10px 12px;
-  border-radius: 10px;
-  color: #c9d4d2;
-  text-decoration: none;
-}
-.final-desk.call-center .nav a.here { background: #1d3344; color: #fff; font-weight: 600; }
-.final-desk.call-center .nav a:hover { background: #1d3344; color: #fff; }
-.final-desk.call-center .top { gap: 16px; }
 .final-desk.call-center .search { flex: 1; max-width: 420px; }
 .final-desk.call-center .search input,
 .final-desk.call-center .lang select {
@@ -21,13 +10,8 @@
   background: #fff;
   color: var(--ink);
 }
-.final-desk.call-center .top-right { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 .final-desk.call-center .lang { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .final-desk.call-center .lang select { width: auto; }
-.final-desk.call-center .voice { font-size: 13px; color: var(--muted); white-space: nowrap; }
-.final-desk.call-center .page-title { margin-bottom: 14px; }
-.final-desk.call-center .page-title h2 { font-family: var(--font-fraunces), serif; font-size: 34px; font-weight: 500; }
-.final-desk.call-center .page-title p { margin-top: 6px; max-width: 640px; }
 .final-desk.call-center .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
 .final-desk.call-center .filters :is(button, a) {
   background: #fff;
@@ -93,12 +77,6 @@
 }
 
 @media (max-width: 980px) {
-  /* The rail itself (compact top bar + menu sheet) is the final-desk shell's job. */
-  .final-desk.call-center .shell { flex-direction: column; }
-  .final-desk.call-center .top { height: auto; flex-wrap: wrap; align-items: stretch; padding: 12px 16px; gap: 10px; }
-  .final-desk.call-center .search { max-width: none; min-width: 0; width: 100%; }
-  .final-desk.call-center .top-right { width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: space-between; }
-  .final-desk.call-center .voice { white-space: normal; }
   .final-desk.call-center .split,
   .final-desk.call-center .facts { grid-template-columns: 1fr; }
   .final-desk.call-center .card { overflow-x: auto; }
@@ -140,32 +118,6 @@
 }
 
 .final-desk.call-center .today { display: grid; gap: 12px; min-width: 0; align-content: start; }
-.final-desk.call-center .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.final-desk.call-center .kpis div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-.final-desk.call-center .kpis dt { font-size: 11px; color: var(--muted); }
-.final-desk.call-center .kpis dd { font-family: var(--font-fraunces), serif; font-size: 28px; font-weight: 500; line-height: 1.1; margin-top: 2px; }
-.final-desk.call-center .today .first { border-color: #c5e0de; }
-.final-desk.call-center .today-list { list-style: none; display: grid; gap: 6px; }
-.final-desk.call-center .queue .today-list { padding: 0 12px 12px; }
-.final-desk.call-center .today-row {
-  display: block; width: 100%; text-align: left; background: #fff; border: 1px solid var(--line);
-  border-radius: 10px; padding: 9px 11px; color: inherit;
-}
-.final-desk.call-center .today-row:hover { background: #f6f1e6; }
-.final-desk.call-center .today-row.on { background: var(--teal2); border-color: #c5e0de; }
-.final-desk.call-center .today-row.hot { border-left: 3px solid var(--amber); }
-.final-desk.call-center .today-row b,
-.final-desk.call-center .today-row span { display: block; }
-.final-desk.call-center .today-row .why { margin-top: 2px; font-size: 13px; color: var(--ink); }
-.final-desk.call-center .today-row .meta { margin-top: 2px; font-size: 12px; color: var(--muted); }
-.final-desk.call-center .queue summary {
-  display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none;
-  padding: 12px 14px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
-}
-.final-desk.call-center .queue summary::-webkit-details-marker { display: none; }
-.final-desk.call-center .queue summary::before { content: "▸"; }
-.final-desk.call-center .queue[open] summary::before { content: "▾"; }
-.final-desk.call-center .queue .count { margin-left: auto; background: #eee8dc; color: var(--ink); border-radius: 999px; padding: 2px 8px; letter-spacing: 0; font-size: 12px; }
 .final-desk.call-center .muted.pad { padding: 0 14px 14px; }
 
 .final-desk.call-center .sched { display: grid; gap: 10px; margin-bottom: 4px; }
@@ -194,14 +146,12 @@
 .final-desk.call-center .keys-sheet dl div { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: center; font-size: 14px; }
 
 @media (max-width: 980px) {
-  .final-desk.call-center .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .final-desk.call-center .power-bar { flex-direction: column; align-items: stretch; }
   .final-desk.call-center .power-acts .btn { flex: 1; }
   /* Today rows are cards, not a table: no forced table width or sideways scroll. */
   .final-desk.call-center .today .card { overflow-x: visible; }
 }
 @media (max-width: 640px) {
-  .final-desk.call-center .main { padding: 16px 16px 48px; }
   .final-desk.call-center .wrap .actions .btn { flex: 1 1 calc(50% - 8px); }
 }
 
@@ -222,34 +172,14 @@
   .final-desk.call-center .missed-row { padding: 16px; }
 }
 
-/* ── Mobile pass (docs/MOBILE.md). Desktop (≥1024) is untouched: every rule
-   below is either display:none there or sits in a phone media query. ── */
+/* ── Mobile pass (docs/MOBILE.md): the lead panel, lists and sheets on a phone. ── */
 .final-desk.call-center .detail-bar,
 .final-desk.call-center .sched-backdrop,
 .final-desk.call-center .sched-grab { display: none; }
-@media (min-width: 1024px) {
-  /* Dialer mode: no side menu. The brand and the switch back to the desk sit in the header. */
-  .final-desk.call-center .rail { display: none; }
-  .final-desk.call-center .top .top-dialer { display: inline-flex; align-items: center; gap: 14px; margin-right: 12px; }
-  .final-desk.call-center .top-brand { font-family: var(--font-fraunces), serif; font-weight: 500; font-size: 20px; color: var(--navy); white-space: nowrap; }
-  .final-desk.call-center .top-brand .flo { color: var(--teal); }
-  .final-desk.call-center .top .dialer-switch { color: var(--ink); }
-  .final-desk.call-center .top .dialer-switch:hover { background: rgba(18, 32, 44, .05); }
-}
-@media (max-width: 1023.98px) {
-  .final-desk.call-center .top .top-dialer { display: none; }
-  .final-desk.call-center .rail .rail-dialer { margin: 0 0 0 auto; color: #e8eeed; }
-}
 
 @media (max-width: 767.98px) {
-  .final-desk.call-center .main { padding: 14px 16px 32px; }
-  .final-desk.call-center.power-on .main { padding-bottom: 150px; }
 
-  /* Header: search on its own row, then language · power · help, then the
-     calling note beside Phone setup. */
-  .final-desk.call-center .top { padding: 10px 16px 12px; gap: 8px; }
   .final-desk.call-center .search input { min-height: 44px; font-size: 16px; }
-  .final-desk.call-center .top-right { flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-start; }
   .final-desk.call-center .lang { position: relative; flex: 1 1 120px; min-width: 0; }
   /* "Working language" becomes a small caption inside the select's box. */
   .final-desk.call-center .lang-text {
@@ -259,12 +189,6 @@
   .final-desk.call-center .power-toggle { min-height: 44px; padding: 0 14px; font-size: 14px; }
   /* Phones have no keyboard for the shortcuts; the keys still work if one is attached. */
   .final-desk.call-center .keys-btn { display: none; }
-  .final-desk.call-center .voice { flex: 1 1 52%; min-width: 0; font-size: 12px; line-height: 1.35; }
-  .final-desk.call-center .top-right > .btn { flex: 0 0 auto; min-height: 44px; padding: 0 12px; font-size: 14px; white-space: nowrap; }
-
-  .final-desk.call-center .page-title { margin-bottom: 12px; }
-  .final-desk.call-center .page-title h2 { font-size: 26px; line-height: 1.15; }
-  .final-desk.call-center .page-title p { font-size: 13px; line-height: 1.45; }
 
   /* Tabs: one row that scrolls sideways, edge to edge. */
   .final-desk.call-center .filters {
@@ -274,16 +198,7 @@
   .final-desk.call-center .filters::-webkit-scrollbar { display: none; }
   .final-desk.call-center .filters :is(button, a) { flex: 0 0 auto; min-height: 44px; padding: 0 16px; font-size: 14px; scroll-snap-align: start; }
 
-  /* Today */
-  .final-desk.call-center .kpis div { padding: 10px 12px; }
-  .final-desk.call-center .kpis dt { font-size: 12px; }
   .final-desk.call-center .today .block { padding: 14px; }
-  .final-desk.call-center .today-list { gap: 8px; }
-  .final-desk.call-center .queue .today-list { padding: 0 14px 14px; }
-  .final-desk.call-center .today-row { min-height: 56px; padding: 12px 14px; }
-  .final-desk.call-center .today-row b { font-size: 16px; }
-  .final-desk.call-center .today-row .why { font-size: 14px; }
-  .final-desk.call-center .queue summary { min-height: 52px; font-size: 12px; }
 
   /* Lead list: stacked rows instead of a wide table. */
   .final-desk.call-center .lead-table { overflow-x: visible; }
@@ -312,8 +227,7 @@
   .final-desk.call-center .detail.open {
     position: fixed; inset: 0; z-index: 40; height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
     border: 0; border-radius: 0; box-shadow: none; background: var(--paper);
-    /* 72px at the bottom keeps the last row clear of the folded phone pill. */
-    padding: 0 16px calc(var(--voice-dock-h, 0px) + 72px);
+    padding: 0 16px calc(var(--voice-dock-h, 0px) + 32px);
   }
   .final-desk.call-center.power-on .detail.open { padding-bottom: calc(var(--voice-dock-h, 0px) + 150px); }
   .final-desk.call-center .detail-bar {
@@ -350,12 +264,10 @@
 
   /* Power mode: pinned just above the call bar, buttons in thumb reach. */
   .final-desk.call-center .power-bar {
-    position: fixed; left: 0; right: 0; bottom: var(--voice-dock-h, 0px); z-index: 45; margin: 0;
+    position: fixed; left: 0; right: 0; bottom: calc(var(--voice-dock-h, 0px) + var(--cc-bar-h, 0px)); z-index: 45; margin: 0;
     flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 16px 12px;
     border-radius: 16px 16px 0 0; border-width: 1px 0 0; box-shadow: 0 -6px 18px rgba(18, 32, 44, .12);
   }
-  /* The folded phone pill sits in the bottom-right corner; keep the last button out from under it. */
-  .final-desk.call-center .power-bar { padding-right: 72px; }
   .final-desk.call-center .power-acts { flex-wrap: nowrap; }
   .final-desk.call-center .power-acts .btn { flex: 1; min-height: 44px; }
 
@@ -396,13 +308,6 @@
 /* ── Dial pad (docs/DIAL_PAD.md): a popover under its button on a desk, a
    bottom sheet on a phone. 40 px keys on a desk, 44 px on a phone. ── */
 .final-desk.call-center .pad-anchor { position: relative; display: inline-flex; }
-.final-desk.call-center .pad-toggle {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: #fff; border: 1px solid var(--line); border-radius: 999px;
-  padding: 7px 12px; color: var(--ink); font-size: 13px; white-space: nowrap;
-}
-.final-desk.call-center .pad-toggle svg { width: 15px; height: 15px; }
-.final-desk.call-center .pad-toggle.on { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 600; }
 .final-desk.call-center .pad-backdrop,
 .final-desk.call-center .pad-grab { display: none; }
 .final-desk.call-center .pad {
@@ -466,17 +371,7 @@
 }
 .final-desk.call-center .pad-recent button:hover { background: var(--teal2); }
 
-/* The header gained a button: on a desk the calling note wraps and the tools
-   drop to a second row before the search shrinks or the page scrolls sideways. */
-@media (min-width: 980.02px) {
-  .final-desk.call-center .top { height: auto; min-height: 64px; padding-block: 10px; }
-  .final-desk.call-center .search { min-width: 180px; }
-  .final-desk.call-center .top-right { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; min-width: 0; }
-  .final-desk.call-center .voice { white-space: normal; max-width: 230px; line-height: 1.35; }
-}
-
 @media (max-width: 767.98px) {
-  .final-desk.call-center .pad-toggle { min-height: 44px; padding: 0 14px; font-size: 14px; }
   .final-desk.call-center .pad-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
   .final-desk.call-center .pad {
     position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto;
@@ -492,4 +387,303 @@
   .final-desk.call-center .pad-key b { font-size: 19px; }
   .final-desk.call-center .pad-call .btn { min-height: 48px; font-size: 16px; }
   .final-desk.call-center .pad-recent button { min-height: 36px; padding: 0 12px; font-size: 14px; }
+}
+
+/* ── Phone status pill: PhoneStatusPill owns its look (phone-pill.css). The
+   header only places it; the More sheet borrows its dot colours for the chip. ── */
+.final-desk.call-center .phone-anchor { position: relative; display: inline-flex; flex: none; }
+.final-desk.call-center .phone-chip .phone-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #9aa3ab; }
+.final-desk.call-center .phone-chip.green .phone-dot { background: #1f9d55; }
+.final-desk.call-center .phone-chip.amber .phone-dot { background: #d97706; }
+.final-desk.call-center .phone-chip.red .phone-dot { background: #dc2626; }
+/* ── Dialer app shell (docs/DIALER_APP.md §1, §7): sticky header, the six
+   sections (a strip on a desk, a bottom tab bar below 1024), More, Team and
+   Today. Phone first: 44 px taps, 16 px inputs, safe areas. ── */
+.final-desk.call-center { min-height: 100dvh; }
+.final-desk.call-center .cc-hidden { display: none !important; }
+.final-desk.call-center .cc-head {
+  position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 12px;
+  min-height: 60px; padding: calc(env(safe-area-inset-top) + 8px) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+  background: var(--paper); border-bottom: 1px solid var(--line);
+}
+.final-desk.call-center .cc-mark { display: inline-flex; align-items: center; flex: none; color: var(--navy); text-decoration: none; }
+.final-desk.call-center .cc-word { font-family: var(--font-fraunces), serif; font-size: 20px; font-weight: 500; white-space: nowrap; }
+.final-desk.call-center .cc-word .flo { color: var(--teal); }
+.final-desk.call-center .cc-glyph {
+  display: none; width: 34px; height: 34px; border-radius: 10px; align-items: center; justify-content: center;
+  background: var(--navy); color: #fff; font-family: var(--font-fraunces), serif; font-size: 19px; font-weight: 500;
+}
+.final-desk.call-center .cc-mark:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; border-radius: 8px; }
+.final-desk.call-center .cc-title {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-fraunces), serif; font-size: 26px; font-weight: 500; line-height: 1.15; color: var(--ink);
+}
+.final-desk.call-center .cc-head-right { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; }
+.final-desk.call-center .cc-dialer {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 0 16px;
+  border: 0; border-radius: 999px; background: var(--teal); color: #fff; font-size: 14px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(14, 107, 102, .25); touch-action: manipulation;
+}
+.final-desk.call-center .cc-dialer svg { width: 16px; height: 16px; }
+.final-desk.call-center .cc-dialer:hover,
+.final-desk.call-center .cc-dialer.on { background: #0b5a56; }
+.final-desk.call-center .cc-dialer:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+
+/* Sections: a strip under the header on a desk. */
+.final-desk.call-center .cc-tabs {
+  position: sticky; top: 60px; z-index: 29; display: flex; justify-content: center; gap: 4px;
+  padding: 6px 16px; background: var(--paper); border-bottom: 1px solid var(--line);
+}
+.final-desk.call-center .cc-tabs > a,
+.final-desk.call-center .cc-more-anchor > button {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px;
+  border: 0; border-radius: 999px; background: none; color: var(--ink); font-size: 14px; font-weight: 500;
+  text-decoration: none; white-space: nowrap; touch-action: manipulation;
+}
+.final-desk.call-center .cc-tabs > a:hover,
+.final-desk.call-center .cc-more-anchor > button:hover { background: rgba(18, 32, 44, .05); }
+.final-desk.call-center .cc-tabs .on { background: var(--teal2); color: var(--teal); font-weight: 600; }
+.final-desk.call-center .cc-tabs :is(a, button):focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+.final-desk.call-center .cc-tab-icon { position: relative; display: inline-flex; }
+.final-desk.call-center .cc-tab-icon svg { width: 18px; height: 18px; color: var(--teal); }
+.final-desk.call-center .cc-badge {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+  background: #c2410c; color: #fff; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.final-desk.call-center .cc-more-anchor { position: relative; display: inline-flex; }
+
+.final-desk.call-center .cc-main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 20px 24px 56px; overflow: visible; }
+.final-desk.call-center .cc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
+.final-desk.call-center .cc-tools .search { flex: 1 1 240px; min-width: 0; max-width: 420px; }
+.final-desk.call-center .cc-tools .lang { flex: none; }
+.final-desk.call-center .back-link {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 40px; margin-bottom: 6px;
+  color: var(--teal); font-weight: 600; text-decoration: none;
+}
+.final-desk.call-center .back-link span { font-size: 22px; line-height: 1; margin-top: -2px; }
+
+@media (min-width: 1024px) {
+  .final-desk.call-center .cc-head { height: 60px; padding: 0 max(24px, calc((100% - 1232px) / 2)); }
+  .final-desk.call-center .cc-title { flex: 0 1 auto; margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--line); }
+}
+
+/* More: a popover under its button on a desk, a bottom sheet below 1024. */
+.final-desk.call-center .more-backdrop { display: none; }
+.final-desk.call-center .more-sheet {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 340px; max-height: calc(100dvh - 140px);
+  overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 12px; padding: 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 16px 40px rgba(18, 32, 44, .18);
+  text-align: left;
+}
+.final-desk.call-center .more-links { list-style: none; display: grid; gap: 2px; }
+.final-desk.call-center .more-links :is(a, button) {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 8px 10px;
+  border: 0; border-radius: 12px; background: none; color: var(--ink); text-align: left; text-decoration: none;
+}
+.final-desk.call-center .more-links :is(a, button):hover { background: #f6f1e6; }
+.final-desk.call-center .more-links :is(a, button):focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+.final-desk.call-center .more-links svg { flex: none; width: 20px; height: 20px; color: var(--teal); }
+.final-desk.call-center .more-links b { display: block; font-size: 15px; }
+.final-desk.call-center .more-links small { display: block; margin-top: 1px; font-size: 12px; color: var(--muted); }
+.final-desk.call-center .more-status { display: grid; gap: 8px; padding: 12px 2px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.final-desk.call-center .more-status div { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+.final-desk.call-center .more-status dt { color: var(--muted); }
+.final-desk.call-center .more-status dd { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; text-align: right; }
+.final-desk.call-center .live-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #1f9d55; box-shadow: 0 0 0 3px rgba(31, 157, 85, .18); }
+.final-desk.call-center .phone-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px;
+  background: #eee8dc; font-size: 12px; font-weight: 600;
+}
+.final-desk.call-center .phone-chip.green { background: var(--greenbg); color: var(--green); }
+.final-desk.call-center .phone-chip.amber { background: var(--amberbg); color: var(--amber); }
+.final-desk.call-center .phone-chip.red { background: #fbe4e1; color: #9b1c1c; }
+.final-desk.call-center .more-switch .dialer-switch { color: var(--ink); }
+.final-desk.call-center .more-switch .dialer-switch:hover { background: rgba(18, 32, 44, .05); }
+
+/* Today (§2). */
+.final-desk.call-center .today { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.final-desk.call-center .today-date { font-size: 14px; color: var(--muted); }
+.final-desk.call-center .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.final-desk.call-center .tile {
+  display: grid; gap: 2px; align-content: start; min-height: 44px; padding: 12px 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; color: var(--ink); text-decoration: none;
+}
+.final-desk.call-center .tile:hover { background: #fff; border-color: #c5e0de; }
+.final-desk.call-center .tile:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.final-desk.call-center .tile-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.final-desk.call-center .tile-value { font-family: var(--font-fraunces), serif; font-size: 30px; font-weight: 500; line-height: 1.1; }
+.final-desk.call-center .tile-hint { font-size: 12px; color: var(--muted); }
+.final-desk.call-center .explainer {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px;
+  background: var(--teal2); border-color: #c5e0de; box-shadow: none; font-size: 14px; line-height: 1.5;
+}
+.final-desk.call-center .explainer p { flex: 1; min-width: 0; }
+.final-desk.call-center .explainer-x {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; margin: -6px -6px 0 0;
+  border: 0; border-radius: 8px; background: none; color: var(--muted);
+}
+.final-desk.call-center .explainer-x:hover { background: rgba(18, 32, 44, .06); color: var(--ink); }
+.final-desk.call-center .explainer-x svg { width: 18px; height: 18px; }
+.final-desk.call-center .attack-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.final-desk.call-center .block .attack-head h3 { margin-bottom: 0; }
+.final-desk.call-center .attack-head .updates { font-size: 12px; }
+.final-desk.call-center .attack-head .count { background: #eee8dc; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+.final-desk.call-center .attack-list { list-style: none; display: grid; gap: 8px; }
+.final-desk.call-center .attack-row {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: start;
+  padding: 10px 12px; background: #fff; border: 1px solid var(--line); border-radius: 12px;
+}
+.final-desk.call-center .attack-row.on { background: var(--teal2); border-color: #c5e0de; }
+.final-desk.call-center .attack-row.hot { border-left: 3px solid var(--amber); }
+.final-desk.call-center .attack-n {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-top: 1px;
+  border-radius: 50%; background: #eee8dc; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.final-desk.call-center .attack-body { display: grid; gap: 3px; min-width: 0; }
+.final-desk.call-center .attack-name {
+  justify-self: start; max-width: 100%; padding: 0; border: 0; background: none; color: var(--ink);
+  font-size: 15px; font-weight: 600; text-align: left; overflow-wrap: anywhere;
+}
+.final-desk.call-center .attack-name:hover { color: var(--teal); text-decoration: underline; text-underline-offset: 2px; }
+.final-desk.call-center .attack-why { font-size: 13px; }
+.final-desk.call-center .attack-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--muted); }
+.final-desk.call-center .stage { padding: 2px 7px; border-radius: 999px; background: #eee8dc; color: var(--ink); font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.final-desk.call-center .stage.new { background: var(--amberbg); color: #7a3e10; }
+.final-desk.call-center .stage.call { background: #fbe4e1; color: #9b1c1c; }
+.final-desk.call-center .stage.booked { background: var(--greenbg); color: var(--green); }
+.final-desk.call-center .stage.wait { background: var(--teal2); color: var(--teal); }
+.final-desk.call-center .stage.dead { background: #ece9e2; color: var(--muted); }
+.final-desk.call-center .attack-note { justify-self: start; max-width: 100%; padding: 3px 8px; border-radius: 8px; background: #f6f1e6; font-size: 13px; overflow-wrap: anywhere; }
+.final-desk.call-center .attack-player { margin-top: 6px; }
+.final-desk.call-center .attack-acts { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 128px; }
+.final-desk.call-center .attack-acts .btn { width: 100%; justify-content: center; }
+/* CallButton's notice and block panel use Tailwind spacing, which the final-desk reset removes. */
+.final-desk.call-center .attack-acts > div { gap: 6px; }
+.final-desk.call-center .attack-acts [role="alert"] { padding: 8px 10px; max-width: 260px; }
+.final-desk.call-center .attack-acts [role="alert"] > * + * { margin-top: 6px; }
+.final-desk.call-center .attack-acts [role="alert"] :is(input, button.bg-primary, button.border) { padding: 0 10px; }
+.final-desk.call-center .chip-bad {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 10px;
+  border: 1px solid #eec0ba; border-radius: 999px; background: #fbe4e1; color: #9b1c1c; font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+.final-desk.call-center .listen {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--teal); font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.final-desk.call-center .listen svg { width: 12px; height: 12px; fill: currentColor; }
+.final-desk.call-center .listen[aria-expanded="true"] { background: var(--teal2); border-color: #c5e0de; }
+.final-desk.call-center .feed { list-style: none; display: grid; max-height: 340px; overflow-y: auto; }
+.final-desk.call-center .feed-row { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.final-desk.call-center .feed-row:first-child { border-top: 0; padding-top: 0; }
+.final-desk.call-center .feed-row time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.final-desk.call-center .feed-row span { overflow-wrap: anywhere; }
+.final-desk.call-center .feed-row.missed span { color: #9b1c1c; }
+
+/* Team (More › Team). */
+.final-desk.call-center .team { display: grid; gap: 12px; }
+.final-desk.call-center .team-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.final-desk.call-center .team-card { display: grid; gap: 12px; padding: 14px; }
+.final-desk.call-center .team-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.final-desk.call-center .team-who b { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.final-desk.call-center .team-who small { display: block; margin-top: 1px; font-size: 12px; color: var(--muted); }
+.final-desk.call-center .presence { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #c9c2b4; }
+.final-desk.call-center .presence.ready { background: #1f9d55; box-shadow: 0 0 0 3px rgba(31, 157, 85, .18); }
+.final-desk.call-center .team-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.final-desk.call-center .team-stats div { padding: 6px 8px; background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+.final-desk.call-center .team-stats dt { font-size: 11px; color: var(--muted); }
+.final-desk.call-center .team-stats div { min-width: 0; }
+.final-desk.call-center .team-stats dd { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+@media (max-width: 980px) {
+  .final-desk.call-center .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Below 1024: the sections are a bottom tab bar; More is a bottom sheet. */
+@media (max-width: 1023.98px) {
+  .final-desk.call-center.tabs-on { --cc-bar-h: calc(56px + env(safe-area-inset-bottom)); }
+  .final-desk.call-center .cc-main { padding: 16px 16px calc(32px + var(--cc-bar-h, 0px)); }
+  .final-desk.call-center.power-on .cc-main { padding-bottom: calc(150px + var(--cc-bar-h, 0px)); }
+  .final-desk.call-center .cc-title { font-size: 24px; }
+  .final-desk.call-center .cc-tabs {
+    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 46;
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
+    height: calc(56px + env(safe-area-inset-bottom));
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    border-top: 1px solid var(--line); border-bottom: 0; background: var(--card); box-shadow: 0 -6px 18px rgba(18, 32, 44, .08);
+  }
+  .final-desk.call-center.thread-open .cc-tabs { display: none; }
+  .final-desk.call-center .cc-tabs > a,
+  .final-desk.call-center .cc-more-anchor > button {
+    flex-direction: column; justify-content: center; gap: 3px; width: 100%; min-width: 0; min-height: 56px; padding: 0 2px;
+    border-radius: 0; color: var(--muted); font-size: 11px; line-height: 1.1;
+  }
+  .final-desk.call-center .cc-tabs .on { background: none; color: var(--teal); }
+  .final-desk.call-center .cc-tabs > a:hover,
+  .final-desk.call-center .cc-more-anchor > button:hover { background: none; }
+  .final-desk.call-center .cc-tab-icon svg { width: 22px; height: 22px; color: currentColor; }
+  .final-desk.call-center .cc-tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .final-desk.call-center .cc-tabs > a { position: relative; }
+  /* On the bar the badge sits on the icon's top-right corner. */
+  .final-desk.call-center .cc-badge {
+    position: absolute; top: 4px; left: calc(50% + 4px); min-width: 18px; height: 18px; padding: 0 5px;
+    line-height: 18px; box-shadow: 0 0 0 2px var(--card);
+  }
+  .final-desk.call-center .cc-more-anchor { display: flex; }
+
+  .final-desk.call-center .more-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
+  .final-desk.call-center .more-sheet {
+    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto; max-height: 92dvh;
+    padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
+    border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
+  }
+  .final-desk.call-center .more-sheet .pad-grab { display: block; width: 40px; height: 4px; margin: 4px auto 0; border-radius: 99px; background: #d6cebf; }
+}
+
+@media (max-width: 767.98px) {
+  /* A lead fills the screen with its own actions: the tab bar steps aside. */
+  .final-desk.call-center.detail-open { --cc-bar-h: 0px; }
+  .final-desk.call-center.detail-open .cc-tabs { display: none; }
+  .final-desk.call-center .cc-head { gap: 8px; }
+  .final-desk.call-center .cc-head-right { gap: 8px; }
+  .final-desk.call-center .cc-dialer { min-height: 44px; padding: 0 14px; font-size: 15px; }
+  .final-desk.call-center .cc-tools .search { flex-basis: 100%; max-width: none; }
+  .final-desk.call-center .explainer-x { width: 44px; height: 44px; margin: -10px -10px -6px 0; }
+  .final-desk.call-center .attack-row { grid-template-columns: 24px minmax(0, 1fr); padding: 12px; }
+  .final-desk.call-center .attack-acts { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; min-width: 0; }
+  .final-desk.call-center .attack-acts > div,
+  .final-desk.call-center .attack-acts > .btn { flex: 1 1 120px; }
+  .final-desk.call-center .attack-acts .btn { min-height: 44px; }
+  .final-desk.call-center .attack-acts .listen,
+  .final-desk.call-center .attack-acts .chip-bad { min-height: 44px; }
+  .final-desk.call-center .attack-name { min-height: 28px; font-size: 16px; }
+  .final-desk.call-center .team-stats dd { font-size: 14px; }
+}
+@media (max-width: 639.98px) {
+  .final-desk.call-center .cc-word { display: none; }
+  .final-desk.call-center .cc-glyph { display: inline-flex; }
+}
+@media (max-width: 399.98px) {
+  /* Every pixel goes to the title, the pill and the Dialer button. */
+  .final-desk.call-center .cc-mark { display: none; }
+  .final-desk.call-center .cc-title { font-size: 22px; }
+  .final-desk.call-center .cc-dialer { padding: 0 12px; gap: 6px; }
+  .final-desk.call-center .phone-status .phone-pill { padding: 0 11px 0 10px; }
+}
+
+/* The call bar (VoiceDock) sits above the tab bar while the bar is up. */
+@media (max-width: 639.98px) {
+  html:has(.final-desk.call-center.tabs-on:not(.detail-open)) .voice-dock { bottom: calc(56px + env(safe-area-inset-bottom)); padding-bottom: 0; }
+}
+@media (min-width: 640px) and (max-width: 767.98px) {
+  html:has(.final-desk.call-center.tabs-on:not(.detail-open)) .voice-dock { bottom: calc(72px + env(safe-area-inset-bottom)); }
+}
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  html:has(.final-desk.call-center.tabs-on) .voice-dock { bottom: calc(72px + env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .final-desk.call-center *,
+  .final-desk.call-center *::before,
+  .final-desk.call-center *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
 }

@@ -230,10 +230,10 @@ export function parseCalendarParams(
   return { view, date, rep, viewSet: rawView === 'day' || rawView === 'week' || rawView === 'month' }
 }
 
-/** Every link inside the calendar keeps the desk base `/call-center?tab=calendar`. */
+/** Every link inside the calendar stays in the dialer's Booked section, `/call-center?s=booked`. */
 export function calendarHref(state: CalendarState, patch: Partial<CalendarState> = {}): string {
   const next = { ...state, ...patch }
-  const q = new URLSearchParams({ tab: 'calendar', view: next.view, date: next.date })
+  const q = new URLSearchParams({ s: 'booked', view: next.view, date: next.date })
   if (next.rep) q.set('rep', next.rep)
   return `/call-center?${q.toString()}`
 }

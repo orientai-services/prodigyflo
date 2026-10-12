@@ -1,3 +1,4 @@
+import { applyLeadSmsStatus } from '@/lib/call-center/messages'
 import { applySmsStatus } from '@/lib/telephony/sms-status'
 import { authenticateSmsStatusWebhook } from '@/lib/telephony/webhook'
 
@@ -10,9 +11,15 @@ export async function POST(request: Request) {
   const auth = await authenticateSmsStatusWebhook(request)
   if (!auth.ok) return new Response(null, { status: auth.rejection.unknown ? 204 : auth.rejection.status })
 
-  const { params, communicationId } = auth.ctx
+  const { params, communicationId, organizationId } = auth.ctx
   if (communicationId) {
     await applySmsStatus(communicationId, {
+      status: params.MessageStatus || params.SmsStatus,
+      errorCode: params.ErrorCode || null,
+    })
+  } else {
+    // A text to a Call Center lead lives on its Messages thread, not in Communication.
+    await applyLeadSmsStatus(organizationId, params.MessageSid || params.SmsSid || '', {
       status: params.MessageStatus || params.SmsStatus,
       errorCode: params.ErrorCode || null,
     })

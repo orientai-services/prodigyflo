@@ -6,6 +6,7 @@ import { isRevocationText, isStartMessage, isStopMessage, type MessagingChannel 
 import { maskEmail, maskPhone } from './send'
 import { last4Of, phoneHashOrNull } from '@/lib/telephony/compliance-core'
 import { blockNumber, clearSmsStop } from '@/lib/telephony/suppressions'
+import { recordInboundLeadText } from '@/lib/call-center/messages'
 
 /**
  * Inbound message ingestion. A provider webhook (or the mock curl during
@@ -199,6 +200,9 @@ export async function processInboundMessage(
     // A STOP from a stranger still counts: it blocks texts in the LINE's
     // organization (it used to be recorded nowhere).
     if (channel === 'SMS') await applySmsKeywords(orgHint, payload)
+    // A Call Center lead with this number keeps the text on its Messages
+    // thread (idempotent on the carrier message id; never throws).
+    if (channel === 'SMS') await recordInboundLeadText(orgHint, payload)
     return { matched: false, duplicate: false, notified }
   }
 

@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, BellOff, Grid3x3, Mic, MicOff, Phone, PhoneOff, Settings2, X } from 'lucide-react'
+import { Grid3x3, Mic, MicOff, PhoneOff, Settings2, X } from 'lucide-react'
 import { dockVisible } from '@/lib/telephony/ui/dock'
 import { clockLabel } from '@/lib/telephony/ui/result'
-import { AudioSettings } from './audio-settings'
-import { ConnectionTest } from './connection-test'
+import { PhoneSettings } from './phone-settings'
 import { useVoice } from './voice-provider'
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'] as const
@@ -39,16 +38,16 @@ const PHONE_QUERY = '(max-width: 639.98px)'
 
 /**
  * The call bar: bottom right on a desk, a full-width bottom sheet on a phone.
- * It lives in Call Center; elsewhere it shows only for a call in progress
- * (`dockVisible`). On a phone the page gets bottom padding equal to the bar's
- * height so nothing hides under it, and `--voice-dock-h` carries that height
- * for pages that pin their own bars above it.
- * Idle it folds to a small round pill in the corner (status dot + phone icon)
- * that reserves no page space; tapping it opens the sheet with the state line,
- * ringtone and phone settings. During a call it shows who, the talk timer,
- * the quality light (one tip when it isn't green), mute, keypad and hang up.
- * Errors keep the sheet open until dismissed, in plain words, because a rep
- * who looked away must still learn why the call dropped.
+ * It shows for a call in progress on any page (`dockVisible`); on the Call
+ * Center the header's phone pill holds the idle state and the settings, so
+ * the bar only comes up there for a call or a dial error. On a phone the page
+ * gets bottom padding equal to the bar's height so nothing hides under it,
+ * and `--voice-dock-h` carries that height for pages that pin their own bars
+ * above it. During a call it shows who, the talk timer, the quality light
+ * (one tip when it isn't green), mute, keypad and hang up. Errors keep the
+ * bar up until dismissed, in plain words, because a rep who looked away must
+ * still learn why the call dropped; the gear beside one opens the phone
+ * settings, since a wrong mic or line is the usual fix.
  */
 export function VoiceDock() {
   const voice = useVoice()
@@ -83,19 +82,16 @@ export function VoiceDock() {
         pathname,
         status: voice.status,
         callError: Boolean(voice.error && voice.lastCall?.error === voice.error),
+        error: Boolean(voice.error),
       }),
   )
 
-  // The sheet shows for a call, for an error, or when the rep opened settings;
-  // otherwise the pill.
   const status = voice?.status ?? 'idle'
-  const expanded = status !== 'idle' || open || Boolean(voice?.error)
 
-  // Reserve the sheet's height at the bottom of the page on a phone. The pill
-  // reserves nothing.
+  // Reserve the bar's height at the bottom of the page on a phone.
   useEffect(() => {
     const bar = barRef.current
-    if (!visible || !expanded || !bar) return
+    if (!visible || !bar) return
     const root = document.documentElement
     const phone = window.matchMedia(PHONE_QUERY)
     const apply = () => {
@@ -113,7 +109,7 @@ export function VoiceDock() {
       root.style.removeProperty('--voice-dock-h')
       document.body.style.paddingBottom = ''
     }
-  }, [visible, expanded])
+  }, [visible])
 
   if (!voice || !visible) return null
   const { setup, leader, registered } = voice
@@ -132,30 +128,12 @@ export function VoiceDock() {
       ? 'Calls ring in your other tab.'
       : registered
         ? 'Phone ready'
-        : 'Starting the phone…'
-
-  if (!expanded) {
-    const dot = leader && registered ? 'bg-sky-500' : 'bg-muted-foreground/40'
-    return (
-      <button
-        type="button"
-        className="bg-popover text-muted-foreground hover:text-foreground fixed right-3 bottom-[calc(env(safe-area-inset-bottom)+12px)] z-50 inline-flex h-11 items-center gap-1.5 rounded-full border px-3 shadow-md sm:right-4 sm:bottom-4 sm:h-9 sm:px-2.5"
-        onClick={() => setOpen(true)}
-        aria-expanded={false}
-        aria-label={`${stateLine} Open phone settings.`}
-        title={stateLine}
-      >
-        <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
-        <Phone className="size-4" aria-hidden="true" />
-        {voice.ringtoneMuted && <BellOff className="size-3.5" aria-hidden="true" />}
-      </button>
-    )
-  }
+        : (voice.phoneIssue ?? 'Starting the phone…')
 
   return (
     <div
       ref={barRef}
-      className="bg-popover text-popover-foreground fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:max-h-none sm:w-80 sm:overflow-visible sm:rounded-xl sm:border sm:pb-0 sm:shadow-lg"
+      className="voice-dock bg-popover text-popover-foreground fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:max-h-none sm:w-80 sm:overflow-visible sm:rounded-xl sm:border sm:pb-0 sm:shadow-lg"
       role="region"
       aria-label="Phone"
     >
@@ -214,33 +192,19 @@ export function VoiceDock() {
             </button>
           </div>
         ) : (
-          <>
-            {leader && (
-              <button
-                type="button"
-                className="hover:bg-muted text-muted-foreground inline-flex size-11 items-center justify-center rounded-lg sm:size-8 sm:rounded-md"
-                onClick={() => voice.setRingtoneMuted(!voice.ringtoneMuted)}
-                aria-pressed={voice.ringtoneMuted}
-                aria-label={voice.ringtoneMuted ? 'Turn the ringtone on' : 'Mute the ringtone'}
-                title={voice.ringtoneMuted ? 'Ringtone off. Incoming calls still show here.' : 'Ringtone on'}
-              >
-                {voice.ringtoneMuted ? <BellOff className="size-5 sm:size-4" /> : <Bell className="size-5 sm:size-4" />}
-              </button>
-            )}
-            <button
-              type="button"
-              className="hover:bg-muted inline-flex size-11 items-center justify-center rounded-lg sm:size-8 sm:rounded-md"
-              onClick={() => setOpen((v) => !v)}
-              aria-expanded={open}
-              aria-label={open ? 'Close phone settings' : 'Phone settings'}
-            >
-              {open ? <X className="size-5 sm:size-4" /> : <Settings2 className="size-5 sm:size-4" />}
-            </button>
-          </>
+          <button
+            type="button"
+            className="hover:bg-muted inline-flex size-11 items-center justify-center rounded-lg sm:size-8 sm:rounded-md"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-label={open ? 'Close phone settings' : 'Phone settings'}
+          >
+            {open ? <X className="size-5 sm:size-4" /> : <Settings2 className="size-5 sm:size-4" />}
+          </button>
         )}
       </div>
 
-      {(setup.voiceLimited || setup.mode === 'mock') && (
+      {busy && (setup.voiceLimited || setup.mode === 'mock') && (
         <div className="flex flex-wrap gap-1.5 px-4 pb-2 sm:px-3">
           {setup.voiceLimited && (
             <span
@@ -288,39 +252,8 @@ export function VoiceDock() {
       )}
 
       {open && !busy && (
-        <div className="grid gap-3 border-t px-4 py-3 sm:px-3">
-          {setup.canPickLine && setup.lines.length > 0 && (
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted-foreground text-xs">Call from</span>
-              <select
-                className="border-input bg-background h-11 rounded-md border px-2 text-base sm:h-8 sm:text-sm"
-                value={voice.lineId ?? ''}
-                onChange={(e) => voice.setLineId(e.target.value)}
-                aria-label="Call from"
-              >
-                {setup.lines.map((line) => (
-                  <option key={line.id} value={line.id}>
-                    {line.label ? `${line.label} · ${line.display}` : line.display}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {!setup.canPickLine && setup.lines.length > 0 && (
-            <p className="text-muted-foreground text-xs">
-              Calls go out from {setup.lines.find((l) => l.id === voice.lineId)?.display ?? setup.lines[0].display}.
-            </p>
-          )}
-          {setup.lines.length === 0 && (
-            <p className="text-muted-foreground text-xs">This account has no phone line yet.</p>
-          )}
-          <AudioSettings />
-          <ConnectionTest />
-          {setup.recordOutbound && (
-            <p className="text-muted-foreground text-xs">
-              Calls are recorded. People hear &ldquo;This call may be recorded&rdquo; when they answer.
-            </p>
-          )}
+        <div className="border-t px-4 py-3 sm:px-3">
+          <PhoneSettings />
         </div>
       )}
     </div>

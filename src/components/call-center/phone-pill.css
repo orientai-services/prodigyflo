@@ -1,0 +1,62 @@
+/* Phone status pill and its sheet (phone-pill.tsx). Self-contained: it reads
+   the final-desk tokens when it sits in the desk and falls back to the same
+   values elsewhere. `.fd-tw` on both roots keeps the final-desk reset off. */
+.phone-status { position: relative; display: inline-flex; flex: none; }
+.phone-status .phone-pill {
+  display: inline-flex; align-items: center; gap: 7px; margin: 0;
+  padding: 7px 13px 7px 11px; border: 1px solid var(--line, #e3dccf); border-radius: 999px;
+  background: #fff; color: var(--ink, #15202b); font: inherit; font-size: 13px; font-weight: 600; line-height: 1.2;
+  white-space: nowrap; cursor: pointer;
+}
+.phone-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #9aa3ab; }
+.phone-status .phone-pill.green { background: var(--greenbg, #dceddc); border-color: #bcd9c2; color: var(--green, #1b5e3b); }
+.phone-status .phone-pill.amber { background: var(--amberbg, #fde7c7); border-color: #ebc790; color: var(--amber, #9a4b0f); }
+.phone-status .phone-pill.red { background: #fbe4e1; border-color: #eec0ba; color: #9b1c1c; }
+.phone-status .green .phone-dot, .phone-sheet .green .phone-dot { background: #1f9d55; box-shadow: 0 0 0 3px rgba(31, 157, 85, .18); }
+.phone-status .amber .phone-dot, .phone-sheet .amber .phone-dot { background: #d97706; box-shadow: 0 0 0 3px rgba(217, 119, 6, .18); }
+.phone-status .red .phone-dot, .phone-sheet .red .phone-dot { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .18); }
+.phone-status .phone-pill.on { box-shadow: 0 0 0 2px var(--teal2, #e6f3f2); }
+.phone-status .phone-pill:focus-visible { outline: 2px solid var(--teal, #0e6b66); outline-offset: 2px; }
+
+.phone-backdrop, .phone-grab { display: none; }
+.phone-sheet {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 340px; margin: 0;
+  max-height: calc(100dvh - 96px); overflow-y: auto; overscroll-behavior: contain;
+  display: grid; gap: 12px; padding: 14px; text-align: left;
+  background: #fffdf8; color: var(--ink, #15202b);
+  border: 1px solid var(--line, #e3dccf); border-radius: 16px; box-shadow: 0 16px 40px rgba(18, 32, 44, .18);
+}
+.phone-head { display: flex; align-items: center; justify-content: space-between; }
+.phone-head h3 { margin: 0; font-size: 16px; font-weight: 500; }
+.phone-sheet .phone-close {
+  display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0;
+  border: 0; border-radius: 8px; background: none; color: #5b6570; cursor: pointer;
+}
+.phone-sheet .phone-close:hover { background: rgba(18, 32, 44, .06); color: var(--ink, #15202b); }
+.phone-close svg { width: 18px; height: 18px; }
+.phone-state { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: 14px; }
+.phone-state .phone-dot { margin-top: 5px; }
+.phone-state b { display: block; }
+.phone-reason { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; color: #5b6570; }
+.phone-settings { border-top: 1px solid var(--line, #e3dccf); padding-top: 12px; }
+.phone-sheet .phone-setup-open {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--line, #e3dccf); border-radius: 10px; background: #fff; color: var(--ink, #15202b);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.phone-setup-open:hover { background: #f6f1e6; }
+.phone-setup-open svg { width: 15px; height: 15px; }
+
+/* Phones: 44 px pill, and the sheet becomes a bottom sheet (it is portalled to the body there). */
+@media (max-width: 767.98px) {
+  .phone-status .phone-pill { min-height: 44px; padding: 0 14px 0 12px; font-size: 14px; }
+  .phone-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
+  .phone-sheet {
+    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto;
+    max-height: 92dvh; padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
+    border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
+  }
+  .phone-grab { display: block; width: 40px; height: 4px; margin: 4px auto 0; border-radius: 99px; background: #d6cebf; }
+  .phone-sheet .phone-close { width: 44px; height: 44px; }
+  .phone-sheet .phone-setup-open { min-height: 48px; font-size: 15px; }
+}

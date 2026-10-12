@@ -111,8 +111,8 @@ describe('URL state', () => {
   })
   it('every link keeps the desk base', () => {
     const state = { view: 'week' as const, date: '2026-10-12', rep: 'gatsby' }
-    expect(calendarHref(state)).toBe('/call-center?tab=calendar&view=week&date=2026-10-12&rep=gatsby')
-    expect(calendarHref(state, { rep: null, view: 'day' })).toBe('/call-center?tab=calendar&view=day&date=2026-10-12')
+    expect(calendarHref(state)).toBe('/call-center?s=booked&view=week&date=2026-10-12&rep=gatsby')
+    expect(calendarHref(state, { rep: null, view: 'day' })).toBe('/call-center?s=booked&view=day&date=2026-10-12')
   })
 })
 
