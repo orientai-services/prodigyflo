@@ -113,8 +113,11 @@ describe('checkDial (P0a: the tel: flow)', () => {
     expect(res).not.toHaveProperty('dial')
   })
 
-  it('blocks a lead with no consent — and a manager cannot override that', async () => {
+  it('blocks a lead with no consent — a rep sees no override and cannot ask for one', async () => {
     expect(await as(rep, () => checkDial({ kind: 'lead', id: noConsentLeadId }))).toMatchObject({ ok: false, code: 'NO_CONSENT', canOverride: null })
+    const asked = await as(rep, () => checkDial({ kind: 'lead', id: noConsentLeadId }, undefined, { kind: 'restriction', reason: 'They asked me to call' }))
+    expect(asked).toMatchObject({ ok: false, code: 'NO_CONSENT', canOverride: null })
+    expect(asked).not.toHaveProperty('warning')
   })
 
   it('refuses another rep’s lead', async () => {
@@ -153,6 +156,76 @@ describe('checkDial (P0a: the tel: flow)', () => {
     expect(await as(rep, () => setContactTimeZone({ target: { kind: 'lead', id: unknownZoneLeadId }, zone: 'America/Denver', note: 'They said Denver' }))).toEqual({ ok: true })
     expect(await as(rep, () => checkDial({ kind: 'lead', id: unknownZoneLeadId }))).toMatchObject({ ok: true, calleeZone: 'America/Denver' })
     expect(await db.auditEvent.count({ where: { organizationId: orgId, action: 'telephony.timezone_set' } })).toBe(1)
+  })
+})
+
+describe('admin overrides of call restrictions (checkDial)', () => {
+  const phone = (i: number) => testNumber(run, i)
+  async function managerLead(i: number, data: Record<string, unknown> = {}) {
+    const id = await lead(phone(i), manager.id, false)
+    if (Object.keys(data).length) await db.callCenterLead.update({ where: { id }, data })
+    return id
+  }
+  const overrides = (id: string) => db.auditEvent.findMany({ where: { organizationId: orgId, action: 'telephony.restriction_override', entityId: id } })
+
+  it('no consent: a manager sees the override with a warning, must give 5–500 characters, and it is audited with the last 4 only', async () => {
+    const id = await managerLead(40)
+    const blocked = await as(manager, () => checkDial({ kind: 'lead', id }))
+    expect(blocked).toMatchObject({ ok: false, code: 'NO_CONSENT', canOverride: 'restriction' })
+    expect(blocked).toHaveProperty('warning')
+
+    for (const reason of ['   ', 'abcd', 'x'.repeat(501)]) {
+      expect(await as(manager, () => checkDial({ kind: 'lead', id }, undefined, { kind: 'restriction', reason }))).toMatchObject({ ok: false, code: 'NO_CONSENT', canOverride: 'restriction' })
+    }
+    // The wrong kind for this block is not an override.
+    expect(await as(manager, () => checkDial({ kind: 'lead', id }, undefined, { kind: 'hours', reason: 'They asked us to call' }))).toMatchObject({ ok: false, code: 'NO_CONSENT' })
+    expect(await overrides(id)).toHaveLength(0)
+
+    const ok = (await as(manager, () => checkDial({ kind: 'lead', id }, undefined, { kind: 'restriction', reason: 'They asked us to call today' }))) as DialCheck
+    expect(ok).toMatchObject({ ok: true })
+    if (ok.ok) {
+      expect(ok.overrideToken).toMatch(/\./)
+      expect(ok.basis).toBe('No consent on file; admin override (no consent)')
+    }
+    const [row] = await overrides(id)
+    expect(row.summary).toContain(`•••${phone(40).slice(-4)}`)
+    expect(row.after).toMatchObject({ code: 'NO_CONSENT', codes: ['NO_CONSENT'], reason: 'They asked us to call today', last4: phone(40).slice(-4), target: 'lead' })
+    const written = JSON.stringify([row.summary, row.after])
+    expect(written).not.toContain(phone(40).replace('+1', ''))
+  })
+
+  it('a lead marked do-not-call: the override warns it is only for people who did NOT ask us to stop', async () => {
+    const id = await managerLead(41, { doNotCallAt: new Date(), consentAt: new Date('2026-10-01T00:00:00Z'), consentSource: 'lead_form', consentFormId: 'f1' })
+    const blocked = await as(manager, () => checkDial({ kind: 'lead', id }))
+    expect(blocked).toMatchObject({ ok: false, code: 'SUPPRESSED', canOverride: 'restriction', warning: 'Only override if this person did NOT ask us to stop calling.' })
+    const ok = await as(manager, () => checkDial({ kind: 'lead', id }, undefined, { kind: 'restriction', reason: 'Marked by mistake, they want a call' }))
+    expect(ok).toMatchObject({ ok: true })
+    expect((await overrides(id))[0].after).toMatchObject({ code: 'SUPPRESSED', codes: ['SUPPRESSED'] })
+  })
+
+  it('a manual do-not-call entry can be overridden; a STOP reply cannot, by anyone', async () => {
+    const manual = await managerLead(42, { consentAt: new Date('2026-10-01T00:00:00Z'), consentSource: 'lead_form', consentFormId: 'f1' })
+    await as(manager, () => addSuppression({ phone: phone(42), sms: false, call: true, reason: 'Asked by owner' }))
+    expect(await as(manager, () => checkDial({ kind: 'lead', id: manual }))).toMatchObject({ code: 'SUPPRESSED', canOverride: 'restriction' })
+    expect(await as(manager, () => checkDial({ kind: 'lead', id: manual }, undefined, { kind: 'restriction', reason: 'Owner cleared it by phone' }))).toMatchObject({ ok: true })
+
+    const stopped = await managerLead(43, { consentAt: new Date('2026-10-01T00:00:00Z'), consentSource: 'lead_form', consentRevokedAt: new Date() })
+    await db.callCenterSuppression.create({
+      data: { organizationId: orgId, numberHash: phoneHash(phone(43)), reason: 'Replied STOP', last4: phone(43).slice(-4), smsBlockedAt: new Date(), smsBlockedSource: 'sms_stop' },
+    })
+    const blocked = await as(manager, () => checkDial({ kind: 'lead', id: stopped }))
+    expect(blocked).toMatchObject({ ok: false, code: 'NO_CONSENT', canOverride: null, reason: "This person asked us to stop contacting them. It can't be overridden." })
+    expect(blocked).not.toHaveProperty('warning')
+    const asked = await as(manager, () => checkDial({ kind: 'lead', id: stopped }, undefined, { kind: 'restriction', reason: 'I really need to reach them' }))
+    expect(asked).toMatchObject({ ok: false, canOverride: null })
+    expect(await overrides(stopped)).toHaveLength(0)
+  })
+
+  it('an unknown time zone can be overridden by a manager, not a rep', async () => {
+    const id = await managerLead(44, { consentAt: new Date('2026-10-01T00:00:00Z'), consentSource: 'lead_form', consentFormId: 'f1' })
+    await db.callCenterLead.update({ where: { id }, data: { phoneSecret: encryptSecret('+18005550199') as never, phoneHash: phoneHash('+18005550199') } })
+    expect(await as(manager, () => checkDial({ kind: 'lead', id }))).toMatchObject({ code: 'UNKNOWN_TIMEZONE', canOverride: 'restriction' })
+    expect(await as(manager, () => checkDial({ kind: 'lead', id }, undefined, { kind: 'restriction', reason: 'They are in Denver, said so' }))).toMatchObject({ ok: true, calleeZone: 'unknown' })
   })
 })
 

@@ -198,7 +198,7 @@ export function usePowerMode({ voice, ranked, lastLeadId, wrapPending, take, rel
           return
         }
         if (!check.ok) {
-          const hint = check.canOverride === 'hours' || check.code === 'UNKNOWN_TIMEZONE'
+          const hint = check.canOverride || check.code === 'UNKNOWN_TIMEZONE'
             ? ' Use Call on the lead to sort it out, or Skip.'
             : ' Skip to move on.'
           stop(`${check.reason}${hint}`, lead.id)

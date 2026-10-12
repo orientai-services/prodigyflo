@@ -242,6 +242,53 @@ describe('calling hours and the override', () => {
   })
 })
 
+describe('admin overrides of call restrictions (TwiML side)', () => {
+  const token = (user: User, target: string, code: 'SUPPRESSED' | 'NO_CONSENT', waive: ('SUPPRESSED' | 'NO_CONSENT')[]) =>
+    signOverride({ orgId, userId: user.id, target, lineId: mainLine, code, waive }, NOON)!
+
+  it('a do-not-call entry: the manager’s token gets through once, and the basis says so', async () => {
+    const cs = callSid()
+    const t = token(manager, `client:${suppressedId}`, 'SUPPRESSED', ['SUPPRESSED'])
+    expect(await place(manager, `client:${suppressedId}`, mainLine, { CallSid: cs, override: t })).toContain('<Dial')
+    const vc = await db.voiceCall.findUniqueOrThrow({ where: { callSid: cs } })
+    expect(vc.overrideNonce).toMatch(/^[0-9a-f]{32}$/)
+    expect(vc.basis).toContain('admin override (do-not-call)')
+    expect(await place(manager, `client:${suppressedId}`, mainLine, { override: t })).toContain('That override was already used.')
+  })
+
+  it('no consent: the token works for a manager, never for a rep', async () => {
+    const forManager = token(manager, `client:${noConsentId}`, 'NO_CONSENT', ['NO_CONSENT'])
+    expect(await place(rep, `client:${noConsentId}`, mainLine, { override: forManager })).toContain('No consent on file for this number.')
+    const forRep = token(rep, `client:${noConsentId}`, 'NO_CONSENT', ['NO_CONSENT'])
+    expect(await place(rep, `client:${noConsentId}`, mainLine, { override: forRep })).toContain('No consent on file for this number.')
+    expect(await place(manager, `client:${noConsentId}`, mainLine, { override: forManager })).toContain('<Dial')
+  })
+
+  it('a token minted for another block, or one that does not name every block, is refused', async () => {
+    const both = await client('Both', testNumber(run, 30), rep.id, { consent: false })
+    const { phoneHash } = await import('@/lib/telephony/compliance-core')
+    await db.callCenterSuppression.create({
+      data: { organizationId: orgId, numberHash: phoneHash(testNumber(run, 30)), reason: 'test', last4: '0000', callBlockedAt: new Date(), callBlockedSource: 'import' },
+    })
+    const wrongCode = token(manager, `client:${both}`, 'NO_CONSENT', ['SUPPRESSED', 'NO_CONSENT'])
+    expect(await place(manager, `client:${both}`, mainLine, { override: wrongCode })).toContain('This number is on the do-not-call list.')
+    const tooNarrow = token(manager, `client:${both}`, 'SUPPRESSED', ['SUPPRESSED'])
+    expect(await place(manager, `client:${both}`, mainLine, { override: tooNarrow })).toContain('No consent on file for this number.')
+    const full = token(manager, `client:${both}`, 'SUPPRESSED', ['SUPPRESSED', 'NO_CONSENT'])
+    expect(await place(manager, `client:${both}`, mainLine, { override: full })).toContain('<Dial')
+  })
+
+  it('a STOP-made block is never overridden, even with a signed token', async () => {
+    const stopped = await client('Stopped', testNumber(run, 31), rep.id)
+    const { phoneHash } = await import('@/lib/telephony/compliance-core')
+    await db.callCenterSuppression.create({
+      data: { organizationId: orgId, numberHash: phoneHash(testNumber(run, 31)), reason: 'STOP', last4: '0000', callBlockedAt: new Date(), callBlockedSource: 'sms_stop' },
+    })
+    const t = token(manager, `client:${stopped}`, 'SUPPRESSED', ['SUPPRESSED'])
+    expect(await place(manager, `client:${stopped}`, mainLine, { override: t })).toContain('This person asked us to stop contacting them.')
+  })
+})
+
 describe('one call at a time', () => {
   beforeEach(async () => {
     await db.telephonyAccountState.create({ data: { accountSid: ACCOUNT, voiceLimitedMode: 'on' } })

@@ -15,7 +15,7 @@ import {
 import { toE164 } from './provider'
 import { readTelephonySettings } from './settings'
 import type { ZoneHints } from './timezones'
-import type { OutboundPurpose } from './voice-contract'
+import type { OutboundBlockCode, OutboundPurpose } from './voice-contract'
 
 /**
  * The ONE outbound decision every call and text runs through (§2.7):
@@ -60,7 +60,7 @@ export async function loadOutboundFacts(input: OutboundInput, now: Date): Promis
     hash
       ? db.callCenterSuppression.findUnique({
           where: { organizationId_numberHash: { organizationId: input.organizationId, numberHash: hash } },
-          select: { smsBlockedAt: true, callBlockedAt: true, removedAt: true, smsBlockedSource: true },
+          select: { smsBlockedAt: true, callBlockedAt: true, removedAt: true, smsBlockedSource: true, callBlockedSource: true },
         })
       : null,
     e164
@@ -143,7 +143,7 @@ function last4(phone: string | null): string | null {
  */
 export async function decideOutbound(
   input: OutboundInput,
-  opts: { actor?: SessionUser | null; override?: boolean; now?: Date } = {},
+  opts: { actor?: SessionUser | null; override?: boolean | { waive: readonly OutboundBlockCode[] }; now?: Date } = {},
 ): Promise<OutboundDecision> {
   const now = opts.now ?? new Date()
   let decision: OutboundDecision

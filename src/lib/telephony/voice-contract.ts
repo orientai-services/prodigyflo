@@ -44,6 +44,18 @@ export type OutboundBlockCode =
   | 'NO_PERMISSION'
   | 'CHECK_FAILED'
 
+/**
+ * What an admin (telephony:manage) may step past on a CALL, with a reason:
+ * 'hours' for OUTSIDE_HOURS (any hour), 'restriction' for do-not-call,
+ * no consent and an unknown time zone. Never texts, never a person's own
+ * request to stop (§2.7).
+ */
+export type OverrideKind = 'hours' | 'restriction'
+
+/** The typed reason an admin gives to call anyway (checkDial re-checks it). */
+export const OVERRIDE_REASON_MIN = 5
+export const OVERRIDE_REASON_MAX = 500
+
 export type DialCheck =
   | {
       ok: true
@@ -53,7 +65,7 @@ export type DialCheck =
       calleeZone: string // IANA, or "several zones"
       line: CallerLine | null // null in P0a (tel: flow)
       basis: string // "Consent on file (form 1234, Oct 2)"
-      overrideToken?: string // present only after an approved hours override
+      overrideToken?: string // present only after an approved admin override
       /**
        * E.164 for the tel: flow (line null). Only for telephony:manage holders,
        * who may see full numbers; everyone else dials from a page that already
@@ -65,7 +77,8 @@ export type DialCheck =
       ok: false
       code: OutboundBlockCode
       reason: string
-      canOverride: 'hours' | null // 'hours' only inside the legal ceiling (§2.7)
+      canOverride: OverrideKind | null // null for anyone without telephony:manage (§2.7)
+      warning?: string // shown in the "Call anyway" prompt (admins only)
     }
 
 /** Custom params on Device.connect(). The server trusts nothing else from the browser. */
