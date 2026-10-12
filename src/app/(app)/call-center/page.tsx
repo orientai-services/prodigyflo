@@ -37,10 +37,9 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   const adsTab = adsAllowed && params.tab === 'ads'
 
   // Call Center Calendar (flag CALL_CENTER_CALENDAR, default off: the tab is hidden).
+  // Like Ads, it renders inside the desk under its own tab (docs/CALENDAR.md).
   const calendarOn = calendarEnabled()
-  if (calendarOn && params.tab === 'calendar') {
-    return <CallCenterCalendarTab organizationId={user.organizationId} leadId={leadIdParam(params.lead)} />
-  }
+  const calendarTab = calendarOn && params.tab === 'calendar'
 
   const [desk, voice, missed, setup, status] = await Promise.all([
     loadCallCenterDesk(),
@@ -74,6 +73,7 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       adsAllowed={adsAllowed}
       calendarAllowed={calendarOn}
       ads={adsTab ? <MetaAdsContent user={user} params={params} base="/call-center?tab=ads" embedded /> : null}
+      calendar={calendarTab ? <CallCenterCalendarTab organizationId={user.organizationId} params={params} /> : null}
     />
   )
 }

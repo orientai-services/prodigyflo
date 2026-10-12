@@ -448,3 +448,47 @@ export function reasonText(reason: string): string {
     default: return reason
   }
 }
+
+// ── Block looks and lists ────────────────────────────────────────────────────
+
+/** HOLD and CONFIRMED still take the rep's time; the rest are closed. */
+export function isLive(status: SlotStatus): boolean {
+  return status === 'HOLD' || status === 'CONFIRMED'
+}
+
+/** The status chip on a block: its words and the CSS look (`cal-st-<look>`). */
+export function statusLook(status: SlotStatus): { label: string; look: string; struck: boolean } {
+  switch (status) {
+    case 'HOLD': return { label: 'Hold', look: 'hold', struck: false }
+    case 'CONFIRMED': return { label: 'Confirmed', look: 'confirmed', struck: false }
+    case 'SAT': return { label: '✓ Sat', look: 'sat', struck: false }
+    case 'NO_SHOW': return { label: 'No-show', look: 'noshow', struck: false }
+    case 'RESCHEDULED': return { label: 'Rescheduled', look: 'struck', struck: true }
+    case 'CANCELLED': return { label: 'Cancelled', look: 'struck', struck: true }
+  }
+}
+
+/** Visits by Pacific day, each day oldest first. */
+export function groupByDay<T extends { startsAt: string }>(visits: readonly T[]): Map<string, T[]> {
+  const out = new Map<string, T[]>()
+  for (const visit of [...visits].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))) {
+    const key = dayKeyOf(new Date(visit.startsAt))
+    const list = out.get(key)
+    if (list) list.push(visit)
+    else out.set(key, [visit])
+  }
+  return out
+}
+
+/** A month cell shows up to `max` chips and "+N more". */
+export function monthChips<T>(visits: readonly T[], max = 3): { shown: T[]; more: number } {
+  return { shown: visits.slice(0, max), more: Math.max(0, visits.length - max) }
+}
+
+/** "Today 2:30 PM", "Tomorrow 9:00 AM", "Fri 9:00 AM": a rail time, Pacific. */
+export function railWhen(at: Date | string, now: Date): string {
+  const key = dayKeyOf(new Date(at))
+  const ahead = daysBetween(dayKeyOf(now), key)
+  const day = ahead === 0 ? 'Today' : ahead === 1 ? 'Tomorrow' : ahead === -1 ? 'Yesterday' : `${WEEKDAYS[weekdayOf(key)].slice(0, 3)} ${short(key).mon} ${short(key).day}`
+  return `${day} ${timeLabel(at)}`
+}

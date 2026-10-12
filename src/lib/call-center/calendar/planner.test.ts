@@ -7,6 +7,11 @@ import {
   dayKeyOf,
   dayOpen,
   firstOpenDay,
+  groupByDay,
+  isLive,
+  monthChips,
+  railWhen,
+  statusLook,
   laneLayout,
   monthCells,
   nowOffset,
@@ -220,5 +225,32 @@ describe('scheduler', () => {
     const grid = schedulerMonth('2026-10-14', NOW).flat()
     expect(grid.filter((d) => d.enabled).map((d) => d.key)).toEqual(['2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19'])
     expect(grid.find((d) => d.today)?.key).toBe('2026-10-14')
+  })
+})
+
+describe('block looks and lists', () => {
+  it('names every status and strikes only the moved or cancelled ones', () => {
+    expect(statusLook('HOLD')).toEqual({ label: 'Hold', look: 'hold', struck: false })
+    expect(statusLook('SAT').label).toBe('✓ Sat')
+    expect(statusLook('NO_SHOW').look).toBe('noshow')
+    expect(statusLook('RESCHEDULED').struck).toBe(true)
+    expect(statusLook('CANCELLED').struck).toBe(true)
+    expect(isLive('HOLD') && isLive('CONFIRMED')).toBe(true)
+    expect(isLive('SAT') || isLive('CANCELLED')).toBe(false)
+  })
+  it('groups visits by Pacific day, oldest first', () => {
+    const v = (id: string, iso: string) => ({ id, startsAt: iso })
+    const byDay = groupByDay([v('b', at(2026, 10, 15, 14).toISOString()), v('a', at(2026, 10, 15, 9).toISOString()), v('c', '2026-10-16T05:30:00.000Z')])
+    expect(byDay.get('2026-10-15')?.map((x) => x.id)).toEqual(['a', 'b', 'c']) // 10:30 PM on the 15th, Pacific
+    expect(byDay.has('2026-10-16')).toBe(false)
+  })
+  it('caps month chips at three with a "+N more"', () => {
+    expect(monthChips([1, 2, 3, 4, 5])).toEqual({ shown: [1, 2, 3], more: 2 })
+    expect(monthChips([1])).toEqual({ shown: [1], more: 0 })
+  })
+  it('labels rail times by day', () => {
+    expect(railWhen(at(2026, 10, 14, 14, 30), NOW)).toBe('Today 2:30 PM')
+    expect(railWhen(at(2026, 10, 15, 9), NOW)).toBe('Tomorrow 9:00 AM')
+    expect(railWhen(at(2026, 10, 16, 9), NOW)).toBe('Fri Oct 16 9:00 AM')
   })
 })
