@@ -312,7 +312,7 @@
 .final-desk.call-center .pad-grab { display: none; }
 .final-desk.call-center .pad {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 300px;
-  display: grid; gap: 10px; padding: 14px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px;
   background: var(--card); border: 1px solid var(--line); border-radius: 16px;
   box-shadow: 0 16px 40px rgba(18, 32, 44, .18);
 }
@@ -601,35 +601,52 @@
 
 /* Below 1024: the sections are a bottom tab bar; More is a bottom sheet. */
 @media (max-width: 1023.98px) {
-  .final-desk.call-center.tabs-on { --cc-bar-h: calc(56px + env(safe-area-inset-bottom)); }
-  .final-desk.call-center .cc-main { padding: 16px 16px calc(32px + var(--cc-bar-h, 0px)); }
+  /* --cc-tab-h is the bar without the home-indicator inset; the safe area
+     needs viewport-fit=cover (the call-center page's viewport export). */
+  .final-desk.call-center { --cc-tab-h: 56px; }
+  .final-desk.call-center.tabs-on { --cc-bar-h: calc(var(--cc-tab-h) + env(safe-area-inset-bottom)); }
+  .final-desk.call-center .cc-main { padding: 16px max(16px, env(safe-area-inset-right)) calc(32px + var(--cc-bar-h, 0px)) max(16px, env(safe-area-inset-left)); }
   .final-desk.call-center.power-on .cc-main { padding-bottom: calc(150px + var(--cc-bar-h, 0px)); }
   .final-desk.call-center .cc-title { font-size: 24px; }
+  /* A native tab bar: frosted desk paper, a hairline on top, no lift. */
   .final-desk.call-center .cc-tabs {
     position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 46;
     display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
-    height: calc(56px + env(safe-area-inset-bottom));
+    height: var(--cc-bar-h); min-height: var(--cc-tab-h);
     padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    border-top: 1px solid var(--line); border-bottom: 0; background: var(--card); box-shadow: 0 -6px 18px rgba(18, 32, 44, .08);
+    border: 0; background: rgba(250, 247, 240, .97); box-shadow: inset 0 .5px 0 rgba(18, 32, 44, .2);
+    -webkit-tap-highlight-color: transparent; transform: translateZ(0);
+  }
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .final-desk.call-center .cc-tabs {
+      background: rgba(250, 247, 240, .82);
+      -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    }
   }
   .final-desk.call-center.thread-open .cc-tabs { display: none; }
   .final-desk.call-center .cc-tabs > a,
   .final-desk.call-center .cc-more-anchor > button {
-    flex-direction: column; justify-content: center; gap: 3px; width: 100%; min-width: 0; min-height: 56px; padding: 0 2px;
-    border-radius: 0; color: var(--muted); font-size: 11px; line-height: 1.1;
+    position: relative; flex-direction: column; justify-content: flex-start; gap: 3px;
+    width: 100%; min-width: 0; height: var(--cc-tab-h); min-height: 44px; padding: 7px 0 0;
+    border-radius: 0; color: #6b737b; font-size: 11px; font-weight: 500; line-height: 13px; letter-spacing: .01em;
+    -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none;
   }
-  .final-desk.call-center .cc-tabs .on { background: none; color: var(--teal); }
+  /* Colour only marks the tab, so the labels never reflow on navigation. */
+  .final-desk.call-center .cc-tabs .on { background: none; color: var(--teal); font-weight: 500; }
+  .final-desk.call-center .cc-tabs .on svg { stroke-width: 2.25; }
   .final-desk.call-center .cc-tabs > a:hover,
   .final-desk.call-center .cc-more-anchor > button:hover { background: none; }
-  .final-desk.call-center .cc-tab-icon svg { width: 22px; height: 22px; color: currentColor; }
+  .final-desk.call-center .cc-tabs :is(a, button):focus-visible { outline: 2px solid var(--teal); outline-offset: -4px; border-radius: 12px; }
+  .final-desk.call-center .cc-tab-icon { transition: transform .12s ease; }
+  .final-desk.call-center .cc-tabs :is(a, button):active .cc-tab-icon { transform: scale(.9); }
+  .final-desk.call-center .cc-tab-icon svg { width: 24px; height: 24px; color: currentColor; }
   .final-desk.call-center .cc-tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .final-desk.call-center .cc-tabs > a { position: relative; }
-  /* On the bar the badge sits on the icon's top-right corner. */
+  /* On the bar the badge is a small pill on the icon's top-right corner. */
   .final-desk.call-center .cc-badge {
-    position: absolute; top: 4px; left: calc(50% + 4px); min-width: 18px; height: 18px; padding: 0 5px;
-    line-height: 18px; box-shadow: 0 0 0 2px var(--card);
+    position: absolute; top: 3px; left: calc(50% + 5px); min-width: 17px; height: 17px; padding: 0 5px;
+    border-radius: 9px; font-size: 10.5px; line-height: 17px; box-shadow: 0 0 0 2px var(--paper); pointer-events: none;
   }
-  .final-desk.call-center .cc-more-anchor { display: flex; }
+  .final-desk.call-center .cc-more-anchor { display: flex; min-width: 0; }
 
   .final-desk.call-center .more-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
   .final-desk.call-center .more-sheet {
@@ -669,6 +686,28 @@
   .final-desk.call-center .cc-title { font-size: 22px; }
   .final-desk.call-center .cc-dialer { padding: 0 12px; gap: 6px; }
   .final-desk.call-center .phone-status .phone-pill { padding: 0 11px 0 10px; }
+}
+
+@media (max-width: 359.98px) {
+  /* 320 px phones: "Messages" fits its 53 px column; the Dialer button keeps
+     its name for screen readers and shows only the phone. */
+  .final-desk.call-center .cc-tabs > a,
+  .final-desk.call-center .cc-more-anchor > button { font-size: 10px; letter-spacing: 0; }
+  .final-desk.call-center .cc-title { font-size: 20px; }
+  .final-desk.call-center .cc-dialer { width: 44px; padding: 0; }
+  .final-desk.call-center .cc-dialer svg { width: 18px; height: 18px; }
+  .final-desk.call-center .cc-dialer span {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap;
+  }
+}
+/* Landscape phones: a compact bar keeps the short screen for content. */
+@media (max-width: 1023.98px) and (orientation: landscape) and (max-height: 500px) {
+  .final-desk.call-center { --cc-tab-h: 46px; }
+  .final-desk.call-center .cc-tabs > a,
+  .final-desk.call-center .cc-more-anchor > button { gap: 1px; padding-top: 4px; font-size: 11px; }
+  .final-desk.call-center .cc-tab-icon svg { width: 22px; height: 22px; }
+  .final-desk.call-center .cc-badge { top: 1px; }
+  .final-desk.call-center .cc-head { min-height: 52px; padding-top: calc(env(safe-area-inset-top) + 4px); padding-bottom: 4px; }
 }
 
 /* The call bar (VoiceDock) sits above the tab bar while the bar is up. */
