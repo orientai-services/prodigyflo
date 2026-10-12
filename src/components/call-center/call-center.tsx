@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { Grid3x3 } from 'lucide-react'
 import {
   recordCallCenterAttempt,
   recordCallCenterText,
@@ -64,6 +65,8 @@ import {
   type LeadTab,
 } from '@/lib/call-center/model'
 import { CallbackScheduler } from './callback-scheduler'
+import { DialPad } from './dial-pad'
+import { BookVisit } from './calendar/scheduler'
 import { PowerBar, WrapUp } from './power-panel'
 import { TodayView } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
@@ -81,7 +84,7 @@ const TABS: { id: LeadTab; label: string }[] = [
   { id: 'dnc', label: 'Do not call' },
 ]
 
-type DeskView = 'today' | 'list' | 'missed' | 'ads'
+type DeskView = 'today' | 'list' | 'missed' | 'ads' | 'calendar'
 
 /** Below this width the lead opens as a full-screen panel instead of the split view. */
 const PHONE_QUERY = '(max-width: 767.98px)'
@@ -129,6 +132,7 @@ export function CallCenter({
   adsAllowed = false,
   calendarAllowed = false,
   ads = null,
+  calendar = null,
 }: {
   initialLeads?: CallLead[]
   viewerId?: string
@@ -141,12 +145,14 @@ export function CallCenter({
   calendarAllowed?: boolean
   /** The Meta Ads dashboard, server-rendered when the page opened on `?tab=ads`. */
   ads?: React.ReactNode
+  /** The Call Center Calendar planner, server-rendered on `?tab=calendar`. */
+  calendar?: React.ReactNode
 }) {
   const router = useRouter()
   const voice = useVoice()
   const [draft, setDraft] = useState<{ source: CallLead[] | undefined; leads: CallLead[] } | null>(null)
   const [tab, setTab] = useState<LeadTab>('all')
-  const [view, setView] = useState<DeskView>(ads ? 'ads' : phone.openMissedId ? 'missed' : 'today')
+  const [view, setView] = useState<DeskView>(ads ? 'ads' : calendar ? 'calendar' : phone.openMissedId ? 'missed' : 'today')
   // The Ads tab's first open is a soft navigation to ?tab=ads, so the dashboard
   // arrives as a new prop on this mounted screen: switch to it when it lands.
   const adsOpen = ads !== null && ads !== undefined
@@ -155,11 +161,29 @@ export function CallCenter({
     setAdsSeen(adsOpen)
     if (adsOpen) setView('ads')
   }
+  // The Calendar works the same way; its links (view, day, rep) are soft
+  // navigations that keep it open. Leaving ?tab=calendar falls back to Today.
+  const calendarOpen = calendar !== null && calendar !== undefined
+  const [calendarSeen, setCalendarSeen] = useState(calendarOpen)
+  if (calendarOpen !== calendarSeen) {
+    setCalendarSeen(calendarOpen)
+    if (calendarOpen) setView('calendar')
+    else if (view === 'calendar') setView('today')
+  }
   const missedView = view === 'missed'
   const [openMissedId, setOpenMissedId] = useState<string | null>(phone.openMissedId ?? null)
   const [language, setLanguage] = useState<LanguageFilter>('all')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(phone.openLeadId ?? null)
+  // `?lead=` can change on this mounted screen (the Calendar's Open lead / Call): open that lead.
+  const [leadSeen, setLeadSeen] = useState(phone.openLeadId ?? null)
+  if ((phone.openLeadId ?? null) !== leadSeen) {
+    setLeadSeen(phone.openLeadId ?? null)
+    if (phone.openLeadId) {
+      setSelectedId(phone.openLeadId)
+      if (view === 'calendar' || view === 'ads' || view === 'missed') setView('today')
+    }
+  }
   const missed = phone.missed ?? []
   const [now, setNow] = useState<string | null>(null)
   const [callAnywayId, setCallAnywayId] = useState<string | null>(null)
@@ -167,8 +191,12 @@ export function CallCenter({
   const [dial, setDial] = useState<{ leadId: string; phone: string | null; email: string | null } | null>(null)
   const [deskError, setDeskError] = useState<string | null>(null)
   const [scheduling, setScheduling] = useState<string | null>(null)
+  /** The lead whose Book visit scheduler is open. */
+  const [booking, setBooking] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [help, setHelp] = useState(false)
+  const [padOpen, setPadOpen] = useState(false)
+  const padButtonRef = useRef<HTMLButtonElement>(null)
   const detailRef = useRef<HTMLElement>(null)
   /** The desk root, where the phone's bottom sheets mount. */
   const [sheetHost, setSheetHost] = useState<HTMLDivElement | null>(null)
@@ -392,12 +420,16 @@ export function CallCenter({
   }
 
   useDeskKeys((action: DeskKeyAction) => {
+    // The Ads and Calendar tabs have no lead list on screen: lead shortcuts would act out of sight.
+    if ((view === 'ads' || view === 'calendar') && action.kind !== 'help' && action.kind !== 'close') return false
     switch (action.kind) {
       case 'help':
         setHelp((open) => !open)
         return true
       case 'close':
-        if (help) setHelp(false)
+        if (padOpen) setPadOpen(false)
+        else if (help) setHelp(false)
+        else if (booking) setBooking(null)
         else if (scheduling) setScheduling(null)
         else if (selected && onPhone()) setSelectedId(null)
         else return false
@@ -443,9 +475,22 @@ export function CallCenter({
     }
   })
 
+  function dialPad() {
+    const pad = (
+      <DialPad
+        canOverrideHours={phone.canOverrideHours}
+        disabled={resultOwed}
+        ignore={padButtonRef}
+        onClose={() => setPadOpen(false)}
+      />
+    )
+    // Like the scheduler: a bottom sheet at the desk root on a phone, a popover under the button on a desk.
+    return sheetHost && onPhone() ? createPortal(pad, sheetHost) : pad
+  }
+
   const refresh = useCallback(() => router.refresh(), [router])
   useLiveRefresh(refresh, () => {
-    if (busy || scheduling || power.phase === 'dialing') return false
+    if (busy || scheduling || booking || power.phase === 'dialing') return false
     return !voice || (voice.status === 'idle' && !voice.activeTarget && !voice.incoming)
   })
 
@@ -513,6 +558,21 @@ export function CallCenter({
                     ? 'Test mode. No real calls are placed.'
                     : 'Browser calling on'
                   : (phone.voiceNote ?? 'Voice not connected')}
+              </span>
+              <span className="pad-anchor">
+                <button
+                  ref={padButtonRef}
+                  type="button"
+                  className={`pad-toggle${padOpen ? ' on' : ''}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={padOpen}
+                  title="Call any US number by hand"
+                  onClick={() => setPadOpen((open) => !open)}
+                >
+                  <Grid3x3 aria-hidden="true" />
+                  Dial pad
+                </button>
+                {padOpen ? dialPad() : null}
               </span>
               {phone.setup ? <PhoneSetupSheet setup={phone.setup.vm} status={phone.setup.status} /> : null}
             </div>
@@ -586,7 +646,18 @@ export function CallCenter({
                   Ads
                 </Link>
               ) : null}
-              {calendarAllowed ? (
+              {calendarAllowed && calendar ? (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={view === 'calendar'}
+                  className={view === 'calendar' ? 'on' : ''}
+                  onClick={() => setView('calendar')}
+                >
+                  Calendar
+                </button>
+              ) : calendarAllowed ? (
+                // The planner renders on the server, so the first open is a navigation.
                 <Link role="tab" aria-selected={false} href="/call-center?tab=calendar">
                   Calendar
                 </Link>
@@ -594,6 +665,8 @@ export function CallCenter({
             </div>
             {view === 'ads' && ads ? (
               <div className="ads-panel">{ads}</div>
+            ) : view === 'calendar' && calendar ? (
+              calendar
             ) : missedView ? (
               <div className="card">
                 <MissedCalls calls={missed} openId={openMissedId} canOverrideHours={phone.canOverrideHours} />
@@ -760,8 +833,29 @@ export function CallCenter({
                             {item.label}
                           </button>
                         ))}
+                        {calendarAllowed && selected.persisted ? (
+                          <button
+                            type="button"
+                            className="btn secondary"
+                            disabled={selected.dnc}
+                            onClick={() => setBooking(selected.id)}
+                          >
+                            Book visit
+                          </button>
+                        ) : null}
                       </div>
                     )}
+                    {booking === selected.id && sheetHost
+                      ? createPortal(
+                          <BookVisit
+                            key={selected.id}
+                            lead={{ id: selected.id, name: selected.name }}
+                            onClose={() => setBooking(null)}
+                            onSaved={refresh}
+                          />,
+                          sheetHost,
+                        )
+                      : null}
                     <h3>Handoff</h3>
                     <div className="actions solo">
                       <button
