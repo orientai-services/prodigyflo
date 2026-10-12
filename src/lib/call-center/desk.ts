@@ -19,6 +19,8 @@ import {
   type TrailKind,
 } from './model'
 import type { CallCenterContact, DeskActor, DeskOutcome, DeskResult } from './desk-types'
+import type { SessionUser } from '@/lib/rbac'
+import { intakeTextBlock, intakeTextBody, intakeTokenId, scsIntakeUrl, signIntakeToken } from './intake-link'
 
 const EMPTY_CONTACT: CallCenterContact = { phone: null, email: null }
 
@@ -603,6 +605,134 @@ export async function recordCallCenterTextFor(
   const after = applyLeadAction(held.lead, 'text', stamp, actor.id)
   if (after === held.lead) return { ok: false, error: 'Not allowed' }
   return writeTrail(organizationId, actor, leadId, held.lead, after, at)
+}
+
+// ── SCS Intake link (docs/CYS_BRIDGE.md §B1) ────────────────────────────────
+
+export type IntakeLinkMode = 'open' | 'text' | 'copy'
+
+export type IntakeLinkResult = { ok: true; url?: string; sent?: boolean } | { ok: false; reason: string }
+
+const INTAKE_MODE_DETAIL: Record<IntakeLinkMode, string> = {
+  open: 'SCS intake opened with the client (rep-assisted)',
+  text: 'SCS intake link texted',
+  copy: 'SCS intake link copied',
+}
+
+type IntakeLinkRow = {
+  id: string
+  pageId: string | null
+  language: 'EN' | 'ES'
+  lockedBy: string | null
+  doNotCallAt: Date | null
+  clientId: string | null
+  leadAttribution: unknown
+  consentAt: Date | null
+  consentRevokedAt: Date | null
+  timeZone: string | null
+  intakeLinkSentAt: Date | null
+}
+
+async function intakeLinkRow(organizationId: string, leadId: string): Promise<IntakeLinkRow | null> {
+  return db.callCenterLead.findFirst({
+    where: { id: leadId, organizationId },
+    select: {
+      id: true,
+      pageId: true,
+      language: true,
+      lockedBy: true,
+      doNotCallAt: true,
+      clientId: true,
+      leadAttribution: true,
+      consentAt: true,
+      consentRevokedAt: true,
+      timeZone: true,
+      intakeLinkSentAt: true,
+    },
+  })
+}
+
+function intakeLinkGate(row: IntakeLinkRow | null, actorId: string): string | null {
+  if (!row) return 'Lead not found'
+  if (row.lockedBy !== actorId) return row.lockedBy ? 'Another rep has this lead' : 'Take this lead first'
+  if (row.doNotCallAt) return 'Do not call'
+  if (row.clientId) return 'This lead already has its intake linked'
+  return null
+}
+
+/** Whether "Text link" is offered for this lead, and why not. */
+export async function scsIntakeTextStatusFor(
+  user: SessionUser,
+  leadId: string,
+  now = new Date(),
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const row = await intakeLinkRow(user.organizationId, leadId)
+  const gate = intakeLinkGate(row, user.id)
+  if (gate || !row) return { ok: false, reason: gate ?? 'Lead not found' }
+  const { isMockMode } = await import('@/lib/messaging')
+  const blocked = intakeTextBlock(row, isMockMode('SMS'), now)
+  return blocked ? { ok: false, reason: blocked } : { ok: true }
+}
+
+/**
+ * The SCS Intake button. Builds the signed `/begin` URL on the server and,
+ * per mode: hands it back to open with the client (rep-assisted, `assist=1`),
+ * hands it back to copy, or texts it from the org's own line after the
+ * consent / do-not-call / hours / live-SMS checks. Every use writes an
+ * INTAKE_LINK event `{mode, tokenId}` and stamps intakeLinkSentAt once.
+ */
+export async function scsIntakeLinkFor(
+  user: SessionUser,
+  leadId: string,
+  mode: IntakeLinkMode,
+  now = new Date(),
+): Promise<IntakeLinkResult> {
+  if (mode !== 'open' && mode !== 'text' && mode !== 'copy') return { ok: false, reason: 'Not allowed' }
+  const row = await intakeLinkRow(user.organizationId, leadId)
+  const gate = intakeLinkGate(row, user.id)
+  if (gate || !row) return { ok: false, reason: gate ?? 'Lead not found' }
+
+  let token: string
+  try {
+    token = signIntakeToken(row.id, now)
+  } catch {
+    return { ok: false, reason: 'The intake link is not set up on this server.' }
+  }
+  const url = scsIntakeUrl({ token, pageId: row.pageId, leadAttribution: row.leadAttribution, assist: mode === 'open' })
+  const tokenId = intakeTokenId(token)
+
+  if (mode === 'text') {
+    const { isMockMode } = await import('@/lib/messaging')
+    const blocked = intakeTextBlock(row, isMockMode('SMS'), now)
+    if (blocked) return { ok: false, reason: blocked }
+    const { sendLeadText } = await import('./messages')
+    const sent = await sendLeadText(user, row.id, intakeTextBody(url, row.language), now)
+    if (!sent.ok) return { ok: false, reason: sent.error }
+    if (sent.message.status === 'failed') return { ok: false, reason: sent.message.note || 'The text was not sent.' }
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      const stamped = await tx.callCenterLead.updateMany({
+        where: { id: row.id, organizationId: user.organizationId, lockedBy: user.id },
+        // The first send time sticks: "link sent <ago>" counts from it.
+        data: { intakeLinkSentAt: row.intakeLinkSentAt ?? now },
+      })
+      if (stamped.count !== 1) throw new Error('LOCK_LOST')
+      await tx.callCenterEvent.create({
+        data: {
+          leadId: row.id,
+          type: 'INTAKE_LINK',
+          createdAt: now,
+          body: JSON.stringify({ label: 'Intake link', detail: INTAKE_MODE_DETAIL[mode], mode, tokenId, userId: user.id }),
+        },
+      })
+    })
+  } catch (err) {
+    if (err instanceof Error && err.message === 'LOCK_LOST') return { ok: false, reason: 'Another rep has this lead' }
+    throw err
+  }
+  return mode === 'text' ? { ok: true, sent: true } : { ok: true, url }
 }
 
 export { missingRelation }
