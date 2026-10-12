@@ -190,7 +190,7 @@ describe('call center history loaders', () => {
       'Took the lead|Nate Fuller|Avery',
     ])
     expect(forms.sort()).toEqual(['New lead|Mara Ellison|Facebook', 'New lead|Nate Fuller|Facebook'])
-    expect(page.rows[0].detail).toBe('Number ending 0102 added to the do-not-call list')
+    expect(page.rows.find((r) => r.title === 'Added to Do not call')?.detail).toBe('Number ending 0102 added to the do-not-call list')
     expect(page.rows.find((r) => r.kind === 'hold')?.detail).toBe('Thu, Oct 15, 9:00 AM · Gatsby')
 
     const averyLines = (await loadActivity(avery, {}, NOW)).rows.map((r) => r.title)
