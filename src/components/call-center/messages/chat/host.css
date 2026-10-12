@@ -1,0 +1,43 @@
+/* Team chat host pieces (docs/TEAM_CHAT_PARITY.md A5, F2): the deep-link flash and the device-notification switch.
+   Scoped like chat.css. */
+
+.final-desk.call-center .chat-msg.chat-hl { animation: chat-hl 2.4s ease-out; border-radius: 10px; }
+@keyframes chat-hl {
+  0%, 35% { background: rgba(255, 179, 0, .22); box-shadow: 0 0 0 2px rgba(255, 179, 0, .45); }
+  100% { background: transparent; box-shadow: 0 0 0 2px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .final-desk.call-center .chat-msg.chat-hl { animation: none; background: rgba(255, 179, 0, .22); }
+}
+
+.final-desk.call-center .chat-push { display: grid; gap: 8px; min-width: 0; }
+.final-desk.call-center .chat-push-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.final-desk.call-center .chat-push-title { font-weight: 600; font-size: 14px; color: var(--ink); min-width: 0; }
+.final-desk.call-center .chat-push-note { color: var(--muted); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.final-desk.call-center .chat-push-msg { font-size: 13px; font-weight: 600; color: var(--teal); overflow-wrap: anywhere; }
+.final-desk.call-center .chat-push-msg.bad { color: #b3261e; }
+.final-desk.call-center .chat-push-test { justify-self: start; }
+
+.final-desk.call-center .chat-switch-btn {
+  display: inline-flex; align-items: center; gap: 8px; flex: none; min-height: 44px; padding: 0 4px;
+  border: 0; background: none; color: var(--ink); font-size: 13px; cursor: pointer;
+}
+.final-desk.call-center .chat-switch-btn > span {
+  position: relative; width: 40px; height: 24px; border-radius: 12px; background: #c9c4b8; transition: background .15s;
+}
+.final-desk.call-center .chat-switch-btn > span::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s;
+}
+.final-desk.call-center .chat-switch-btn.on > span { background: var(--teal); }
+.final-desk.call-center .chat-switch-btn.on > span::after { transform: translateX(16px); }
+.final-desk.call-center .chat-switch-btn:disabled { opacity: .55; cursor: progress; }
+
+.final-desk.call-center .chat-push-menu { position: relative; display: inline-flex; }
+.final-desk.call-center .chat-push-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 70; display: grid; gap: 12px;
+  width: min(320px, calc(100vw - 32px)); padding: 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 40px rgba(18, 32, 44, .18);
+}
+/* The list's meta row now carries the bell too: let it wrap on a 360 px phone rather than overflow. */
+.final-desk.call-center .chat-side-meta { flex-wrap: wrap; row-gap: 0; }
