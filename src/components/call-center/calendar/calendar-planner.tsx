@@ -36,7 +36,7 @@ const SPAN: Record<CalendarView, string> = { day: 'on this day', week: 'this wee
 /**
  * The Calendar tab's planner (docs/CALENDAR.md §2): view switch, range
  * stepper, rep filter, the grid, the rail, the visit panel and the
- * scheduler. Navigation is plain links on `/call-center?tab=calendar`; the
+ * scheduler. Navigation is plain links on `/call-center?s=booked`; the
  * server renders each view from the database.
  */
 export function CalendarPlanner({ vm }: { vm: CalendarVM }) {

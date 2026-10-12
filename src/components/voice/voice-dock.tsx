@@ -133,7 +133,7 @@ export function VoiceDock() {
   return (
     <div
       ref={barRef}
-      className="bg-popover text-popover-foreground fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:max-h-none sm:w-80 sm:overflow-visible sm:rounded-xl sm:border sm:pb-0 sm:shadow-lg"
+      className="voice-dock bg-popover text-popover-foreground fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:max-h-none sm:w-80 sm:overflow-visible sm:rounded-xl sm:border sm:pb-0 sm:shadow-lg"
       role="region"
       aria-label="Phone"
     >

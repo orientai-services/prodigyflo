@@ -32,7 +32,7 @@ function railVM(lead: RailLead): RailLeadVM {
 }
 
 /**
- * The Calendar tab inside the Call Center desk (`/call-center?tab=calendar`,
+ * The dialer's Booked section (`/call-center?s=booked`; the old `?tab=calendar` still lands here,
  * docs/CALENDAR.md). Door 2 leads only, separate from the Master Calendar.
  * The view, day and rep live in the URL; everything shown is read here.
  */

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarDays, Grid3x3, Megaphone, Phone, Settings2 } from 'lucide-react'
+import { Phone } from 'lucide-react'
 import {
   recordCallCenterAttempt,
   recordCallCenterText,
@@ -15,10 +15,22 @@ import {
   skipCallCenterLead,
   takeCallCenterLead,
 } from '@/lib/call-center/actions'
+import {
+  LEAD_FILTERS,
+  filterLeads,
+  sectionHref,
+  shellTitle,
+  todayBadge,
+  todayCounts,
+  updatedLabel,
+  type DeskFilter,
+  type ShellRoute,
+} from '@/lib/call-center/app-shell'
 import type { DeskResult } from '@/lib/call-center/desk-types'
 import { leadIdOfTarget } from '@/lib/call-center/lead-link'
 import { todayBoard } from '@/lib/call-center/priority'
 import { SHORTCUTS, type DeskKeyAction } from '@/lib/call-center/shortcuts'
+import type { TeamMember } from '@/lib/call-center/team'
 import type { MissedCallVM, TwilioStatusVM } from '@/lib/telephony/voice-contract'
 import type { PhoneSetupVM } from '@/lib/telephony/ui/phone-setup-data'
 import { CallButton } from '@/components/voice/call-button'
@@ -27,7 +39,6 @@ import { useVoice } from '@/components/voice/voice-provider'
 import { MissedCalls } from '@/components/telephony/missed-calls'
 import { PhoneSetupSheet } from '@/components/telephony/phone-setup-sheet'
 import {
-  CALL_CENTER_COPY,
   CURRENT_REP,
   HELD_UNTIL_MORNING,
   OUTCOMES,
@@ -61,36 +72,32 @@ import {
   type CallLead,
   type LanguageFilter,
   type LeadOutcome,
-  type LeadTab,
 } from '@/lib/call-center/model'
+import { SectionNav } from './app-nav'
 import { CallbackScheduler } from './callback-scheduler'
 import { DialPad } from './dial-pad'
+import { MoreSheet } from './more-sheet'
 import { PhonePill, PhoneSheet, usePhoneStatus } from './phone-pill'
 import { BookVisit } from './calendar/scheduler'
 import { PowerBar, WrapUp } from './power-panel'
-import { TodayView } from './today-view'
+import { TeamView } from './team-view'
+import { TodayView, type TodayServer } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
 import { usePowerMode } from './use-power-mode'
-import { DialerModeSwitch } from './dialer-mode-switch'
 import '../final-desk/final-desk.css'
 import './call-center.css'
 
-const TABS: { id: LeadTab; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'forms', label: 'Forms' },
-  { id: 'inbound', label: 'Inbound' },
-  { id: 'uncontacted', label: 'Not contacted' },
-  { id: 'retry', label: 'Retry' },
-  { id: 'dnc', label: 'Do not call' },
-]
-
-type DeskView = 'today' | 'list' | 'missed' | 'ads' | 'calendar'
-
 /** Below this width the lead opens as a full-screen panel instead of the split view. */
 const PHONE_QUERY = '(max-width: 767.98px)'
+/** Below this width the sections are a bottom tab bar and More is a bottom sheet. */
+const TABBAR_QUERY = '(max-width: 1023.98px)'
+
+function matches(query: string): boolean {
+  return typeof window !== 'undefined' && window.matchMedia(query).matches
+}
 
 function onPhone(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia(PHONE_QUERY).matches
+  return matches(PHONE_QUERY)
 }
 
 function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (lead: CallLead) => void }) {
@@ -114,7 +121,7 @@ export type CallCenterPhone = {
   /** Why browser calling is off (plain English), or null when it is on. The phone pill's sheet shows it. */
   voiceNote?: string | null
   missed?: MissedCallVM[]
-  /** `?missed=<id>`: open the Missed tab on that row. */
+  /** `?missed=<id>`: open the Missed list on that row. */
   openMissedId?: string | null
   /** `?lead=<id>`: open that lead. */
   openLeadId?: string | null
@@ -124,65 +131,78 @@ export type CallCenterPhone = {
   setup?: { vm: PhoneSetupVM; status: TwilioStatusVM | null } | null
 }
 
+const TODAY_ROUTE: ShellRoute = { section: 'today', ads: false, filter: null }
+
+/**
+ * The dialer app (docs/DIALER_APP.md): a sticky header (section title, the
+ * phone pill, the Dialer button), the six sections as a bottom tab bar on a
+ * phone or a strip on a desk, and the open section. Today and Leads are
+ * drawn here from the desk's leads; Messages, History, Booked, Campaigns and
+ * Team arrive as server-rendered slots or data.
+ */
 export function CallCenter({
   initialLeads,
   viewerId,
   phone = {},
   renderedAt,
+  route = TODAY_ROUTE,
   adsAllowed = false,
   calendarAllowed = false,
-  ads = null,
-  calendar = null,
+  slot = null,
+  unread = 0,
+  today = null,
+  team = null,
+  viewer = null,
+  threadOpen = false,
 }: {
   initialLeads?: CallLead[]
   viewerId?: string
   phone?: CallCenterPhone
   /** The server's clock when it rendered, so the first Today ranking matches on both sides. */
   renderedAt?: string
-  /** Holds connectors:read, so the Ads tab shows. */
+  /** The open section, from `?s=` (and the old `?tab=` / `?lead=` / `?missed=` links). */
+  route?: ShellRoute
+  /** Holds connectors:read, so More shows Campaigns. */
   adsAllowed?: boolean
-  /** CALL_CENTER_CALENDAR is on, so the Calendar tab shows. */
+  /** CALL_CENTER_CALENDAR is on, so Booked shows the planner and leads offer Book visit. */
   calendarAllowed?: boolean
-  /** The Meta Ads dashboard, server-rendered when the page opened on `?tab=ads`. */
-  ads?: React.ReactNode
-  /** The Call Center Calendar planner, server-rendered on `?tab=calendar`. */
-  calendar?: React.ReactNode
+  /** The open section's server slot: History, Messages, the Ads dashboard or the calendar planner. */
+  slot?: React.ReactNode
+  /** Unread inbound texts (the Messages badge). */
+  unread?: number
+  /** Today's server numbers and team feed (Today only). */
+  today?: TodayServer | null
+  /** The team list (Team only). */
+  team?: TeamMember[] | null
+  viewer?: { name: string; role: string } | null
+  /** A Messages thread fills the phone screen: the tab bar steps aside. */
+  threadOpen?: boolean
 }) {
   const router = useRouter()
   const voice = useVoice()
+  const section = route.section
+  const leadsList = section === 'leads' && !route.ads
+  /** Today and Leads hold the lead panel, the tools and the shortcuts. */
+  const deskSection = section === 'today' || leadsList
   const [draft, setDraft] = useState<{ source: CallLead[] | undefined; leads: CallLead[] } | null>(null)
-  const [tab, setTab] = useState<LeadTab>('all')
-  const [view, setView] = useState<DeskView>(ads ? 'ads' : calendar ? 'calendar' : phone.openMissedId ? 'missed' : 'today')
-  // The Ads tab's first open is a soft navigation to ?tab=ads, so the dashboard
-  // arrives as a new prop on this mounted screen: switch to it when it lands.
-  const adsOpen = ads !== null && ads !== undefined
-  const [adsSeen, setAdsSeen] = useState(adsOpen)
-  if (adsOpen !== adsSeen) {
-    setAdsSeen(adsOpen)
-    if (adsOpen) setView('ads')
+  const [tab, setTab] = useState<DeskFilter>(route.filter ?? 'all')
+  // Arriving on Leads (a tab, a Today tile, a Missed link) starts from the URL's filter, or All.
+  // The chips themselves stay client-side, so the 20 s refresh keeps the one picked.
+  const filterKey = `${section}|${route.filter ?? ''}`
+  const [filterSeen, setFilterSeen] = useState(filterKey)
+  if (filterKey !== filterSeen) {
+    setFilterSeen(filterKey)
+    setTab(route.filter ?? 'all')
   }
-  // The Calendar works the same way; its links (view, day, rep) are soft
-  // navigations that keep it open. Leaving ?tab=calendar falls back to Today.
-  const calendarOpen = calendar !== null && calendar !== undefined
-  const [calendarSeen, setCalendarSeen] = useState(calendarOpen)
-  if (calendarOpen !== calendarSeen) {
-    setCalendarSeen(calendarOpen)
-    if (calendarOpen) setView('calendar')
-    else if (view === 'calendar') setView('today')
-  }
-  const missedView = view === 'missed'
-  const [openMissedId, setOpenMissedId] = useState<string | null>(phone.openMissedId ?? null)
+  const missedView = leadsList && tab === 'missed'
   const [language, setLanguage] = useState<LanguageFilter>('all')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(phone.openLeadId ?? null)
-  // `?lead=` can change on this mounted screen (the Calendar's Open lead / Call): open that lead.
+  // `?lead=` can change on this mounted screen (the Calendar's Open lead, a Messages link): open that lead.
   const [leadSeen, setLeadSeen] = useState(phone.openLeadId ?? null)
   if ((phone.openLeadId ?? null) !== leadSeen) {
     setLeadSeen(phone.openLeadId ?? null)
-    if (phone.openLeadId) {
-      setSelectedId(phone.openLeadId)
-      if (view === 'calendar' || view === 'ads' || view === 'missed') setView('today')
-    }
+    if (phone.openLeadId) setSelectedId(phone.openLeadId)
   }
   const missed = phone.missed ?? []
   const [now, setNow] = useState<string | null>(null)
@@ -200,9 +220,17 @@ export function CallCenter({
   /** The phone pill's sheet (settings + Test connection) and the owner's Phone setup sheet. */
   const [phoneOpen, setPhoneOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  // A section change (any tab, a More link) closes More.
+  const routeKey = `${section}:${route.ads}`
+  const [routeSeen, setRouteSeen] = useState(routeKey)
+  if (routeKey !== routeSeen) {
+    setRouteSeen(routeKey)
+    setMoreOpen(false)
+  }
   const pillRef = useRef<HTMLButtonElement>(null)
-  /** The phone's bottom button bar: its buttons open the same sheets. */
-  const barRef = useRef<HTMLElement>(null)
+  /** The section bar: More's button lives in it. */
+  const navRef = useRef<HTMLElement>(null)
   const phoneStatus = usePhoneStatus(phone.voiceNote)
   const detailRef = useRef<HTMLElement>(null)
   /** The desk root, where the phone's bottom sheets mount. */
@@ -256,7 +284,9 @@ export function CallCenter({
 
   // ── Today ────────────────────────────────────────────────────────────────
   const deskRep = leads.some((lead) => lead.persisted) ? (viewerId ?? '') : CURRENT_REP
-  const board = todayBoard(visibleLeads(leads, 'all', language, query), new Date(clock), deskRep)
+  const clockDate = new Date(clock)
+  const board = todayBoard(visibleLeads(leads, 'all', language, ''), clockDate, deskRep)
+  const counts = todayCounts(leads, clockDate)
 
   // ── Wrap-up: the last call to a lead in this tab still owes a result ─────
   const last = voice?.lastCall ?? null
@@ -294,9 +324,11 @@ export function CallCenter({
     select: (lead) => openLead(lead),
   })
 
-  const rows = visibleLeads(leads, tab, language, query)
-  const pool = view === 'today' ? leads : rows
-  const selected = pool.find((lead) => lead.id === selectedId && !lead.disabled) ?? null
+  const rows = filterLeads(leads, tab, language, query, clockDate)
+  const pool = section === 'today' ? leads : rows
+  const selected = deskSection && !missedView
+    ? (pool.find((lead) => lead.id === selectedId && !lead.disabled) ?? null)
+    : null
   const who = selected ? repFor(selected) : CURRENT_REP
   const quietBlocked = Boolean(selected && now && callNeedsConfirm(selected, now) && callAnywayId !== selected.id)
   const revealLeadId = selected?.persisted && viewerId && selected.lockedBy === viewerId && !selected.dnc
@@ -405,7 +437,7 @@ export function CallCenter({
     return sheetHost && onPhone() ? createPortal(picker, sheetHost) : picker
   }
 
-  /** J/K walk the list on screen: the Today ranking then its queues, or the open tab's rows. */
+  /** J/K walk the list on screen: the Today ranking, or the open filter's rows. */
   function step(dir: 1 | -1) {
     const order: CallLead[] = []
     const seen = new Set<string>()
@@ -414,12 +446,8 @@ export function CallCenter({
       seen.add(lead.id)
       order.push(lead)
     }
-    if (view === 'today') {
-      board.ranked.forEach((row) => add(row.lead))
-      for (const items of Object.values(board.queues)) items.forEach((item) => add(item.lead))
-    } else {
-      rows.forEach(add)
-    }
+    if (section === 'today') board.ranked.forEach((row) => add(row.lead))
+    else rows.forEach(add)
     if (!order.length) return
     const index = order.findIndex((lead) => lead.id === selectedId)
     const next = index === -1 ? order[dir === 1 ? 0 : order.length - 1] : order[(index + dir + order.length) % order.length]
@@ -427,22 +455,25 @@ export function CallCenter({
   }
 
   useDeskKeys((action: DeskKeyAction) => {
-    // The Ads and Calendar tabs have no lead list on screen: lead shortcuts would act out of sight.
-    if ((view === 'ads' || view === 'calendar') && action.kind !== 'help' && action.kind !== 'close') return false
+    if (action.kind === 'close') {
+      if (padOpen) setPadOpen(false)
+      else if (phoneOpen) setPhoneOpen(false)
+      else if (moreOpen) setMoreOpen(false)
+      else if (help) setHelp(false)
+      else if (booking) setBooking(null)
+      else if (scheduling) setScheduling(null)
+      else if (selected && onPhone()) setSelectedId(null)
+      else return false
+      return true
+    }
+    // Shortcuts belong to the lead lists: off on Messages, Booked, History, Team, Campaigns and Missed.
+    if (!deskSection || missedView) return false
     switch (action.kind) {
       case 'help':
         setHelp((open) => !open)
         return true
-      case 'close':
-        if (padOpen) setPadOpen(false)
-        else if (phoneOpen) setPhoneOpen(false)
-        else if (help) setHelp(false)
-        else if (booking) setBooking(null)
-        else if (scheduling) setScheduling(null)
-        else if (selected && onPhone()) setSelectedId(null)
-        else return false
-        return true
       case 'search':
+        if (!leadsList) return false
         searchRef.current?.focus()
         return true
       case 'next':
@@ -488,7 +519,7 @@ export function CallCenter({
       <DialPad
         canOverrideHours={phone.canOverrideHours}
         disabled={resultOwed}
-        ignore={onPhone() ? barRef : padButtonRef}
+        ignore={padButtonRef}
         onClose={() => setPadOpen(false)}
       />
     )
@@ -501,7 +532,7 @@ export function CallCenter({
       <PhoneSheet
         status={phoneStatus}
         pill={pillRef}
-        bar={barRef}
+        bar={navRef}
         onClose={() => setPhoneOpen(false)}
         onOpenSetup={phone.setup ? () => setSetupOpen(true) : undefined}
       />
@@ -510,8 +541,26 @@ export function CallCenter({
     return sheetHost && onPhone() ? createPortal(sheet, sheetHost) : sheet
   }
 
-  /** On a phone the bottom bar gives way to the call bar during a call or while a dial error shows. */
-  const callBarUp = Boolean(voice && (voice.status !== 'idle' || voice.error))
+  const line = voice?.setup.lines.find((l) => l.id === voice.lineId) ?? voice?.setup.lines[0] ?? null
+  function moreSheet() {
+    const sheet = (
+      <MoreSheet
+        adsAllowed={adsAllowed}
+        phone={phoneStatus}
+        line={line ? (line.label && line.label !== line.display ? `${line.label} · ${line.display}` : line.display) : null}
+        updated={updatedLabel(renderedAt ? Date.parse(renderedAt) : clock, clock)}
+        viewer={viewer}
+        toggle={navRef}
+        onClose={() => setMoreOpen(false)}
+        onSettings={() => {
+          setPadOpen(false)
+          setPhoneOpen(true)
+        }}
+      />
+    )
+    // A bottom sheet over the tab bar below 1024, a popover under More on a desk.
+    return sheetHost && matches(TABBAR_QUERY) ? createPortal(sheet, sheetHost) : sheet
+  }
 
   const refresh = useCallback(() => router.refresh(), [router])
   useLiveRefresh(refresh, () => {
@@ -524,188 +573,173 @@ export function CallCenter({
       ref={setSheetHost}
       className={[
         'final-desk call-center',
+        `s-${section}`,
         power.on ? 'power-on' : '',
         selected ? 'detail-open' : '',
-        callBarUp ? '' : 'bar-on',
+        threadOpen ? 'thread-open' : 'tabs-on',
       ].filter(Boolean).join(' ')}
     >
-      <div className="shell">
-        {/* Dialer mode: no desk menu. The rail is only the phone's top bar (brand + the switch back to the desk). */}
-        <aside className="rail">
-          <div className="brand">
-            <small>SCS operations</small>
-            <strong>Prodigy<span className="flo">Flo</span></strong>
-          </div>
-          <DialerModeSwitch on className="rail-dialer" />
-        </aside>
-        <div className="col">
-          <header className="top">
-            <div className="top-dialer">
-              <strong className="top-brand">Prodigy<span className="flo">Flo</span></strong>
-              <DialerModeSwitch on />
-            </div>
-            <label className="search">
-              <span className="sr">Search leads</span>
-              <input
-                ref={searchRef}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search leads"
-                aria-label="Search leads"
-              />
-            </label>
-            <div className="top-right">
-              <label className="lang">
-                <span className="lang-text">Working language</span>
-                <select
-                  aria-label="Working language"
-                  value={language}
-                  onChange={(event) => chooseLanguage(event.target.value as LanguageFilter)}
-                >
-                  <option value="all">All</option>
-                  <option value="en">English</option>
-                  <option value="es">Spanish page later</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className={`power-toggle${power.on ? ' on' : ''}`}
-                aria-pressed={power.on}
-                disabled={!voice}
-                title={voice ? 'Dial the next lead by itself after each result (P)' : 'Power mode needs browser calling.'}
-                onClick={power.toggle}
-              >
-                Power mode {power.on ? 'on' : 'off'}
-              </button>
-              <button type="button" className="keys-btn" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>?</button>
-              <span className="pad-anchor">
-                <button
-                  ref={padButtonRef}
-                  type="button"
-                  className={`pad-toggle${padOpen ? ' on' : ''}`}
-                  aria-haspopup="dialog"
-                  aria-expanded={padOpen}
-                  title="Call any US number by hand"
-                  onClick={() => setPadOpen((open) => !open)}
-                >
-                  <Grid3x3 aria-hidden="true" />
-                  Dial pad
-                </button>
-                {padOpen ? dialPad() : null}
-              </span>
-              {phone.setup ? (
-                <PhoneSetupSheet
-                  setup={phone.setup.vm}
-                  status={phone.setup.status}
-                  triggerClassName="btn secondary setup-btn"
-                  open={setupOpen}
-                  onOpenChange={setSetupOpen}
+      <header className="cc-head">
+        <Link href={sectionHref('today')} className="cc-mark" aria-label="ProdigyFlo dialer, Today">
+          <span className="cc-word">Prodigy<span className="flo">Flo</span></span>
+          <span className="cc-glyph" aria-hidden="true">P</span>
+        </Link>
+        <h1 className="cc-title">{shellTitle(route)}</h1>
+        <div className="cc-head-right">
+          {/* The phone's state at a glance; its sheet holds the settings and the test. */}
+          <span className="phone-anchor">
+            <PhonePill ref={pillRef} status={phoneStatus} open={phoneOpen} onToggle={() => setPhoneOpen((open) => !open)} />
+            {phoneOpen ? phoneSheet() : null}
+          </span>
+          <span className="pad-anchor">
+            <button
+              ref={padButtonRef}
+              type="button"
+              className={`cc-dialer${padOpen ? ' on' : ''}`}
+              aria-haspopup="dialog"
+              aria-expanded={padOpen}
+              title="Call any US number by hand"
+              onClick={() => {
+                setPhoneOpen(false)
+                setMoreOpen(false)
+                setPadOpen((open) => !open)
+              }}
+            >
+              <Phone aria-hidden="true" />
+              <span>Dialer</span>
+            </button>
+            {padOpen ? dialPad() : null}
+          </span>
+          {phone.setup ? (
+            // Opened from the phone sheet; the sheet's own trigger stays out of the header.
+            <PhoneSetupSheet
+              setup={phone.setup.vm}
+              status={phone.setup.status}
+              triggerClassName="cc-hidden"
+              open={setupOpen}
+              onOpenChange={setSetupOpen}
+            />
+          ) : null}
+        </div>
+      </header>
+      <SectionNav
+        route={route}
+        badges={{ today: todayBadge(counts), messages: unread }}
+        moreOpen={moreOpen}
+        onMore={() => {
+          setPadOpen(false)
+          setPhoneOpen(false)
+          setMoreOpen((open) => !open)
+        }}
+        more={moreOpen ? moreSheet() : null}
+        navRef={navRef}
+      />
+      <main className="main cc-main">
+        <PowerBar power={power} nameOf={(id) => leads.find((lead) => lead.id === id)?.name ?? null} />
+        {wrapPending && wrapLead && last ? (
+          <WrapUp
+            lead={wrapLead}
+            call={last}
+            required={power.on}
+            busy={busy}
+            error={deskError}
+            scheduler={scheduling === wrapLead.id ? scheduler(wrapLead) : null}
+            onOutcome={(outcome) => { void recordOutcome(wrapLead, outcome) }}
+            onLater={() => setWrappedSeq(last.seq)}
+          />
+        ) : null}
+        {deskSection ? (
+          <div className="cc-tools">
+            {leadsList ? (
+              <label className="search">
+                <span className="sr">Search leads</span>
+                <input
+                  ref={searchRef}
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search leads"
+                  aria-label="Search leads"
                 />
-              ) : null}
-            </div>
-            {/* The phone's state at a glance; its sheet holds the settings and the test. */}
-            <span className="phone-anchor">
-              <PhonePill ref={pillRef} status={phoneStatus} open={phoneOpen} onToggle={() => setPhoneOpen((open) => !open)} />
-              {phoneOpen ? phoneSheet() : null}
-            </span>
-          </header>
-          <main className="main">
-            <div className="page-title">
-              <h2>Call Center</h2>
-              <p className="muted">{CALL_CENTER_COPY}</p>
-            </div>
-            <PowerBar power={power} nameOf={(id) => leads.find((lead) => lead.id === id)?.name ?? null} />
-            {wrapPending && wrapLead && last ? (
-              <WrapUp
-                lead={wrapLead}
-                call={last}
-                required={power.on}
-                busy={busy}
-                error={deskError}
-                scheduler={scheduling === wrapLead.id ? scheduler(wrapLead) : null}
-                onOutcome={(outcome) => { void recordOutcome(wrapLead, outcome) }}
-                onLater={() => setWrappedSeq(last.seq)}
-              />
+              </label>
             ) : null}
-            <div className="filters" role="tablist" aria-label="Lead filters">
+            <label className="lang">
+              <span className="lang-text">Working language</span>
+              <select
+                aria-label="Working language"
+                value={language}
+                onChange={(event) => chooseLanguage(event.target.value as LanguageFilter)}
+              >
+                <option value="all">All</option>
+                <option value="en">English</option>
+                <option value="es">Spanish page later</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className={`power-toggle${power.on ? ' on' : ''}`}
+              aria-pressed={power.on}
+              disabled={!voice}
+              title={voice ? 'Dial the next lead by itself after each result (P)' : 'Power mode needs browser calling.'}
+              onClick={power.toggle}
+            >
+              Power mode {power.on ? 'on' : 'off'}
+            </button>
+            <button type="button" className="keys-btn" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>?</button>
+          </div>
+        ) : null}
+        {leadsList ? (
+          <div className="filters" role="tablist" aria-label="Lead filters">
+            {LEAD_FILTERS.map((item) => (
               <button
+                key={item.id}
                 type="button"
                 role="tab"
-                aria-selected={view === 'today'}
-                className={view === 'today' ? 'on' : ''}
-                onClick={() => setView('today')}
+                aria-selected={tab === item.id}
+                className={tab === item.id ? 'on' : ''}
+                onClick={() => setTab(item.id)}
               >
-                Today
+                {item.label}
+                {item.id === 'missed' && missed.length ? ` (${missed.length})` : ''}
               </button>
-              {TABS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={view === 'list' && tab === item.id}
-                  className={view === 'list' && tab === item.id ? 'on' : ''}
-                  onClick={() => {
-                    setView('list')
-                    setTab(item.id)
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-              <button
-                type="button"
-                role="tab"
-                aria-selected={missedView}
-                className={missedView ? 'on' : ''}
-                onClick={() => setView('missed')}
-              >
-                Missed{missed.length ? ` (${missed.length})` : ''}
-              </button>
-              {adsAllowed && ads ? (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={view === 'ads'}
-                  className={view === 'ads' ? 'on wide-only' : 'wide-only'}
-                  onClick={() => setView('ads')}
-                >
-                  Ads
-                </button>
-              ) : adsAllowed ? (
-                // The dashboard renders on the server, so the first open is a navigation.
-                <Link role="tab" aria-selected={false} className="wide-only" href="/call-center?tab=ads">
-                  Ads
-                </Link>
-              ) : null}
-              {calendarAllowed && calendar ? (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={view === 'calendar'}
-                  className={view === 'calendar' ? 'on wide-only' : 'wide-only'}
-                  onClick={() => setView('calendar')}
-                >
-                  Calendar
-                </button>
-              ) : calendarAllowed ? (
-                // The planner renders on the server, so the first open is a navigation.
-                <Link role="tab" aria-selected={false} className="wide-only" href="/call-center?tab=calendar">
-                  Calendar
-                </Link>
-              ) : null}
+            ))}
+          </div>
+        ) : null}
+        {route.ads ? (
+          <>
+            <Link className="back-link" href={sectionHref('leads')}><span aria-hidden="true">‹</span> Leads</Link>
+            <div className="ads-panel">{slot}</div>
+          </>
+        ) : section === 'booked' ? (
+          slot ?? (
+            <div className="card block">
+              <h3>Booked</h3>
+              <p className="muted">The visit calendar isn&rsquo;t switched on for this workspace yet.</p>
             </div>
-            {view === 'ads' && ads ? (
-              <div className="ads-panel">{ads}</div>
-            ) : view === 'calendar' && calendar ? (
-              calendar
-            ) : missedView ? (
-              <div className="card">
-                <MissedCalls calls={missed} openId={openMissedId} canOverrideHours={phone.canOverrideHours} />
-              </div>
-            ) : (
+          )
+        ) : section === 'team' ? (
+          <TeamView members={team ?? []} />
+        ) : !deskSection ? (
+          slot
+        ) : missedView ? (
+          <div className="card">
+            <MissedCalls calls={missed} openId={phone.openMissedId ?? null} canOverrideHours={phone.canOverrideHours} />
+          </div>
+        ) : (
             <div className="split">
-              {view === 'today' ? (
-                <TodayView board={board} rep={repFor} selectedId={selectedId} onOpen={openLead} />
+              {section === 'today' ? (
+                <TodayView
+                  board={board}
+                  counts={counts}
+                  now={clock}
+                  server={today}
+                  rep={repFor}
+                  selectedId={selectedId}
+                  canOverrideHours={phone.canOverrideHours}
+                  resultOwed={resultOwed}
+                  onOpen={openLead}
+                  onTelDialed={(lead) => { void commit(lead, () => recordCallCenterAttempt(lead.id), () => {}) }}
+                />
               ) : (
               <div className="card lead-table">
                 <table>
@@ -747,7 +781,7 @@ export function CallCenter({
                   <>
                     <div className="detail-bar">
                       <button type="button" className="detail-back" onClick={() => setSelectedId(null)}>
-                        <span aria-hidden="true">‹</span> {view === 'today' ? 'Today' : 'Leads'}
+                        <span aria-hidden="true">‹</span> {section === 'today' ? 'Today' : 'Leads'}
                       </button>
                       <span className="detail-bar-name">{selected.name}</span>
                     </div>
@@ -776,16 +810,13 @@ export function CallCenter({
                     ) : null}
                     {selected.missedCallId ? (
                       <div className="banner" role="status">
-                        <button
-                          type="button"
+                        <Link
                           className="linkish"
-                          onClick={() => {
-                            setOpenMissedId(selected.missedCallId ?? null)
-                            setView('missed')
-                          }}
+                          href={`/call-center?s=leads&missed=${encodeURIComponent(selected.missedCallId)}`}
+                          onClick={() => setSelectedId(null)}
                         >
                           Missed call waiting. Open it.
-                        </button>
+                        </Link>
                       </div>
                     ) : null}
                     {!selected.persisted && now && callNeedsConfirm(selected, now) ? (
@@ -946,92 +977,21 @@ export function CallCenter({
                   <>
                     <h2 className="who">Select a lead</h2>
                     <p className="muted">
-                      {view === 'today'
-                        ? 'Pick someone from Call first or a queue. Press ? for keyboard shortcuts.'
+                      {section === 'today'
+                        ? 'Pick someone from What to attack first. Press ? for keyboard shortcuts.'
                         : 'Click a row. The Spanish page placeholder stays disabled.'}
                     </p>
                   </>
                 )}
               </article>
             </div>
-            )}
-          </main>
-        </div>
-      </div>
-      {/* Phones: the tools that leave the header and the tab strip, in thumb reach. */}
-      <nav ref={barRef} className="cc-bottom-bar" aria-label="Call Center tools">
-        {adsAllowed ? (
-          ads ? (
-            <button type="button" className={view === 'ads' ? 'on' : ''} aria-pressed={view === 'ads'} onClick={() => setView('ads')}>
-              <Megaphone aria-hidden="true" />
-              Ads
-            </button>
-          ) : (
-            <Link href="/call-center?tab=ads">
-              <Megaphone aria-hidden="true" />
-              Ads
-            </Link>
-          )
-        ) : null}
-        {calendarAllowed ? (
-          calendar ? (
-            <button type="button" className={view === 'calendar' ? 'on' : ''} aria-pressed={view === 'calendar'} onClick={() => setView('calendar')}>
-              <CalendarDays aria-hidden="true" />
-              Calendar
-            </button>
-          ) : (
-            <Link href="/call-center?tab=calendar">
-              <CalendarDays aria-hidden="true" />
-              Calendar
-            </Link>
-          )
-        ) : null}
-        <button
-          type="button"
-          className={padOpen ? 'on' : ''}
-          aria-haspopup="dialog"
-          aria-expanded={padOpen}
-          onClick={() => {
-            setPhoneOpen(false)
-            setPadOpen((open) => !open)
-          }}
-        >
-          <Grid3x3 aria-hidden="true" />
-          Dial pad
-        </button>
-        {phone.setup ? (
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            onClick={() => {
-              setPadOpen(false)
-              setSetupOpen(true)
-            }}
-          >
-            <Settings2 aria-hidden="true" />
-            Phone setup
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={phoneOpen ? 'on' : ''}
-            aria-haspopup="dialog"
-            aria-expanded={phoneOpen}
-            onClick={() => {
-              setPadOpen(false)
-              setPhoneOpen((open) => !open)
-            }}
-          >
-            <Phone aria-hidden="true" />
-            Phone settings
-          </button>
         )}
-      </nav>
+      </main>
       {help ? (
         <div className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={() => setHelp(false)}>
           <div className="card block" onClick={(event) => event.stopPropagation()}>
             <h3>Keyboard shortcuts</h3>
-            <p className="muted">They work anywhere on the desk except while you are typing.</p>
+            <p className="muted">They work on Today and Leads except while you are typing.</p>
             <dl>
               {SHORTCUTS.map((row) => (
                 <div key={row.keys}>

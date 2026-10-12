@@ -113,9 +113,14 @@ describe('call center door', () => {
   })
 
   it('does not call Twilio, Meta, or the intake desk', () => {
-    const screen = readFileSync(path.join(root, 'components/call-center/call-center.tsx'), 'utf8')
-    const model = readFileSync(path.join(root, 'lib/call-center/model.ts'), 'utf8')
-    const page = readFileSync(path.join(root, 'app/(app)/call-center/page.tsx'), 'utf8')
+    // The screen is the dialer shell: the desk itself plus the pieces it draws (sections, More, Today, Team).
+    const read = (file: string) => readFileSync(path.join(root, file), 'utf8')
+    const desk = read('components/call-center/call-center.tsx')
+    const parts = ['app-nav', 'more-sheet', 'today-view', 'team-view'].map((name) => read(`components/call-center/${name}.tsx`))
+    const shell = read('lib/call-center/app-shell.ts')
+    const screen = [desk, ...parts, shell].join('\n')
+    const model = read('lib/call-center/model.ts')
+    const page = read('app/(app)/call-center/page.tsx')
     const bundle = `${screen}\n${model}\n${page}`
     expect(bundle).toContain('Ad form fills and inbound on the ad number. Not the SCS intake journey.')
     // The trail still marks preview-only actions; the screen has no banner or header note for it:
@@ -130,9 +135,13 @@ describe('call center door', () => {
     expect(bundle).not.toMatch(/\bfetch\s*\(/)
     expect(bundle).not.toMatch(/from ['"]twilio|graph\.facebook|meta\.com|process\.env|\bSES\b|\$\d/)
     expect(screen).not.toMatch(/router\.push/)
-    // Dialer mode: the desk menu stays off this screen; one switch leads back to the Board.
-    expect(screen).toContain('DialerModeSwitch')
+    // Dialer mode: the desk menu stays off this screen; one switch (in More) leads back to the Board.
+    expect(screen.match(/<DialerModeSwitch\b/g)).toHaveLength(1)
+    expect(read('components/call-center/more-sheet.tsx')).toContain('<DialerModeSwitch on />')
     expect(screen).not.toContain("label: 'Call Center'")
+    // Search lives in Leads, not the header; the header holds the title, the pill and the Dialer button.
+    expect(desk).toMatch(/<header className="cc-head">[\s\S]*<PhonePill[\s\S]*className=\{`cc-dialer[\s\S]*<\/header>/)
+    expect(desk.slice(desk.indexOf('<header'), desk.indexOf('</header>'))).not.toContain('Search leads')
     expect(screen).toContain('Call anyway')
     expect(screen).toContain('Send intake link')
     expect(screen).toContain('Save note')
