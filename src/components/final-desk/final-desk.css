@@ -42,6 +42,15 @@
 .final-desk .nav button{text-align:left;background:transparent;border:0;color:#c9d4d2;padding:10px 12px;border-radius:10px}
 .final-desk .nav button.on,.final-desk .nav button:hover{background:#1d3344;color:#fff}
 .final-desk .nav .sec{margin:18px 12px 6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#7d9290}
+.final-desk .dialer-switch{position:relative;display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none;font-size:13px;font-weight:600;min-height:44px;padding:0 10px;border-radius:10px}
+.final-desk .dialer-switch input{position:absolute;opacity:0;width:0;height:0}
+.final-desk .dialer-track{position:relative;flex:none;width:38px;height:22px;border-radius:999px;background:#3a5566;transition:background .15s}
+.final-desk .dialer-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.final-desk .dialer-switch.on .dialer-track{background:var(--teal)}
+.final-desk .dialer-switch.on .dialer-knob{left:19px}
+.final-desk .dialer-switch input:focus-visible+.dialer-track{outline:2px solid currentColor;outline-offset:2px}
+.final-desk .rail .dialer-switch{color:#dbe6e4;margin:2px 0 10px}
+.final-desk .rail .dialer-switch:hover{background:rgba(255,255,255,.06)}
 .final-desk .rail-foot{margin-top:auto;padding:12px;font-size:12px;color:#8aa3a1}
 .final-desk .rail-foot b{display:block;color:#e8eeed;font-size:13px;margin-bottom:2px}
 .final-desk .rail-foot .out{margin-top:10px;width:100%;background:transparent;border:1px solid #3a5566;color:#c9d4d2;border-radius:8px;padding:7px 10px;font-size:12px}

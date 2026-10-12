@@ -68,18 +68,9 @@ import { PowerBar, WrapUp } from './power-panel'
 import { TodayView } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
 import { usePowerMode } from './use-power-mode'
+import { DialerModeSwitch } from './dialer-mode-switch'
 import '../final-desk/final-desk.css'
 import './call-center.css'
-
-const RAIL = [
-  { href: '/board', label: 'Board' },
-  { href: '/pipeline', label: 'Pipeline' },
-  { href: '/clients', label: 'Clients' },
-  { href: '/queue', label: 'Queue' },
-  { href: '/call-center', label: 'Call Center' },
-  { href: '/documents', label: 'Document lab' },
-  { href: '/submissions', label: 'CYS' },
-] as const
 
 const TABS: { id: LeadTab; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -178,8 +169,6 @@ export function CallCenter({
   const [scheduling, setScheduling] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [help, setHelp] = useState(false)
-  /** The desk menu on a phone (the rail collapses into a top bar there). */
-  const [navOpen, setNavOpen] = useState(false)
   const detailRef = useRef<HTMLElement>(null)
   /** The desk root, where the phone's bottom sheets mount. */
   const [sheetHost, setSheetHost] = useState<HTMLDivElement | null>(null)
@@ -410,7 +399,6 @@ export function CallCenter({
       case 'close':
         if (help) setHelp(false)
         else if (scheduling) setScheduling(null)
-        else if (navOpen) setNavOpen(false)
         else if (selected && onPhone()) setSelectedId(null)
         else return false
         return true
@@ -466,41 +454,25 @@ export function CallCenter({
       ref={setSheetHost}
       className={[
         'final-desk call-center',
-        navOpen ? 'nav-open' : '',
         power.on ? 'power-on' : '',
         selected ? 'detail-open' : '',
       ].filter(Boolean).join(' ')}
     >
       <div className="shell">
+        {/* Dialer mode: no desk menu. The rail is only the phone's top bar (brand + the switch back to the desk). */}
         <aside className="rail">
           <div className="brand">
             <small>SCS operations</small>
             <strong>Prodigy<span className="flo">Flo</span></strong>
           </div>
-          {/* Shown below lg by the final-desk shell styles; opens the same links in a sheet. */}
-          <button
-            type="button"
-            className="rail-toggle"
-            aria-expanded={navOpen}
-            aria-controls="call-center-nav"
-            aria-label={navOpen ? 'Close menu' : 'Open menu'}
-            onClick={() => setNavOpen((open) => !open)}
-          >
-            <span aria-hidden="true">{navOpen ? '✕' : '☰'}</span>
-            <span className="rail-toggle-label">Menu</span>
-          </button>
-          <nav className="nav" id="call-center-nav" aria-label="Desk">
-            {RAIL.map((item) =>
-              item.href === '/call-center' ? (
-                <Link key={item.href} href={item.href} className="here" aria-current="page" onClick={() => setNavOpen(false)}>{item.label}</Link>
-              ) : (
-                <Link key={item.href} href={item.href} onClick={() => setNavOpen(false)}>{item.label}</Link>
-              ),
-            )}
-          </nav>
+          <DialerModeSwitch on className="rail-dialer" />
         </aside>
         <div className="col">
           <header className="top">
+            <div className="top-dialer">
+              <strong className="top-brand">Prodigy<span className="flo">Flo</span></strong>
+              <DialerModeSwitch on />
+            </div>
             <label className="search">
               <span className="sr">Search leads</span>
               <input

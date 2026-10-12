@@ -228,7 +228,17 @@
 .final-desk.call-center .sched-backdrop,
 .final-desk.call-center .sched-grab { display: none; }
 @media (min-width: 1024px) {
-  .final-desk.call-center .rail-toggle { display: none; }
+  /* Dialer mode: no side menu. The brand and the switch back to the desk sit in the header. */
+  .final-desk.call-center .rail { display: none; }
+  .final-desk.call-center .top .top-dialer { display: inline-flex; align-items: center; gap: 14px; margin-right: 12px; }
+  .final-desk.call-center .top-brand { font-family: var(--font-fraunces), serif; font-weight: 500; font-size: 20px; color: var(--navy); white-space: nowrap; }
+  .final-desk.call-center .top-brand .flo { color: var(--teal); }
+  .final-desk.call-center .top .dialer-switch { color: var(--ink); }
+  .final-desk.call-center .top .dialer-switch:hover { background: rgba(18, 32, 44, .05); }
+}
+@media (max-width: 1023.98px) {
+  .final-desk.call-center .top .top-dialer { display: none; }
+  .final-desk.call-center .rail .rail-dialer { margin: 0 0 0 auto; color: #e8eeed; }
 }
 
 @media (max-width: 767.98px) {

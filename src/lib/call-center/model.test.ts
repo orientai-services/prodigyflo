@@ -124,11 +124,9 @@ describe('call center door', () => {
     expect(bundle).not.toMatch(/\bfetch\s*\(/)
     expect(bundle).not.toMatch(/from ['"]twilio|graph\.facebook|meta\.com|process\.env|\bSES\b|\$\d/)
     expect(screen).not.toMatch(/router\.push/)
-    expect(screen).toContain('<Link')
-    expect(screen).toContain('href={item.href}')
-    for (const href of ['/board', '/pipeline', '/clients', '/queue', '/call-center', '/documents', '/submissions']) {
-      expect(screen).toContain(`href: '${href}'`)
-    }
+    // Dialer mode: the desk menu stays off this screen; one switch leads back to the Board.
+    expect(screen).toContain('DialerModeSwitch')
+    expect(screen).not.toContain("label: 'Call Center'")
     expect(screen).toContain('Call anyway')
     expect(screen).toContain('Send intake link')
     expect(screen).toContain('Save note')
@@ -138,7 +136,6 @@ describe('call center door', () => {
     expect(model).toContain(INTAKE_QUEUED)
     expect(model).toContain(HELD_UNTIL_MORNING)
     expect(screen).toContain('Spanish page later')
-    expect(screen).toContain('aria-current="page"')
     expect(screen).toContain('lead.subtitle')
     expect(screen).toContain("if (next === 'es') setTab('all')")
     expect(screen).not.toContain('rail-foot')
