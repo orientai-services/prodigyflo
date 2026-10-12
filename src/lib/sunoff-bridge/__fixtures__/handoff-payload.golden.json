@@ -1,0 +1,488 @@
+{
+  "version": "pf-handoff/v1",
+  "pf_lead_id": "pf:<org>:<lead>",
+  "pf_client_id": "<client>",
+  "rep": {
+    "pf_user_id": "<rep>",
+    "name": "Gatsby Rep",
+    "email": "gatsby@example.test"
+  },
+  "contact": {
+    "first": "Mara",
+    "last": "Example",
+    "email": "mara.<run>@example.test",
+    "phone": "<phone>",
+    "address": {
+      "line1": "123 Sun St",
+      "line2": "Unit 4",
+      "city": "Las Vegas",
+      "state": "NV",
+      "zip": "89101"
+    },
+    "language": "es"
+  },
+  "facts": {
+    "client.first": {
+      "v": "Mara",
+      "src": "pf"
+    },
+    "client.last": {
+      "v": "Example",
+      "src": "pf"
+    },
+    "client.email": {
+      "v": "mara.<run>@example.test",
+      "src": "pf"
+    },
+    "client.phone": {
+      "v": "<phone>",
+      "src": "pf"
+    },
+    "client.address": {
+      "v": "123 Sun St Unit 4",
+      "src": "pf"
+    },
+    "client.city": {
+      "v": "Las Vegas",
+      "src": "pf"
+    },
+    "client.state": {
+      "v": "NV",
+      "src": "pf"
+    },
+    "client.zip": {
+      "v": "89101",
+      "src": "pf"
+    },
+    "client.language": {
+      "v": "es",
+      "src": "pf"
+    },
+    "client.mailing_address": {
+      "v": null,
+      "src": null
+    },
+    "client.sole_owner": {
+      "v": true,
+      "src": "pf"
+    },
+    "client.contract_names": {
+      "v": null,
+      "src": null
+    },
+    "client.property_type": {
+      "v": "single_family",
+      "src": "pf"
+    },
+    "client.age_band": {
+      "v": "65_plus",
+      "src": "pf"
+    },
+    "client.language_barrier": {
+      "v": null,
+      "src": null
+    },
+    "system.sales_company": {
+      "v": null,
+      "src": null
+    },
+    "system.installer": {
+      "v": "Sunrun Installs",
+      "src": "pf"
+    },
+    "system.installer_status": {
+      "v": "active",
+      "src": "pf"
+    },
+    "system.size_kw": {
+      "v": null,
+      "src": null
+    },
+    "system.install_year": {
+      "v": null,
+      "src": null
+    },
+    "system.permit_no": {
+      "v": null,
+      "src": null
+    },
+    "system.producing": {
+      "v": null,
+      "src": null
+    },
+    "finance.contract_type": {
+      "v": "loan",
+      "src": "pf_verified"
+    },
+    "finance.finance_company": {
+      "v": "GoodLeap",
+      "src": "pf_verified"
+    },
+    "finance.balance": {
+      "v": 48000,
+      "src": "pf"
+    },
+    "finance.apr": {
+      "v": 3.99,
+      "src": "pf_verified"
+    },
+    "finance.escalator_pct": {
+      "v": null,
+      "src": null
+    },
+    "finance.term_years": {
+      "v": 25,
+      "src": "pf"
+    },
+    "finance.monthly": {
+      "v": 212.5,
+      "src": "pf_verified"
+    },
+    "finance.payments_made": {
+      "v": null,
+      "src": null
+    },
+    "finance.ucc_filed": {
+      "v": null,
+      "src": null
+    },
+    "sale.signed_year": {
+      "v": 2021,
+      "src": "pf"
+    },
+    "sale.signed_where": {
+      "v": null,
+      "src": null
+    },
+    "sale.three_day_notice": {
+      "v": null,
+      "src": null
+    },
+    "sale.got_copies": {
+      "v": null,
+      "src": null
+    },
+    "sale.first_contact": {
+      "v": "door",
+      "src": "pf"
+    },
+    "sale.first_contact_other": {
+      "v": null,
+      "src": null
+    },
+    "sale.presentation_where": {
+      "v": null,
+      "src": null
+    },
+    "sale.presentation_length": {
+      "v": null,
+      "src": null
+    },
+    "sale.tactics": {
+      "v": [
+        "limited_time",
+        "sign_now"
+      ],
+      "src": "pf"
+    },
+    "sale.credit_check": {
+      "v": null,
+      "src": null
+    },
+    "issue.promises": {
+      "v": null,
+      "src": null
+    },
+    "issue.promised": {
+      "v": [
+        "no_cost",
+        "free"
+      ],
+      "src": "pf"
+    },
+    "issue.promised_other": {
+      "v": null,
+      "src": null
+    },
+    "issue.misled": {
+      "v": null,
+      "src": null
+    },
+    "issue.bill_change": {
+      "v": null,
+      "src": null
+    },
+    "issue.told_bill_lower": {
+      "v": null,
+      "src": null
+    },
+    "issue.performance": {
+      "v": null,
+      "src": null
+    },
+    "issue.install_problems": {
+      "v": null,
+      "src": null
+    },
+    "issue.service_problems": {
+      "v": null,
+      "src": null
+    },
+    "issue.complaints_filed": {
+      "v": null,
+      "src": null
+    },
+    "issue.selling_home": {
+      "v": null,
+      "src": null
+    },
+    "issue.sale_blocked": {
+      "v": null,
+      "src": null
+    },
+    "issue.hardship": {
+      "v": null,
+      "src": null
+    },
+    "issue.outcome_wanted": {
+      "v": [
+        "cancel",
+        "remove_lien"
+      ],
+      "src": "pf"
+    },
+    "issue.main_issue": {
+      "v": "bill_higher",
+      "src": "pf"
+    },
+    "issue.reasons": {
+      "v": [
+        "zero_bill_promise",
+        "high_pressure_tactics"
+      ],
+      "src": "pf"
+    },
+    "utility.name": {
+      "v": null,
+      "src": null
+    },
+    "utility.account": {
+      "v": null,
+      "src": null
+    }
+  },
+  "intake_verbatim": [
+    {
+      "q": "Who installed it?",
+      "a": "Sunrun Installs"
+    },
+    {
+      "q": "pain type",
+      "a": "bill_higher"
+    },
+    {
+      "q": "pain narrative",
+      "a": "They said my bill would be zero."
+    },
+    {
+      "q": "experience flags",
+      "a": "promised_offset, in_home_sale, payment_increase"
+    }
+  ],
+  "questionnaire": {
+    "version": 14,
+    "status": "in_progress",
+    "current_step": 4,
+    "answers": {
+      "legal_name": "Mara Example",
+      "prop_addr": "123 Sun St, Unit 4, Las Vegas, NV, 89101",
+      "mail_same": "",
+      "phone": "<phone>",
+      "email": "mara.<run>@example.test",
+      "sole_owner": "Yes",
+      "on_contract": "",
+      "prop_type": "Single-family home",
+      "sales_co": "",
+      "install_co": "Sunrun Installs",
+      "lender": "GoodLeap",
+      "agree_type": [
+        "Loan"
+      ],
+      "year_signed": "",
+      "sign_where": "",
+      "notice_3day": "",
+      "got_copies": "",
+      "first_contact": "Door-to-door salesperson",
+      "pres_where": "",
+      "pres_len": "",
+      "pressure": [
+        "Limited-time offer",
+        "Told I had to sign immediately"
+      ],
+      "promises": [
+        "\"No cost solar\" / \"Free solar\""
+      ],
+      "misled": "",
+      "untrue": "",
+      "mo_pay": "$199",
+      "term_yrs": "25 years (300 months)",
+      "escalator": "",
+      "combo_bill": "",
+      "told_lower": "",
+      "working": "",
+      "perf": [],
+      "install": [],
+      "service": [],
+      "oob": "No",
+      "complaints": [],
+      "selling": "",
+      "sale_issue": "",
+      "ucc": "",
+      "age": "65+",
+      "le": "",
+      "credit_ck": "",
+      "hardship": [],
+      "goal": [
+        "Cancel the contract entirely",
+        "Remove lien"
+      ]
+    },
+    "unmapped": []
+  },
+  "story": {
+    "transcript": "They said my bill would be zero.",
+    "transcript_lang": "es",
+    "testimonial": null
+  },
+  "issue": {
+    "main_issue": "bill_higher",
+    "reasons": [
+      "zero_bill_promise",
+      "high_pressure_tactics"
+    ],
+    "flags": [
+      "promised_offset",
+      "in_home_sale",
+      "payment_increase"
+    ],
+    "theories": [],
+    "urgency": null
+  },
+  "dates": {
+    "contract_signed_at": "2021-06-15T00:00:00.000Z",
+    "first_payment": null,
+    "in_service": null,
+    "intake_received_at": null,
+    "lead_created_at": "2026-10-01T15:59:00.000Z",
+    "consent_at": "2026-10-01T16:00:00.000Z"
+  },
+  "appointment": {
+    "starts_at": "2030-03-05T17:00:00.000Z",
+    "ends_at": "2030-03-05T18:30:00.000Z",
+    "type": "PRESENTATION",
+    "timezone": "America/Los_Angeles"
+  },
+  "documents": [
+    {
+      "id": "<id>",
+      "file_name": "huge-scan.pdf",
+      "mime": "application/pdf",
+      "size": 27262976,
+      "sha256": null,
+      "category": "other",
+      "cys_slot": null,
+      "url": null,
+      "skipped": "over_25mb"
+    },
+    {
+      "id": "<id>",
+      "file_name": "NV Energy bill.pdf",
+      "mime": "application/pdf",
+      "size": 10,
+      "sha256": null,
+      "category": "electric_bills",
+      "cys_slot": "electric_bills",
+      "url": "/api/bridge/sunoff/files/HANDOFF/<id>",
+      "skipped": null
+    },
+    {
+      "id": "<doc:contract>",
+      "file_name": "GoodLeap loan agreement.pdf",
+      "mime": "application/pdf",
+      "size": 30,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "category": "finance_agreement",
+      "cys_slot": "finance_agreement",
+      "url": "/api/bridge/sunoff/files/HANDOFF/<doc:contract>",
+      "skipped": null
+    },
+    {
+      "id": "packet-review",
+      "file_name": "Case review.pdf",
+      "mime": "application/pdf",
+      "size": null,
+      "sha256": null,
+      "category": "pf_internal",
+      "cys_slot": null,
+      "url": "/api/bridge/sunoff/files/HANDOFF/packet-review",
+      "skipped": null
+    },
+    {
+      "id": "packet-pitch",
+      "file_name": "Closer pitch.pdf",
+      "mime": "application/pdf",
+      "size": null,
+      "sha256": null,
+      "category": "pf_internal",
+      "cys_slot": null,
+      "url": "/api/bridge/sunoff/files/HANDOFF/packet-pitch",
+      "skipped": null
+    }
+  ],
+  "internal": {
+    "brief": {
+      "content": {
+        "approved": true,
+        "situation": "Loan with a zero-bill promise."
+      },
+      "approved": true,
+      "generated_at": "<generated>"
+    },
+    "rights": {
+      "state": [
+        "Nevada unfair / deceptive practices (UDAP) statute: savings or offset claims are measured against this contract and the bills on file. Do not invent a utility rate, a bill amount, or a production number.",
+        "Nevada (NV): home-solicitation cooling-off is 3 business days if this was sold away from the seller’s place of business. Confirm sale location.",
+        "Nevada contractor desk: Nevada State Contractors Board (NSCB). File there in parallel with the lender demand — not as the first sentence of the call.",
+        "Nevada UDAP: Nevada unfair / deceptive practices (UDAP) statute. Sales-practice / savings-claim files run here after the packet is documented.",
+        "AG desk: Nevada Attorney General — consumer protection.",
+        "Nevada recovery / guaranty path: Nevada Recovery Fund (if eligible). Cite only if this installer/job is eligible — confirm before promising a fund payout.",
+        "Nevada solar overlay: Nevada residential contractor disclosures, mechanics-lien warnings, and Recovery Fund notices often appear on the install agreement. Use only if they are on THIS packet."
+      ],
+      "federal": [
+        "Federal FTC Cooling-Off Rule (16 CFR 429): 3 business days to cancel a sale made at the home or a temporary location, not at the seller’s place of business. Confirm the sale location from the packet / sales trail. If the 3-day notice is missing on an in-home sale, that is a federal notice defect — not a guess.",
+        "Federal TILA / Regulation Z: APR, amount financed, finance charge, and payment schedule on the loan/lease paper must match what was disclosed. Pull the TILA box. Do not invent APR. A disclosure mismatch is a TILA lever; it is not automatic loan death.",
+        "Federal TILA rescission (15 U.S.C. § 1635): the 3-business-day right to rescind applies only if this credit is secured by the client’s principal dwelling. An equipment-only UCC-1 on the panels often is NOT dwelling-secured. Confirm the security language on the note before using rescission talk. If it is a refinance/home-equity style solar loan, rescission may still be in play — only after the paper says so.",
+        "Federal FTC Holder Rule (16 CFR 433): if the consumer credit contract contains the Holder Notice (“ANY HOLDER OF THIS CONSUMER CREDIT CONTRACT IS SUBJECT TO ALL CLAIMS AND DEFENSES…”), installer misrepresentation / breach / warranty claims can be raised against the lender as defenses. If the notice is not on THIS note, do not assume Holder.",
+        "Sale looks in-home / tablet. Stack FTC Cooling-Off + this state’s home-solicitation statute. Missing cancellation-notice forms are a notice defect. Confirm copies in the packet."
+      ]
+    },
+    "documents": [
+      "packet-review",
+      "packet-pitch"
+    ]
+  },
+  "consent": {
+    "consent_at": "2026-10-01T16:00:00.000Z",
+    "source": "lead_form",
+    "text_version": "pf-scs-2026-10-01",
+    "revoked_at": null,
+    "do_not_call_at": null
+  },
+  "attribution": {
+    "adId": "ad-1",
+    "formId": "form-1",
+    "campaignId": "camp-1"
+  },
+  "revision": "<sha256>",
+  "purpose": "handoff"
+}
