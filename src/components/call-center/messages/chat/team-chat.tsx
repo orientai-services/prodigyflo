@@ -144,8 +144,10 @@ function reducer(s: State, a: Action): State {
     case 'presence':
       return { ...s, online: { ...s.online, [a.uid]: a.online } }
     case 'bump': {
-      // A new reply: the root's count and "last reply" move (C6).
-      const fix = (list: Message[]) => list.map((m) => (m.id === a.root ? { ...m, reply_count: m.reply_count + 1, last_reply_at: Math.max(m.last_reply_at ?? 0, a.at) } : m))
+      // A new reply: the root's count and "last reply" move (C6). The Worker also sends the root itself (an
+      // `edit` with the absolute count and last_reply_at = the reply's time); when that came first, don't add again.
+      const fix = (list: Message[]) =>
+        list.map((m) => (m.id === a.root && (m.last_reply_at ?? 0) < a.at ? { ...m, reply_count: m.reply_count + 1, last_reply_at: a.at } : m))
       const cur = s.panes[a.channel]
       return { ...s, panes: cur ? { ...s.panes, [a.channel]: { ...cur, list: fix(cur.list) } } : s.panes, thread: s.thread ? { ...s.thread, list: fix(s.thread.list) } : null }
     }
