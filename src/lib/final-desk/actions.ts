@@ -9,6 +9,8 @@ import { createInvite, resetInviteLink } from '@/lib/invites'
 import { getEmailProvider, isMockMode } from '@/lib/messaging'
 import { QUESTIONNAIRE_NAME, QUESTIONNAIRE_VERSION, QUESTION_SECTIONS, QUESTIONS, answerCount, validateAnswers } from './questions'
 import { finalDeskEnabled, loadFinalDesk, loadFinalQuestionnaire } from './data'
+import { normalizeApn } from '@/lib/property-records/contract'
+import { requeueWithStaffApn } from '@/lib/property-records/jobs'
 
 const saveSchema = z.object({ clientId: z.string().min(1), answers: z.unknown(), touched: z.array(z.string()).max(42),
   page: z.number().int().min(0).max(8), revision: z.number().int().min(0), complete: z.boolean().default(false) })
@@ -85,4 +87,20 @@ export async function inviteFinalCloser(raw: unknown): Promise<{ ok: boolean; er
     if (result.status !== 'SENT') throw Error('Email delivery failed; the invitation remains pending and can be resent')
     return { ok: true, message: 'Invitation sent' }
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Could not send invitation' } }
+}
+
+/** Staff enters the county parcel number (APN) when the county has not listed the house yet. Re-queues the records lookup with it. */
+export async function enterParcelApn(raw: unknown): Promise<{ ok: boolean; error?: string; message?: string }> {
+  try {
+    if (!finalDeskEnabled()) throw Error('Final desk is not enabled')
+    const input = z.object({ clientId: z.string().min(1).max(64), apn: z.string().min(1).max(32) }).parse(raw)
+    const apn = normalizeApn(input.apn)
+    if (!apn) throw Error('Enter the parcel number as 123-45-678-901')
+    const user = await requirePermission('clients:update')
+    const client = await db.client.findFirst({ where: { AND: [clientScope(user), { id: input.clientId }] }, select: { id: true } })
+    if (!client) throw Error('Client not found or outside your scope')
+    const job = await requeueWithStaffApn({ clientId: client.id, organizationId: user.organizationId, apn })
+    await recordAudit(user, { action: 'records.staff_apn.entered', entityType: 'PropertyRecordsJob', entityId: job.id, summary: `Parcel ${apn} entered; county records lookup re-queued` })
+    return { ok: true, message: `Parcel ${apn} saved — county records lookup re-queued` }
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Could not save the parcel number' } }
 }

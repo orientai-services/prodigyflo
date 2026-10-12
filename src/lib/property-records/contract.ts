@@ -14,9 +14,9 @@ export function addressVersion(address:PropertyAddress) {return createHash('sha2
 export const PERMIT_REASONS=['no_solar_permit','outside_service_area','needs_human_check','login_required','lookup_failed'] as const
 export const PERMIT_REASON_TEXT:Record<typeof PERMIT_REASONS[number],string>={no_solar_permit:'no solar permit on record',outside_service_area:'outside service area',needs_human_check:'needs human check',login_required:'portal needs a login',lookup_failed:'lookup failed'}
 export const recordsResult=z.object({version:z.literal('property-records-v1'),case_key:z.string(),address_version:z.string(),address:addressSchema,
-  parcel:z.object({id:z.string(),address:addressSchema,source_url:z.string(),match_method:z.enum(['exact','fuzzy_street']).optional(),assessor_address:z.string().nullable().optional()}).nullable(),
-  status:z.enum(['complete','partial','no_match','unsupported','paused']),
-  outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused','assessor_copy','recorder_record_summary','permit_record_page','no_permit_found']),reason:z.enum(PERMIT_REASONS).optional(),retry_after:z.string().datetime().optional(),source_url:z.string().optional(),detail:z.string().optional(),address_tried:z.string().optional(),match_method:z.enum(['exact','fuzzy_street']).optional()})),
+  parcel:z.object({id:z.string(),address:addressSchema,source_url:z.string(),match_method:z.enum(['exact','fuzzy_street','staff_apn']).optional(),assessor_address:z.string().nullable().optional()}).nullable(),
+  status:z.enum(['complete','partial','no_match','unsupported','paused','not_listed']),
+  outcomes:z.array(z.object({source:z.string(),kind:z.enum(['parcel','permit','deed','ucc']),status:z.enum(['original','index_only','no_match','unsupported','failed','budget_paused','assessor_copy','recorder_record_summary','permit_record_page','no_permit_found','not_listed']),retryable:z.boolean().optional(),reason:z.enum(PERMIT_REASONS).optional(),retry_after:z.string().datetime().optional(),source_url:z.string().optional(),detail:z.string().optional(),address_tried:z.string().optional(),match_method:z.enum(['exact','fuzzy_street','staff_apn']).optional()})),
   originals:z.array(z.object({url:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/),mime:z.string(),filename:z.string(),category:z.enum(['deed','ucc','permit']),source_url:z.string(),provenance:z.enum(['assessor_copy','recorder_record_summary','city_permit','recorder_unofficial_copy','original','permit_record_page']).optional(),record_key:z.string().regex(/^(deed|ucc|permit):[A-Za-z0-9:._-]{1,160}$/).optional(),amendment_only:z.boolean().optional()})),cached:z.boolean()})
 export type RecordsOriginal=z.infer<typeof recordsResult>['originals'][number]
 export const AMENDMENT_ONLY_LABEL='amendment only, original not on index'
@@ -61,10 +61,20 @@ export function addressNotFoundNote(result:unknown):string|null {
   const tried=parcel?.address_tried||[a.line1,a.city,a.state,a.postal_code].filter(v=>typeof v==='string'&&v).join(', ')
   return `Address not found at county — check spelling${tried?` (tried: ${tried})`:''}`
 }
+/** The county locator knows the house but the assessor does not list its parcel yet (usually a recent, unrecorded sale). Never guessed. */
+export const NOT_LISTED_NOTE='Parcel not yet listed at county (recent sale?)'
+export const NOT_LISTED_RETRY_MS=24*60*60_000
+export const NOT_LISTED_GIVE_UP_MS=30*24*60*60_000
+/** Clark County APN: 176-28-115-071 or 17628115071. Returns the dashed form, or null. */
+export function normalizeApn(value:string):string|null {
+  const m=value.trim().match(/^(\d{3})-?(\d{2})-?(\d{3})-?(\d{3})$/)
+  return m?`${m[1]}-${m[2]}-${m[3]}-${m[4]}`:null
+}
 /** Staff-facing line for a records job that has not completed: retrying, or stopped for a human. */
 export function recordsJobStatusNote(job:{status:string;error?:string|null}|null|undefined):string|null {
   if(!job) return null
   if(job.status==='PENDING'||job.status==='RUNNING') return 'County records lookup in progress'
+  if(job.status==='NOT_LISTED') return `${NOT_LISTED_NOTE} — retrying daily; staff can enter the parcel number`
   if(job.status==='FAILED') return 'County records temporarily unavailable — retrying automatically'
   if(job.status==='PAUSED') return `Records lookup needs human check${job.error?` — ${job.error.replace(/^Needs human check after repeated failures: /,'')}`:''}`
   return null
