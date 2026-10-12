@@ -11,7 +11,6 @@ import {
   revealCallCenterContact,
   saveCallCenterNote,
   saveCallCenterOutcome,
-  sendCallCenterIntakeLink,
   skipCallCenterLead,
   takeCallCenterLead,
 } from '@/lib/call-center/actions'
@@ -50,7 +49,6 @@ import {
   canCall,
   canRecordOutcome,
   canSaveNote,
-  canSendIntake,
   canTake,
   canText,
   channelLabel,
@@ -70,12 +68,14 @@ import {
   triesLine,
   visibleLeads,
   type CallLead,
+  type IntakeMode,
   type LanguageFilter,
   type LeadOutcome,
 } from '@/lib/call-center/model'
 import { SectionNav } from './app-nav'
 import { CallbackScheduler } from './callback-scheduler'
 import { DialPad } from './dial-pad'
+import { HandoffGroup, LeadProfile, useLeadHandoff } from './lead-profile'
 import { MoreSheet } from './more-sheet'
 import { PhoneStatusPill, usePhoneStatus } from './phone-pill'
 import { BookVisit } from './calendar/scheduler'
@@ -98,6 +98,15 @@ function matches(query: string): boolean {
 
 function onPhone(): boolean {
   return matches(PHONE_QUERY)
+}
+
+/** A desk action's lead doesn't read the Client link or the texting gate: keep what the desk had. */
+function keepLinks(before: CallLead, next: CallLead): CallLead {
+  return {
+    ...next,
+    clientId: next.clientId !== undefined ? next.clientId : before.clientId,
+    intakeTextBlock: next.intakeTextBlock !== undefined ? next.intakeTextBlock : before.intakeTextBlock,
+  }
 }
 
 function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (lead: CallLead) => void }) {
@@ -198,6 +207,9 @@ export function CallCenter({
   const [language, setLanguage] = useState<LanguageFilter>('all')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(phone.openLeadId ?? null)
+  /** Below 1024 the lead sheet has two tabs: the lead itself and the Client profile. */
+  const [detailTab, setDetailTab] = useState<'lead' | 'profile'>('lead')
+  const profileRef = useRef<HTMLElement>(null)
   // `?lead=` can change on this mounted screen (the Calendar's Open lead, a Messages link): open that lead.
   const [leadSeen, setLeadSeen] = useState(phone.openLeadId ?? null)
   if ((phone.openLeadId ?? null) !== leadSeen) {
@@ -247,7 +259,7 @@ export function CallCenter({
     // Functional: power mode replaces leads from async steps.
     setDraft((prev) => {
       const base = prev && prev.source === initialLeads ? prev.leads : (initialLeads ?? seedLeads())
-      return { source: initialLeads, leads: base.map((lead) => (lead.id === next.id ? next : lead)) }
+      return { source: initialLeads, leads: base.map((lead) => (lead.id === next.id ? keepLinks(lead, next) : lead)) }
     })
   }
 
@@ -334,6 +346,22 @@ export function CallCenter({
   const revealLeadId = selected?.persisted && viewerId && selected.lockedBy === viewerId && !selected.dnc
     ? selected.id
     : null
+  const handoff = useLeadHandoff({
+    lead: selected,
+    rep: who,
+    holds: selected ? holding(selected) : false,
+    admin: viewer?.role === 'SUPER_ADMIN',
+    now: clock,
+    onChanged: () => router.refresh(),
+    onPreview: (lead: CallLead, mode: IntakeMode) => {
+      const at = stamp()
+      replace({ ...sendIntakeLink(lead, at), intake: { sentAt: at, mode } })
+    },
+  })
+  function openProfile() {
+    setDetailTab('profile')
+    if (!matches(TABBAR_QUERY)) profileRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
   const dialPhone = revealLeadId && dial?.leadId === revealLeadId ? dial.phone : null
   const dialEmail = revealLeadId && dial?.leadId === revealLeadId ? dial.email : null
   // Power mode: no new dial until the last call has its result.
@@ -374,6 +402,7 @@ export function CallCenter({
   function openLead(lead: CallLead) {
     if (lead.disabled) return
     setSelectedId(lead.id)
+    setDetailTab('lead')
     setNote('')
     setNow(new Date().toISOString())
   }
@@ -709,7 +738,7 @@ export function CallCenter({
             <MissedCalls calls={missed} openId={phone.openMissedId ?? null} canOverrideHours={phone.canOverrideHours} />
           </div>
         ) : (
-            <div className="split">
+            <div className={`split${selected ? ' profile-on' : ''}`}>
               {section === 'today' ? (
                 <TodayView
                   board={board}
@@ -757,7 +786,7 @@ export function CallCenter({
               )}
               <article
                 ref={detailRef}
-                className={`card block detail${selected ? ' open' : ''}`}
+                className={`card block detail${selected ? ` open has-profile tab-${detailTab}` : ''}`}
                 aria-label={selected ? `Lead: ${selected.name}` : undefined}
               >
                 {selected ? (
@@ -768,6 +797,12 @@ export function CallCenter({
                       </button>
                       <span className="detail-bar-name">{selected.name}</span>
                     </div>
+                    <div className="detail-tabs" role="tablist" aria-label="Lead panel">
+                      <button type="button" role="tab" aria-selected={detailTab === 'lead'} className={detailTab === 'lead' ? 'on' : ''} onClick={() => setDetailTab('lead')}>Lead</button>
+                      <button type="button" role="tab" aria-selected={detailTab === 'profile'} className={detailTab === 'profile' ? 'on' : ''} onClick={() => setDetailTab('profile')}>Profile</button>
+                    </div>
+                    <div className="detail-cols">
+                    <div className="lead-main">
                     <div className="tags">
                       <span className="tag">{badgeLabel(selected.channel)}</span>
                       <span className="tag">{languageLabel(selected.language)}</span>
@@ -902,16 +937,7 @@ export function CallCenter({
                         )
                       : null}
                     <h3>Handoff</h3>
-                    <div className="actions solo">
-                      <button
-                        type="button"
-                        className="btn secondary"
-                        disabled={!canSendIntake(selected, who) || !holding(selected)}
-                        onClick={() => { void commit(selected, () => sendCallCenterIntakeLink(selected.id), () => replace(sendIntakeLink(selected, stamp()))) }}
-                      >
-                        Send intake link
-                      </button>
-                    </div>
+                    <HandoffGroup api={handoff} onOpenProfile={openProfile} />
                     <h3>Note</h3>
                     <textarea
                       ref={noteRef}
@@ -955,6 +981,11 @@ export function CallCenter({
                         </li>
                       ))}
                     </ol>
+                    </div>
+                    <aside ref={profileRef} className="lead-profile-col" aria-label="Client profile">
+                      <LeadProfile api={handoff} now={clock} sheetHost={sheetHost} />
+                    </aside>
+                    </div>
                   </>
                 ) : (
                   <>
