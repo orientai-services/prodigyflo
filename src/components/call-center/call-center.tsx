@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarDays, Grid3x3, Megaphone, Phone, Settings2 } from 'lucide-react'
+import { Grid3x3 } from 'lucide-react'
 import {
   recordCallCenterAttempt,
   recordCallCenterText,
@@ -65,7 +65,7 @@ import {
 } from '@/lib/call-center/model'
 import { CallbackScheduler } from './callback-scheduler'
 import { DialPad } from './dial-pad'
-import { PhonePill, PhoneSheet, usePhoneStatus } from './phone-pill'
+import { PhoneStatusPill } from './phone-pill'
 import { BookVisit } from './calendar/scheduler'
 import { PowerBar, WrapUp } from './power-panel'
 import { TodayView } from './today-view'
@@ -197,13 +197,8 @@ export function CallCenter({
   const [help, setHelp] = useState(false)
   const [padOpen, setPadOpen] = useState(false)
   const padButtonRef = useRef<HTMLButtonElement>(null)
-  /** The phone pill's sheet (settings + Test connection) and the owner's Phone setup sheet. */
-  const [phoneOpen, setPhoneOpen] = useState(false)
+  /** The owner's Phone setup sheet: its header button, or the phone pill's sheet, opens it. */
   const [setupOpen, setSetupOpen] = useState(false)
-  const pillRef = useRef<HTMLButtonElement>(null)
-  /** The phone's bottom button bar: its buttons open the same sheets. */
-  const barRef = useRef<HTMLElement>(null)
-  const phoneStatus = usePhoneStatus(phone.voiceNote)
   const detailRef = useRef<HTMLElement>(null)
   /** The desk root, where the phone's bottom sheets mount. */
   const [sheetHost, setSheetHost] = useState<HTMLDivElement | null>(null)
@@ -435,7 +430,6 @@ export function CallCenter({
         return true
       case 'close':
         if (padOpen) setPadOpen(false)
-        else if (phoneOpen) setPhoneOpen(false)
         else if (help) setHelp(false)
         else if (booking) setBooking(null)
         else if (scheduling) setScheduling(null)
@@ -488,30 +482,13 @@ export function CallCenter({
       <DialPad
         canOverrideHours={phone.canOverrideHours}
         disabled={resultOwed}
-        ignore={onPhone() ? barRef : padButtonRef}
+        ignore={padButtonRef}
         onClose={() => setPadOpen(false)}
       />
     )
     // Like the scheduler: a bottom sheet at the desk root on a phone, a popover under the button on a desk.
     return sheetHost && onPhone() ? createPortal(pad, sheetHost) : pad
   }
-
-  function phoneSheet() {
-    const sheet = (
-      <PhoneSheet
-        status={phoneStatus}
-        pill={pillRef}
-        bar={barRef}
-        onClose={() => setPhoneOpen(false)}
-        onOpenSetup={phone.setup ? () => setSetupOpen(true) : undefined}
-      />
-    )
-    // Same as the dial pad: a bottom sheet at the desk root on a phone, a popover under the pill on a desk.
-    return sheetHost && onPhone() ? createPortal(sheet, sheetHost) : sheet
-  }
-
-  /** On a phone the bottom bar gives way to the call bar during a call or while a dial error shows. */
-  const callBarUp = Boolean(voice && (voice.status !== 'idle' || voice.error))
 
   const refresh = useCallback(() => router.refresh(), [router])
   useLiveRefresh(refresh, () => {
@@ -526,7 +503,6 @@ export function CallCenter({
         'final-desk call-center',
         power.on ? 'power-on' : '',
         selected ? 'detail-open' : '',
-        callBarUp ? '' : 'bar-on',
       ].filter(Boolean).join(' ')}
     >
       <div className="shell">
@@ -597,17 +573,14 @@ export function CallCenter({
                 <PhoneSetupSheet
                   setup={phone.setup.vm}
                   status={phone.setup.status}
-                  triggerClassName="btn secondary setup-btn"
+                  triggerClassName="btn secondary"
                   open={setupOpen}
                   onOpenChange={setSetupOpen}
                 />
               ) : null}
             </div>
             {/* The phone's state at a glance; its sheet holds the settings and the test. */}
-            <span className="phone-anchor">
-              <PhonePill ref={pillRef} status={phoneStatus} open={phoneOpen} onToggle={() => setPhoneOpen((open) => !open)} />
-              {phoneOpen ? phoneSheet() : null}
-            </span>
+            <PhoneStatusPill voiceNote={phone.voiceNote} onOpenSetup={phone.setup ? () => setSetupOpen(true) : undefined} />
           </header>
           <main className="main">
             <div className="page-title">
@@ -666,14 +639,14 @@ export function CallCenter({
                   type="button"
                   role="tab"
                   aria-selected={view === 'ads'}
-                  className={view === 'ads' ? 'on wide-only' : 'wide-only'}
+                  className={view === 'ads' ? 'on' : ''}
                   onClick={() => setView('ads')}
                 >
                   Ads
                 </button>
               ) : adsAllowed ? (
                 // The dashboard renders on the server, so the first open is a navigation.
-                <Link role="tab" aria-selected={false} className="wide-only" href="/call-center?tab=ads">
+                <Link role="tab" aria-selected={false} href="/call-center?tab=ads">
                   Ads
                 </Link>
               ) : null}
@@ -682,14 +655,14 @@ export function CallCenter({
                   type="button"
                   role="tab"
                   aria-selected={view === 'calendar'}
-                  className={view === 'calendar' ? 'on wide-only' : 'wide-only'}
+                  className={view === 'calendar' ? 'on' : ''}
                   onClick={() => setView('calendar')}
                 >
                   Calendar
                 </button>
               ) : calendarAllowed ? (
                 // The planner renders on the server, so the first open is a navigation.
-                <Link role="tab" aria-selected={false} className="wide-only" href="/call-center?tab=calendar">
+                <Link role="tab" aria-selected={false} href="/call-center?tab=calendar">
                   Calendar
                 </Link>
               ) : null}
@@ -958,75 +931,6 @@ export function CallCenter({
           </main>
         </div>
       </div>
-      {/* Phones: the tools that leave the header and the tab strip, in thumb reach. */}
-      <nav ref={barRef} className="cc-bottom-bar" aria-label="Call Center tools">
-        {adsAllowed ? (
-          ads ? (
-            <button type="button" className={view === 'ads' ? 'on' : ''} aria-pressed={view === 'ads'} onClick={() => setView('ads')}>
-              <Megaphone aria-hidden="true" />
-              Ads
-            </button>
-          ) : (
-            <Link href="/call-center?tab=ads">
-              <Megaphone aria-hidden="true" />
-              Ads
-            </Link>
-          )
-        ) : null}
-        {calendarAllowed ? (
-          calendar ? (
-            <button type="button" className={view === 'calendar' ? 'on' : ''} aria-pressed={view === 'calendar'} onClick={() => setView('calendar')}>
-              <CalendarDays aria-hidden="true" />
-              Calendar
-            </button>
-          ) : (
-            <Link href="/call-center?tab=calendar">
-              <CalendarDays aria-hidden="true" />
-              Calendar
-            </Link>
-          )
-        ) : null}
-        <button
-          type="button"
-          className={padOpen ? 'on' : ''}
-          aria-haspopup="dialog"
-          aria-expanded={padOpen}
-          onClick={() => {
-            setPhoneOpen(false)
-            setPadOpen((open) => !open)
-          }}
-        >
-          <Grid3x3 aria-hidden="true" />
-          Dial pad
-        </button>
-        {phone.setup ? (
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            onClick={() => {
-              setPadOpen(false)
-              setSetupOpen(true)
-            }}
-          >
-            <Settings2 aria-hidden="true" />
-            Phone setup
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={phoneOpen ? 'on' : ''}
-            aria-haspopup="dialog"
-            aria-expanded={phoneOpen}
-            onClick={() => {
-              setPadOpen(false)
-              setPhoneOpen((open) => !open)
-            }}
-          >
-            <Phone aria-hidden="true" />
-            Phone settings
-          </button>
-        )}
-      </nav>
       {help ? (
         <div className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={() => setHelp(false)}>
           <div className="card block" onClick={(event) => event.stopPropagation()}>
