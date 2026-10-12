@@ -195,7 +195,7 @@ export function useLeadHandoff({ lead, rep, holds, admin, now, onChanged, onPrev
       const result = await provisionSunoffUser()
       if (result.ok) {
         setNeedsSunoff(null)
-        say(`SunOff account created. Check ${result.email} for the set-password link, then press CYS Sign up again.`)
+        say(result.message ?? `SunOff account created. Check ${result.email} for the set-password link, then press CYS Sign up again.`)
       } else say(result.reason)
     } catch {
       say('Could not reach the server. Try again.')

@@ -8,7 +8,8 @@
  * TEMP: every function below is a stub until its lane lands.
  *   - scsIntakeLink, possibleMatchFor, linkLeadToClient → lane PF-A (link)
  *   - startSunoffHandoff, refreshSunoffHandoff, sunoffHandoffState,
- *     provisionSunoffUser → lane PF-B (handoff), src/lib/call-center/sunoff-actions.ts
+ *     provisionSunoffUser → lane PF-B (handoff): '@/lib/call-center/sunoff-actions'
+ *     (feat/cys-handoff 9f04ff8, df791eb; its shapes are supersets of these)
  * Replace each body with `return <real action>(...)` (or re-export it) and
  * delete its TEMP line.
  */
@@ -29,7 +30,8 @@ export type HandoffResult =
 
 export type HandoffState = { status: HandoffStatus; lastSentAt: string | null; stale: boolean; lastError: string | null }
 
-export type ProvisionResult = { ok: true; email: string } | { ok: false; reason: string }
+/** PF-B returns more (created, sunoffUserId, code); `message` is ready to show. */
+export type ProvisionResult = { ok: true; email: string; message?: string } | { ok: false; reason: string }
 
 const NOT_CONNECTED = 'Not connected yet'
 
