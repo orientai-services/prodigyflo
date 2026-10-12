@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import * as Icons from 'lucide-react'
-import { Loader2, User } from 'lucide-react'
+import { Circle, Loader2, User } from 'lucide-react'
+import { NamedIcon } from '@/components/icon-by-name'
 import {
   CommandDialog,
   CommandEmpty,
@@ -24,8 +24,7 @@ type SearchHit = {
 }
 
 function NavIcon({ name }: { name: string }) {
-  const Icon = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[name]
-  return Icon ? <Icon className="size-4" /> : <Icons.Circle className="size-4" />
+  return <NamedIcon name={name} fallback={Circle} className="size-4" />
 }
 
 /** "/sales/hot-leads" → ["sales", "hot", "leads"] — extra case-insensitive match words. */

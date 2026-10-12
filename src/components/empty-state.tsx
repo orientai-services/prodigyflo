@@ -1,6 +1,7 @@
-import * as Icons from 'lucide-react'
+import { Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/brand-mark'
+import { NamedIcon } from '@/components/icon-by-name'
 
 export function EmptyState({
   icon = 'Inbox',
@@ -22,9 +23,6 @@ export function EmptyState({
   illustration?: 'brand' | React.ReactNode
   className?: string
 }) {
-  const Icon =
-    (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[icon] ?? Icons.Inbox
-
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-14 text-center', className)}>
       {illustration ? (
@@ -34,7 +32,7 @@ export function EmptyState({
               <BrandMark showWordmark={false} className="h-7 opacity-80" />
             </div>
             <div className="bg-card shadow-e1 absolute -right-2 -bottom-2 flex size-7 items-center justify-center rounded-full border">
-              <Icon className="text-muted-foreground size-3.5" />
+              <NamedIcon name={icon} fallback={Inbox} className="text-muted-foreground size-3.5" />
             </div>
           </div>
         ) : (
@@ -42,7 +40,7 @@ export function EmptyState({
         )
       ) : (
         <div className="bg-muted flex size-10 items-center justify-center rounded-full">
-          <Icon className="text-muted-foreground size-5" />
+          <NamedIcon name={icon} fallback={Inbox} className="text-muted-foreground size-5" />
         </div>
       )}
       <p className="mt-3 text-sm font-medium">{title}</p>

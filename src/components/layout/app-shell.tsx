@@ -3,9 +3,9 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import * as Icons from 'lucide-react'
-import { Building2, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react'
+import { Building2, Circle, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { NamedIcon } from '@/components/icon-by-name'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@/components/ui/sheet'
@@ -54,8 +54,7 @@ const navStore = {
 }
 
 function NavIcon({ name, className }: { name: string; className?: string }) {
-  const Icon = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[name]
-  return Icon ? <Icon className={className} /> : <Icons.Circle className={className} />
+  return <NamedIcon name={name} fallback={Circle} className={className} />
 }
 
 /**
