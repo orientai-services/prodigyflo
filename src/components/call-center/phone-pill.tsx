@@ -1,10 +1,15 @@
 'use client'
 
-import { useEffect, useRef, type Ref, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { Settings2, X } from 'lucide-react'
 import { phoneStatus, type PhoneStatus } from '@/lib/telephony/ui/phone-status'
 import { PhoneSettings } from '@/components/voice/phone-settings'
 import { useVoice } from '@/components/voice/voice-provider'
+import './phone-pill.css'
+
+/** Below this width the sheet is a bottom sheet instead of a popover under the pill. */
+const PHONE_QUERY = '(max-width: 767.98px)'
 
 /** The pill's light from `useVoice()`, or red with the server's reason when browser calling is off. */
 export function usePhoneStatus(voiceNote?: string | null): PhoneStatus {
@@ -25,76 +30,89 @@ export function usePhoneStatus(voiceNote?: string | null): PhoneStatus {
 }
 
 /**
- * The phone status pill, top right of the Call Center header: green "Phone
- * ready", amber "Connecting…", red "Phone off", or "On a call". Tapping it
- * opens the phone sheet (`PhoneSheet`).
+ * The phone status pill: green "Phone ready" or "On a call", amber
+ * "Connecting…", red "Phone off". Tapping it opens the phone sheet: why the
+ * light is the colour it is, the caller line, ringtone, microphone and
+ * speaker, Test connection, and for an owner the way into Phone setup.
+ *
+ * Self-contained so any header can mount it: it keeps its own open state and
+ * styles (phone-pill.css; `.fd-tw` keeps the final-desk reset off it). On a
+ * desk the sheet is a popover under the pill; on a phone it is a bottom sheet
+ * portalled to the body, so no ancestor's stacking or overflow can clip it.
  */
-export function PhonePill({
-  status,
-  open,
-  onToggle,
-  ref,
+export function PhoneStatusPill({
+  voiceNote,
+  onOpenSetup,
 }: {
-  status: PhoneStatus
-  open: boolean
-  onToggle: () => void
-  ref?: Ref<HTMLButtonElement>
+  /** Why browser calling is off (plain English), shown in the sheet when the provider is absent. */
+  voiceNote?: string | null
+  /** Owners only: opens the Phone setup sheet. */
+  onOpenSetup?: () => void
 }) {
+  const status = usePhoneStatus(voiceNote)
+  const [open, setOpen] = useState(false)
+  const [phone, setPhone] = useState(false)
+  const pillRef = useRef<HTMLButtonElement>(null)
+
+  const toggle = () => {
+    setPhone(window.matchMedia(PHONE_QUERY).matches)
+    setOpen((now) => !now)
+  }
+
+  const sheet = open ? (
+    <PhoneSheet status={status} pill={pillRef} onClose={() => setOpen(false)} onOpenSetup={onOpenSetup} />
+  ) : null
+
   return (
-    <button
-      ref={ref}
-      type="button"
-      className={`phone-pill ${status.tone}${open ? ' on' : ''}`}
-      aria-haspopup="dialog"
-      aria-expanded={open}
-      aria-label={`${status.label}. Phone settings and test.`}
-      title={status.reason ?? 'Phone settings and test'}
-      onClick={onToggle}
-    >
-      <span className="phone-dot" aria-hidden="true" />
-      <span>{status.label}</span>
-    </button>
+    <span className="phone-status fd-tw">
+      <button
+        ref={pillRef}
+        type="button"
+        className={`phone-pill ${status.tone}${open ? ' on' : ''}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`${status.label}. Phone settings and test.`}
+        title={status.reason ?? 'Phone settings and test'}
+        onClick={toggle}
+      >
+        <span className="phone-dot" aria-hidden="true" />
+        <span>{status.label}</span>
+      </button>
+      {sheet && phone ? createPortal(sheet, document.body) : sheet}
+    </span>
   )
 }
 
-/**
- * The pill's sheet: why the light is the colour it is, the phone settings
- * and Test connection, and for an owner the way into Phone setup. A popover
- * under the pill on a desk, a bottom sheet on a phone (the parent mounts it
- * at the desk root there, like the dial pad).
- */
-export function PhoneSheet({
+function PhoneSheet({
   status,
   pill,
-  bar,
   onClose,
   onOpenSetup,
 }: {
   status: PhoneStatus
-  /** The pill and the phone's bottom bar open the sheet: a press on either is not an outside click. */
+  /** A press on the pill toggles; it is not an outside click. */
   pill: RefObject<HTMLElement | null>
-  bar: RefObject<HTMLElement | null>
   onClose: () => void
-  /** Owners only: opens the Phone setup sheet. */
   onOpenSetup?: () => void
 }) {
   const voice = useVoice()
   const rootRef = useRef<HTMLDivElement>(null)
-  const live = useRef({ onClose, pill, bar })
+  const live = useRef({ onClose, pill })
   useEffect(() => {
-    live.current = { onClose, pill, bar }
+    live.current = { onClose, pill }
   })
 
   useEffect(() => {
+    // Capture phase, so page shortcuts never see the Escape meant for the sheet.
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       event.preventDefault()
+      event.stopPropagation()
       live.current.onClose()
     }
     const onPointer = (event: PointerEvent) => {
       const target = event.target as Node | null
-      if (!target || rootRef.current?.contains(target)) return
-      if (live.current.pill.current?.contains(target) || live.current.bar.current?.contains(target)) return
+      if (!target || rootRef.current?.contains(target) || live.current.pill.current?.contains(target)) return
       live.current.onClose()
     }
     document.addEventListener('keydown', onKey, true)
@@ -106,13 +124,13 @@ export function PhoneSheet({
   }, [])
 
   return (
-    <>
-      <div className="phone-backdrop" aria-hidden="true" />
+    <span className="phone-status-layer fd-tw">
+      <span className="phone-backdrop" aria-hidden="true" />
       <div ref={rootRef} className="phone-sheet" role="dialog" aria-label="Phone">
-        <div className="pad-grab" aria-hidden="true" />
-        <div className="pad-head">
+        <span className="phone-grab" aria-hidden="true" />
+        <div className="phone-head">
           <h3>Phone</h3>
-          <button type="button" className="pad-close" aria-label="Close phone settings" onClick={onClose}>
+          <button type="button" className="phone-close" aria-label="Close phone settings" onClick={onClose}>
             <X aria-hidden="true" />
           </button>
         </div>
@@ -120,19 +138,18 @@ export function PhoneSheet({
           <span className="phone-dot" aria-hidden="true" />
           <span>
             <b>{status.label}</b>
-            {status.reason ? <span className="muted">{status.reason}</span> : null}
+            {status.reason ? <span className="phone-reason">{status.reason}</span> : null}
           </span>
         </p>
-        {/* The settings are Tailwind components: they keep their own spacing inside the desk. */}
         {voice ? (
-          <div className="fd-tw phone-settings">
+          <div className="phone-settings">
             <PhoneSettings />
           </div>
         ) : null}
         {onOpenSetup ? (
           <button
             type="button"
-            className="btn secondary phone-setup-open"
+            className="phone-setup-open"
             onClick={() => {
               onClose()
               onOpenSetup()
@@ -143,6 +160,6 @@ export function PhoneSheet({
           </button>
         ) : null}
       </div>
-    </>
+    </span>
   )
 }

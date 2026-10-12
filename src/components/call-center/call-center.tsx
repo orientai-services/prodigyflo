@@ -77,7 +77,7 @@ import { SectionNav } from './app-nav'
 import { CallbackScheduler } from './callback-scheduler'
 import { DialPad } from './dial-pad'
 import { MoreSheet } from './more-sheet'
-import { PhonePill, PhoneSheet, usePhoneStatus } from './phone-pill'
+import { PhoneStatusPill, usePhoneStatus } from './phone-pill'
 import { BookVisit } from './calendar/scheduler'
 import { PowerBar, WrapUp } from './power-panel'
 import { TeamView } from './team-view'
@@ -217,8 +217,7 @@ export function CallCenter({
   const [help, setHelp] = useState(false)
   const [padOpen, setPadOpen] = useState(false)
   const padButtonRef = useRef<HTMLButtonElement>(null)
-  /** The phone pill's sheet (settings + Test connection) and the owner's Phone setup sheet. */
-  const [phoneOpen, setPhoneOpen] = useState(false)
+  /** The owner's Phone setup sheet (opened from the phone pill's sheet). */
   const [setupOpen, setSetupOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   // A section change (any tab, a More link) closes More.
@@ -228,7 +227,8 @@ export function CallCenter({
     setRouteSeen(routeKey)
     setMoreOpen(false)
   }
-  const pillRef = useRef<HTMLButtonElement>(null)
+  /** Holds the phone pill: More › Settings opens its sheet by pressing it. */
+  const pillSlotRef = useRef<HTMLSpanElement>(null)
   /** The section bar: More's button lives in it. */
   const navRef = useRef<HTMLElement>(null)
   const phoneStatus = usePhoneStatus(phone.voiceNote)
@@ -457,7 +457,6 @@ export function CallCenter({
   useDeskKeys((action: DeskKeyAction) => {
     if (action.kind === 'close') {
       if (padOpen) setPadOpen(false)
-      else if (phoneOpen) setPhoneOpen(false)
       else if (moreOpen) setMoreOpen(false)
       else if (help) setHelp(false)
       else if (booking) setBooking(null)
@@ -527,20 +526,6 @@ export function CallCenter({
     return sheetHost && onPhone() ? createPortal(pad, sheetHost) : pad
   }
 
-  function phoneSheet() {
-    const sheet = (
-      <PhoneSheet
-        status={phoneStatus}
-        pill={pillRef}
-        bar={navRef}
-        onClose={() => setPhoneOpen(false)}
-        onOpenSetup={phone.setup ? () => setSetupOpen(true) : undefined}
-      />
-    )
-    // Same as the dial pad: a bottom sheet at the desk root on a phone, a popover under the pill on a desk.
-    return sheetHost && onPhone() ? createPortal(sheet, sheetHost) : sheet
-  }
-
   const line = voice?.setup.lines.find((l) => l.id === voice.lineId) ?? voice?.setup.lines[0] ?? null
   function moreSheet() {
     const sheet = (
@@ -554,7 +539,8 @@ export function CallCenter({
         onClose={() => setMoreOpen(false)}
         onSettings={() => {
           setPadOpen(false)
-          setPhoneOpen(true)
+          // The pill owns its sheet; pressing it is the one way in, from anywhere.
+          pillSlotRef.current?.querySelector<HTMLButtonElement>('.phone-pill')?.click()
         }}
       />
     )
@@ -587,9 +573,8 @@ export function CallCenter({
         <h1 className="cc-title">{shellTitle(route)}</h1>
         <div className="cc-head-right">
           {/* The phone's state at a glance; its sheet holds the settings and the test. */}
-          <span className="phone-anchor">
-            <PhonePill ref={pillRef} status={phoneStatus} open={phoneOpen} onToggle={() => setPhoneOpen((open) => !open)} />
-            {phoneOpen ? phoneSheet() : null}
+          <span ref={pillSlotRef} className="phone-anchor">
+            <PhoneStatusPill voiceNote={phone.voiceNote} onOpenSetup={phone.setup ? () => setSetupOpen(true) : undefined} />
           </span>
           <span className="pad-anchor">
             <button
@@ -600,7 +585,6 @@ export function CallCenter({
               aria-expanded={padOpen}
               title="Call any US number by hand"
               onClick={() => {
-                setPhoneOpen(false)
                 setMoreOpen(false)
                 setPadOpen((open) => !open)
               }}
@@ -628,7 +612,6 @@ export function CallCenter({
         moreOpen={moreOpen}
         onMore={() => {
           setPadOpen(false)
-          setPhoneOpen(false)
           setMoreOpen((open) => !open)
         }}
         more={moreOpen ? moreSheet() : null}

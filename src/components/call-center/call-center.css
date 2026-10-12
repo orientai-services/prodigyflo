@@ -389,52 +389,13 @@
   .final-desk.call-center .pad-recent button { min-height: 36px; padding: 0 12px; font-size: 14px; }
 }
 
-/* ── Phone status pill (top right of the header) and its sheet: settings and
-   Test connection. A popover under the pill on a desk, a bottom sheet on a
-   phone. ── */
-.final-desk.call-center .phone-anchor { position: relative; display: inline-flex; flex: none; margin-left: 0; }
-.final-desk.call-center .phone-pill {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 13px 7px 11px; border: 1px solid var(--line); border-radius: 999px;
-  background: #fff; color: var(--ink); font-size: 13px; font-weight: 600; white-space: nowrap;
-}
-.final-desk.call-center .phone-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #9aa3ab; }
-.final-desk.call-center .phone-pill.green { background: var(--greenbg); border-color: #bcd9c2; color: var(--green); }
-.final-desk.call-center .phone-pill.amber { background: var(--amberbg); border-color: #ebc790; color: var(--amber); }
-.final-desk.call-center .phone-pill.red { background: #fbe4e1; border-color: #eec0ba; color: #9b1c1c; }
-.final-desk.call-center .green .phone-dot { background: #1f9d55; box-shadow: 0 0 0 3px rgba(31, 157, 85, .18); }
-.final-desk.call-center .amber .phone-dot { background: #d97706; box-shadow: 0 0 0 3px rgba(217, 119, 6, .18); }
-.final-desk.call-center .red .phone-dot { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .18); }
-.final-desk.call-center .phone-pill.on { box-shadow: 0 0 0 2px var(--teal2); }
-.final-desk.call-center .phone-pill:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-.final-desk.call-center .phone-backdrop { display: none; }
-.final-desk.call-center .phone-sheet {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 340px;
-  max-height: calc(100dvh - 96px); overflow-y: auto; overscroll-behavior: contain;
-  display: grid; gap: 12px; padding: 14px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(18, 32, 44, .18);
-}
-.final-desk.call-center .phone-state { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
-.final-desk.call-center .phone-state .phone-dot { margin-top: 5px; }
-.final-desk.call-center .phone-state b { display: block; }
-.final-desk.call-center .phone-state .muted { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; }
-.final-desk.call-center .phone-settings { border-top: 1px solid var(--line); padding-top: 12px; }
-.final-desk.call-center .phone-setup-open { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.final-desk.call-center .phone-setup-open svg { width: 15px; height: 15px; }
-
-@media (max-width: 767.98px) {
-  .final-desk.call-center .phone-pill { min-height: 44px; padding: 0 14px 0 12px; font-size: 14px; }
-  .final-desk.call-center .phone-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
-  .final-desk.call-center .phone-sheet {
-    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto;
-    max-height: 92dvh; gap: 12px; padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
-    border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
-  }
-  .final-desk.call-center .phone-setup-open { min-height: 48px; font-size: 15px; }
-
-}
-
+/* ── Phone status pill: PhoneStatusPill owns its look (phone-pill.css). The
+   header only places it; the More sheet borrows its dot colours for the chip. ── */
+.final-desk.call-center .phone-anchor { position: relative; display: inline-flex; flex: none; }
+.final-desk.call-center .phone-chip .phone-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #9aa3ab; }
+.final-desk.call-center .phone-chip.green .phone-dot { background: #1f9d55; }
+.final-desk.call-center .phone-chip.amber .phone-dot { background: #d97706; }
+.final-desk.call-center .phone-chip.red .phone-dot { background: #dc2626; }
 /* ── Dialer app shell (docs/DIALER_APP.md §1, §7): sticky header, the six
    sections (a strip on a desk, a bottom tab bar below 1024), More, Team and
    Today. Phone first: 44 px taps, 16 px inputs, safe areas. ── */
@@ -707,7 +668,7 @@
   .final-desk.call-center .cc-mark { display: none; }
   .final-desk.call-center .cc-title { font-size: 22px; }
   .final-desk.call-center .cc-dialer { padding: 0 12px; gap: 6px; }
-  .final-desk.call-center .phone-pill { padding: 0 11px 0 10px; }
+  .final-desk.call-center .phone-status .phone-pill { padding: 0 11px 0 10px; }
 }
 
 /* The call bar (VoiceDock) sits above the tab bar while the bar is up. */

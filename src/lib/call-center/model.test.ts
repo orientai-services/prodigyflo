@@ -129,8 +129,7 @@ describe('call center door', () => {
     expect(screen).not.toContain('PREVIEW_BANNER')
     expect(screen).not.toContain('Voice not connected')
     expect(screen).not.toContain('Browser calling on')
-    expect(screen).toContain('<PhonePill')
-    expect(screen).toContain('usePhoneStatus(phone.voiceNote)')
+    expect(screen).toContain('<PhoneStatusPill voiceNote={phone.voiceNote}')
     expect(bundle).toContain('Working language')
     expect(bundle).not.toMatch(/\bfetch\s*\(/)
     expect(bundle).not.toMatch(/from ['"]twilio|graph\.facebook|meta\.com|process\.env|\bSES\b|\$\d/)
@@ -140,7 +139,7 @@ describe('call center door', () => {
     expect(read('components/call-center/more-sheet.tsx')).toContain('<DialerModeSwitch on />')
     expect(screen).not.toContain("label: 'Call Center'")
     // Search lives in Leads, not the header; the header holds the title, the pill and the Dialer button.
-    expect(desk).toMatch(/<header className="cc-head">[\s\S]*<PhonePill[\s\S]*className=\{`cc-dialer[\s\S]*<\/header>/)
+    expect(desk).toMatch(/<header className="cc-head">[\s\S]*<PhoneStatusPill[\s\S]*className=\{`cc-dialer[\s\S]*<\/header>/)
     expect(desk.slice(desk.indexOf('<header'), desk.indexOf('</header>'))).not.toContain('Search leads')
     expect(screen).toContain('Call anyway')
     expect(screen).toContain('Send intake link')
