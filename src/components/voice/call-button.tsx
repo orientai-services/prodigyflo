@@ -5,7 +5,7 @@ import { Loader2, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { checkDial } from '@/lib/telephony/actions'
 import { OVERRIDE_REASON_MAX, OVERRIDE_REASON_MIN, type DialCheck, type DialTarget, type OverrideKind } from '@/lib/telephony/voice-contract'
-import { actionFailure, thrownMessage } from '@/lib/telephony/ui/result'
+import { actionFailure, isDialCheckAnswer, thrownMessage } from '@/lib/telephony/ui/result'
 import { ContactTimezone } from '@/components/telephony/contact-timezone'
 import { useVoice } from './voice-provider'
 
@@ -82,7 +82,10 @@ export function CallButton({
     setNotice(null)
     try {
       const res = await checkDial(target, voice?.lineId ?? undefined, override)
-      const failure = actionFailure(res)
+      // A refused dial is a DialCheck ({ ok: false, code, reason, canOverride }),
+      // not an action failure: read it as one so the plain reason and the
+      // admin's "Call anyway" survive. Only a bare { ok: false, error } is generic.
+      const failure = isDialCheckAnswer(res) ? null : actionFailure(res)
       if (failure) {
         setBlocked({ ok: false, code: 'CHECK_FAILED', reason: failure.error, canOverride: null })
         return
