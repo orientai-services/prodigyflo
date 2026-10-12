@@ -525,6 +525,8 @@ export async function recordInboundLeadText(
     } catch (err) {
       if (!isUniqueViolation(err)) throw err
     }
+    // The team chat shows this lead's case thread: ask it to pull now instead of on its next poll.
+    void import('@/lib/chat-bridge/remote').then((m) => m.pingChatCases([lead.id])).catch(() => {})
     return { leadId: lead.id }
   } catch {
     return null
