@@ -9,7 +9,7 @@ import { voiceLimited } from './account-status'
 import { decideOutbound, verifyOverride } from './compliance'
 import { resolveCallerLine } from './lines'
 import { telephonySettingsFor } from './settings'
-import { parseTargetKey, resolveDialTarget, targetKey } from './targets'
+import { auditHandDial, parseTargetKey, resolveDialTarget, targetKey } from './targets'
 import { outboundDialTwiml, sayAndHangup } from './twiml'
 import { activeLegs, lockAccount, remoteParty } from './voice-calls'
 import { voiceBrowserEnabled, FLAG_OFF } from './voice-config'
@@ -168,6 +168,7 @@ export async function placeBrowserCall(ctx: ClientWebhookContext, now = new Date
       return { busy: false as const, vc }
     })
     if (outcome.busy) return sayAndHangup(LIMITED_BUSY)
+    await auditHandDial(actor, t, 'browser', outcome.vc.id)
     return dialFor(outcome.vc, decision.e164) ?? sayAndHangup(COULD_NOT_PLACE)
   } catch (err) {
     const dupe = isUniqueViolation(err)

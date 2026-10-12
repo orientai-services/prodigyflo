@@ -8,6 +8,7 @@ export type DialTarget =
   | { kind: 'client'; id: string }
   | { kind: 'lead'; id: string } // CallCenterLead id
   | { kind: 'missed'; id: string } // VoiceCall id: call back an unknown caller
+  | { kind: 'number'; id: string } // E.164 (+1 and 10 digits): a number dialed by hand on the pad
 
 export type CallerLine = { id: string; display: string; label: string; isDefault: boolean }
 
@@ -69,7 +70,7 @@ export type DialCheck =
 
 /** Custom params on Device.connect(). The server trusts nothing else from the browser. */
 export type ConnectParams = {
-  target: string // 'client:<id>' | 'lead:<id>' | 'missed:<id>'
+  target: string // 'client:<id>' | 'lead:<id>' | 'missed:<id>' | 'number:+1XXXXXXXXXX'
   line: string // PhoneNumber id
   override?: string // overrideToken from checkDial
 }

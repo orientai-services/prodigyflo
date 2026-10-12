@@ -20,7 +20,7 @@ import {
 import { saveTelephonySettings, telephonySettingsFor } from './settings'
 import { twilioStatusFor } from './status-view'
 import { blockNumber, clearSmsPair, removeBlock } from './suppressions'
-import { resolveDialTarget, targetKey } from './targets'
+import { auditHandDial, resolveDialTarget, targetKey } from './targets'
 import { guardAccountAction } from './tenancy'
 import { clampWindow, isValidZone } from './timezones'
 import { listMissed, markHandled } from './voice-calls'
@@ -56,7 +56,12 @@ const NO_PERMISSION = fail("You don't have permission to do that.", 'FORBIDDEN')
 function isTarget(t: unknown): t is DialTarget {
   if (!t || typeof t !== 'object') return false
   const v = t as { kind?: unknown; id?: unknown }
-  return (v.kind === 'client' || v.kind === 'lead' || v.kind === 'missed') && typeof v.id === 'string' && v.id.length > 0 && v.id.length <= 200
+  return (
+    (v.kind === 'client' || v.kind === 'lead' || v.kind === 'missed' || v.kind === 'number') &&
+    typeof v.id === 'string' &&
+    v.id.length > 0 &&
+    v.id.length <= 200
+  )
 }
 
 // ── Browser calling (P0b) ────────────────────────────────────────────────────
@@ -152,6 +157,9 @@ export async function checkDial(
   if (!decision.allowed) {
     return { ok: false, code: decision.code, reason: decision.reason, canOverride: manager ? decision.canOverride : null }
   }
+  // A browser hand dial is audited by the webhook when it really goes out; the
+  // tel: flow has no webhook, so its pass here is the dial.
+  if (!line) await auditHandDial(user, t, 'tel')
   return {
     ok: true,
     who: t.who,
