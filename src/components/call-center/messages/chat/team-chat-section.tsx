@@ -33,5 +33,6 @@ function Badge({ n }: { n: number }): JSX.Element | null {
 
 export async function TeamChatSection({ user }: { user: SessionUser }): Promise<JSX.Element> {
   const linked = Boolean(await linkedSunoffId(user))
-  return <TeamChat configured={Boolean(chatKey())} linked={linked} initialLang="en" />
+  // No language here: the screen takes it from the chat (me.lang), which ProdigyFlo does not store.
+  return <TeamChat configured={Boolean(chatKey())} linked={linked} />
 }
