@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import type { SessionUser } from '@/lib/rbac'
 import { countUnreadMessages, listThreads, loadThread, type ThreadVM } from '@/lib/call-center/messages'
-import { parseThreadKey } from '@/lib/call-center/messages-core'
+import { messagesHref, parseThreadKey } from '@/lib/call-center/messages-core'
 import { MessagesView } from './messages-view'
 import { teamChatUnread as teamUnreadFor } from '@/lib/chat-bridge/remote'
 import { MessagesSwitch, TeamChatSection } from './chat/team-chat-section'
@@ -10,8 +10,9 @@ import { MessagesSwitch, TeamChatSection } from './chat/team-chat-section'
  * Messages, the dialer's text inbox (docs/DIALER_APP.md §4, lane C). Lane A
  * renders it under `/call-center?s=messages`; `base` is that URL and every
  * link built here keeps it. `?t=lead:<id>` / `?t=client:<id>` opens a thread,
- * `?q=` pre-fills the search. `?view=team` shows the SunOff team chat instead
- * (docs/CYS_BRIDGE.md §B4, ./chat/).
+ * `?q=` pre-fills the search. The team chat (docs/CYS_BRIDGE.md §B4, ./chat/)
+ * is what Messages opens on; `?view=sms`, or any `?t=` / `?q=`, shows the lead
+ * text inbox instead, and every link the inbox builds keeps `view=sms`.
  */
 export async function MessagesSection(props: {
   user: SessionUser
@@ -19,15 +20,17 @@ export async function MessagesSection(props: {
   base: string
 }): Promise<JSX.Element> {
   const { user, params, base } = props
-  const view = (Array.isArray(params.view) ? params.view[0] : params.view) === 'team' ? 'team' : 'sms'
+  const view = messagesView(params)
   if (view === 'team') {
+    const smsUnread = await countUnreadMessages(user).catch(() => 0)
     return (
       <>
-        <MessagesSwitch base={base} view="team" teamUnread={0} />
+        <MessagesSwitch base={base} view="team" teamUnread={0} smsUnread={smsUnread} />
         <TeamChatSection user={user} />
       </>
     )
   }
+  const smsBase = messagesHref(base, { view: 'sms' })
   const now = new Date()
   const key = parseThreadKey(params.t)
   const [threads, thread, teamUnread] = await Promise.all([
@@ -38,9 +41,9 @@ export async function MessagesSection(props: {
   const q = Array.isArray(params.q) ? params.q[0] : params.q
   return (
     <>
-      <MessagesSwitch base={base} view="sms" teamUnread={teamUnread} />
+      <MessagesSwitch base={base} view="sms" teamUnread={teamUnread} smsUnread={0} />
       <MessagesView
-        base={base}
+        base={smsBase}
         threads={threads}
         thread={thread}
         missing={Boolean(key && !thread)}
@@ -49,6 +52,15 @@ export async function MessagesSection(props: {
       />
     </>
   )
+}
+
+/** Team chat first; the SMS inbox only when asked for or when a thread / search is in the URL. */
+export function messagesView(params: Record<string, string | string[] | undefined>): 'team' | 'sms' {
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? ''
+  const view = one(params.view)
+  if (view === 'team') return 'team'
+  if (view === 'sms' || one(params.t) || one(params.q)) return 'sms'
+  return 'team'
 }
 
 /** Unread team-chat messages, for the shell badge next to the SMS one. 0 when unlinked; never throws. */
