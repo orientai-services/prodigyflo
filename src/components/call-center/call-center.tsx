@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { Grid3x3 } from 'lucide-react'
 import {
   recordCallCenterAttempt,
   recordCallCenterText,
@@ -64,6 +65,7 @@ import {
   type LeadTab,
 } from '@/lib/call-center/model'
 import { CallbackScheduler } from './callback-scheduler'
+import { DialPad } from './dial-pad'
 import { PowerBar, WrapUp } from './power-panel'
 import { TodayView } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
@@ -169,6 +171,8 @@ export function CallCenter({
   const [scheduling, setScheduling] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [help, setHelp] = useState(false)
+  const [padOpen, setPadOpen] = useState(false)
+  const padButtonRef = useRef<HTMLButtonElement>(null)
   const detailRef = useRef<HTMLElement>(null)
   /** The desk root, where the phone's bottom sheets mount. */
   const [sheetHost, setSheetHost] = useState<HTMLDivElement | null>(null)
@@ -397,7 +401,8 @@ export function CallCenter({
         setHelp((open) => !open)
         return true
       case 'close':
-        if (help) setHelp(false)
+        if (padOpen) setPadOpen(false)
+        else if (help) setHelp(false)
         else if (scheduling) setScheduling(null)
         else if (selected && onPhone()) setSelectedId(null)
         else return false
@@ -442,6 +447,19 @@ export function CallCenter({
         return true
     }
   })
+
+  function dialPad() {
+    const pad = (
+      <DialPad
+        canOverrideHours={phone.canOverrideHours}
+        disabled={resultOwed}
+        ignore={padButtonRef}
+        onClose={() => setPadOpen(false)}
+      />
+    )
+    // Like the scheduler: a bottom sheet at the desk root on a phone, a popover under the button on a desk.
+    return sheetHost && onPhone() ? createPortal(pad, sheetHost) : pad
+  }
 
   const refresh = useCallback(() => router.refresh(), [router])
   useLiveRefresh(refresh, () => {
@@ -513,6 +531,21 @@ export function CallCenter({
                     ? 'Test mode. No real calls are placed.'
                     : 'Browser calling on'
                   : (phone.voiceNote ?? 'Voice not connected')}
+              </span>
+              <span className="pad-anchor">
+                <button
+                  ref={padButtonRef}
+                  type="button"
+                  className={`pad-toggle${padOpen ? ' on' : ''}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={padOpen}
+                  title="Call any US number by hand"
+                  onClick={() => setPadOpen((open) => !open)}
+                >
+                  <Grid3x3 aria-hidden="true" />
+                  Dial pad
+                </button>
+                {padOpen ? dialPad() : null}
               </span>
               {phone.setup ? <PhoneSetupSheet setup={phone.setup.vm} status={phone.setup.status} /> : null}
             </div>

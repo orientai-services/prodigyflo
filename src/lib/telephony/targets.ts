@@ -4,9 +4,11 @@ import { decryptSecret, type EncryptedSecret } from '@/lib/crypto'
 import { clientScope, type SessionUser } from '@/lib/rbac'
 import { readSecret } from '@/lib/call-center/contact'
 import { readFacebookFormEvent } from '@/lib/call-center/meta-route'
-import { maskedLast4, outboundPurpose } from './compliance-core'
-import { toE164 } from './provider'
+import { auditOutbound } from './compliance'
+import { last4Of, maskedLast4, outboundPurpose, phoneHashOrNull } from './compliance-core'
+import { formatE164, toE164 } from './provider'
 import type { ZoneHints } from './timezones'
+import { isUsE164 } from './ui/dial-pad'
 import { canSeeCall } from './voice-calls'
 import type { DialTarget, OutboundBlockCode, OutboundPurpose } from './voice-contract'
 
@@ -18,6 +20,9 @@ import type { DialTarget, OutboundBlockCode, OutboundPurpose } from './voice-con
  *   client  in clientScope(actor)
  *   lead    in the actor's org AND locked by the actor (the desk rule)
  *   missed  a VoiceCall in the actor's org that the actor may see
+ *   number  a US number typed on the dial pad (the one target where the
+ *           browser sends digits): a client in scope, else a lead in the org,
+ *           else an unknown number (docs/DIAL_PAD.md §2)
  */
 
 export type ResolvedTarget = {
@@ -30,7 +35,11 @@ export type ResolvedTarget = {
   purpose: OutboundPurpose
   servicingBasis: string | null
   zoneHints: ZoneHints
+  /** Hand dials only: what the typed number matched. */
+  handDial?: HandDialMatch
 }
+
+export type HandDialMatch = 'client' | 'lead' | 'unknown'
 
 export type TargetResult =
   | { ok: true; target: ResolvedTarget }
@@ -40,10 +49,13 @@ export function targetKey(target: DialTarget): string {
   return `${target.kind}:${target.id}`
 }
 
-/** 'client:<id>' | 'lead:<id>' | 'missed:<id>' → DialTarget, else null. */
+/** 'client:<id>' | 'lead:<id>' | 'missed:<id>' | 'number:+1XXXXXXXXXX' → DialTarget, else null. */
 export function parseTargetKey(raw: string | null | undefined): DialTarget | null {
-  const m = /^(client|lead|missed):([A-Za-z0-9:_-]{1,200})$/.exec((raw ?? '').trim())
-  return m ? { kind: m[1] as DialTarget['kind'], id: m[2] } : null
+  const key = (raw ?? '').trim()
+  const m = /^(client|lead|missed):([A-Za-z0-9:_-]{1,200})$/.exec(key)
+  if (m) return { kind: m[1] as 'client' | 'lead' | 'missed', id: m[2] }
+  const n = /^number:(\+1\d{10})$/.exec(key)
+  return n ? { kind: 'number', id: n[1] } : null
 }
 
 const NOT_IN_SCOPE = { ok: false as const, code: 'NOT_IN_SCOPE' as const, reason: "That contact isn't in your list." }
@@ -163,10 +175,89 @@ async function resolveLead(actor: SessionUser, id: string, key: string, requireL
   }
 }
 
+export const NOT_A_US_NUMBER = 'Enter a 10-digit US number.'
+
+/**
+ * A number typed on the dial pad. A client the actor may see comes first
+ * (purpose and basis from their stage, as on the client's own Call), then a
+ * lead in the org (no desk lock for a hand dial; the call still links to the
+ * lead), else an unknown number, called as servicing on the rep's say-so. The
+ * do-not-call list and calling hours still decide in every case.
+ */
+async function resolveNumber(actor: SessionUser, raw: string, now: Date, key: string): Promise<TargetResult> {
+  const e164 = toE164(raw)
+  if (!e164 || !isUsE164(e164)) return { ok: false, code: 'NO_NUMBER', reason: NOT_A_US_NUMBER }
+
+  // No cap: a missed match would call a known client as an unknown number
+  // (servicing), skipping the purpose their stage sets.
+  const candidates = await db.client.findMany({
+    where: { AND: [clientScope(actor), { phone: { contains: e164.slice(-4) } }] },
+    orderBy: { lastActivityAt: 'desc' },
+    select: { id: true, phone: true },
+  })
+  const client = candidates.find((c) => c.phone && toE164(c.phone) === e164)
+  if (client) {
+    const asClient = await resolveClient(actor, client.id, now, key)
+    if (asClient.ok) return { ok: true, target: { ...asClient.target, handDial: 'client' } }
+  }
+
+  const hash = phoneHashOrNull(e164)
+  const lead = hash
+    ? await db.callCenterLead.findFirst({
+        where: { organizationId: actor.organizationId, phoneHash: hash },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      })
+    : null
+  if (lead) {
+    const asLead = await resolveLead(actor, lead.id, key, false)
+    if (asLead.ok) return { ok: true, target: { ...asLead.target, phone: e164, handDial: 'lead' } }
+  }
+
+  return {
+    ok: true,
+    target: {
+      key,
+      phone: e164,
+      who: formatE164(e164),
+      clientId: null,
+      leadId: null,
+      voiceCallId: null,
+      purpose: 'servicing',
+      servicingBasis: `Hand-dialed by ${actor.name?.trim() || 'a rep'}`,
+      zoneHints: { e164 },
+      handDial: 'unknown',
+    },
+  }
+}
+
+const MATCH_WORDS: Record<HandDialMatch, string> = { client: 'a client', lead: 'a lead', unknown: 'not a known contact' }
+
+/**
+ * The audit row for a hand dial that went out: the last four and what it
+ * matched, never the full number. Written once per dial: by the browser-call
+ * webhook, or by checkDial for the tel: flow (which has no webhook).
+ */
+export async function auditHandDial(
+  actor: SessionUser,
+  t: ResolvedTarget,
+  via: 'browser' | 'tel',
+  voiceCallId: string | null = null,
+): Promise<void> {
+  if (!t.handDial) return
+  const last4 = last4Of(t.phone)
+  await auditOutbound({ organizationId: actor.organizationId, clientId: t.clientId, leadId: t.leadId }, actor, {
+    action: 'telephony.hand_dial',
+    summary: `Hand-dialed the number ending ${last4 ?? '····'} (${MATCH_WORDS[t.handDial]})`,
+    after: { last4, match: t.handDial, via, voiceCallId },
+  })
+}
+
 export async function resolveDialTarget(actor: SessionUser, target: DialTarget, now = new Date()): Promise<TargetResult> {
   const key = targetKey(target)
   if (target.kind === 'client') return resolveClient(actor, target.id, now, key)
   if (target.kind === 'lead') return resolveLead(actor, target.id, key, true)
+  if (target.kind === 'number') return resolveNumber(actor, target.id, now, key)
 
   const vc = await db.voiceCall.findFirst({ where: { id: target.id, organizationId: actor.organizationId } })
   if (!vc || !(await canSeeCall(actor, vc))) return NOT_IN_SCOPE
