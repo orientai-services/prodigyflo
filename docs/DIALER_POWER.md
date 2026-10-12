@@ -4,6 +4,10 @@ Branch `feat/dialer-power`. This brings the habits that make a fast dialer to
 the Call Center desk. Everything is built natively in this repo. No code,
 numbers, credentials or data are shared with any other product.
 
+The one approved exception (owner, 2026-10-12): the two SunOff bridges, CYS
+sign-up hand-off and team chat, exactly as `docs/CYS_BRIDGE.md` specifies.
+Nothing else crosses.
+
 The existing rules still hold: `docs/TELEPHONY_LIVE.md` (compliance runs on the
 server for every dial, a lead must be locked by the rep, the full number never
 reaches the list, every carrier write is idempotent).

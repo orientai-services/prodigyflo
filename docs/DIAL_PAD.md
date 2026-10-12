@@ -4,6 +4,10 @@ Branch `feat/dial-pad` (base: `feat/dialer-mode-alerts`, which turns the Call
 Center into "dialer mode"). Owner ask (2026-10-11): "add a dial pad system to
 the dialer". Built natively in this repo; nothing shared with any other product.
 
+The one approved exception (owner, 2026-10-12): the two SunOff bridges, CYS
+sign-up hand-off and team chat, exactly as `docs/CYS_BRIDGE.md` specifies.
+Nothing else crosses.
+
 The existing rules hold (`docs/TELEPHONY_LIVE.md`): compliance runs on the
 server for every dial, the browser never sends a phone number for a known
 contact, every carrier write is idempotent. A hand-dialed number is the one

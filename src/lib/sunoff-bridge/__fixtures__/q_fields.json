@@ -1,0 +1,860 @@
+[
+ {
+  "id": "q1",
+  "section": "Client & Property",
+  "section_es": "Cliente y Propiedad",
+  "label": "Full legal name",
+  "label_es": "Nombre legal completo",
+  "type": "text",
+  "prefill": "customer_name",
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": true,
+  "showIf": null
+ },
+ {
+  "id": "q2",
+  "section": "Client & Property",
+  "section_es": "Cliente y Propiedad",
+  "label": "Property address",
+  "label_es": "Dirección de la propiedad",
+  "type": "text",
+  "prefill": "customer_address",
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": true,
+  "showIf": null
+ },
+ {
+  "id": "q3",
+  "section": "Client & Property",
+  "section_es": "Cliente y Propiedad",
+  "label": "Mailing address (if different)",
+  "label_es": "Dirección postal (si es diferente)",
+  "type": "text",
+  "prefill": null,
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q4_phone",
+  "section": "Client & Property",
+  "section_es": "Cliente y Propiedad",
+  "label": "Phone",
+  "label_es": "Teléfono",
+  "type": "tel",
+  "prefill": "customer_phone",
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q4_email",
+  "section": "Client & Property",
+  "section_es": "Cliente y Propiedad",
+  "label": "Email",
+  "label_es": "Correo electrónico",
+  "type": "email",
+  "prefill": "customer_email",
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q5",
+  "section": "Client & Property",
+  "section_es": "Cliente y Propiedad",
+  "label": "Are you the sole property owner?",
+  "label_es": "¿Es usted el único dueño de la propiedad?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No"
+  ],
+  "options_es": [
+   "Sí",
+   "No"
+  ],
+  "other": "No",
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q6",
+  "section": "Client & Property",
+  "section_es": "Cliente y Propiedad",
+  "label": "Who is on the solar contract? (name/s)",
+  "label_es": "¿Quién aparece en el contrato solar? (nombre/s)",
+  "type": "text",
+  "prefill": null,
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q7",
+  "section": "Client & Property",
+  "section_es": "Cliente y Propiedad",
+  "label": "Property type",
+  "label_es": "Tipo de propiedad",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Single-family home",
+   "Condo / Townhome",
+   "Manufactured home",
+   "Commercial property"
+  ],
+  "options_es": [
+   "Casa unifamiliar",
+   "Condominio / Casa adosada (Townhome)",
+   "Casa manufacturada",
+   "Propiedad comercial"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q8",
+  "section": "Solar Company & Contract Basics",
+  "section_es": "Compañía Solar y Datos Básicos del Contrato",
+  "label": "Solar company (sales company)",
+  "label_es": "Compañía solar (compañía de ventas)",
+  "type": "text",
+  "prefill": null,
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q9",
+  "section": "Solar Company & Contract Basics",
+  "section_es": "Compañía Solar y Datos Básicos del Contrato",
+  "label": "Installer company (if different)",
+  "label_es": "Compañía instaladora (si es diferente)",
+  "type": "text",
+  "prefill": "solar_installer",
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q10",
+  "section": "Solar Company & Contract Basics",
+  "section_es": "Compañía Solar y Datos Básicos del Contrato",
+  "label": "Finance company or lender name",
+  "label_es": "Nombre de la compañía financiera o prestamista",
+  "type": "text",
+  "prefill": "solar_finance_company",
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q11",
+  "section": "Solar Company & Contract Basics",
+  "section_es": "Compañía Solar y Datos Básicos del Contrato",
+  "label": "Type of solar agreement(s)",
+  "label_es": "Tipo de acuerdo(s) solar(es)",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "Loan",
+   "Lease",
+   "Purchase Agreement",
+   "PPA (Power Purchase Agreement)",
+   "Cash purchase",
+   "Warranty Contract"
+  ],
+  "options_es": [
+   "Préstamo",
+   "Arrendamiento (Lease)",
+   "Contrato de compra",
+   "PPA (Acuerdo de Compra de Energía)",
+   "Compra en efectivo",
+   "Contrato de garantía"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q12",
+  "section": "Solar Company & Contract Basics",
+  "section_es": "Compañía Solar y Datos Básicos del Contrato",
+  "label": "Year contract was actually signed",
+  "label_es": "Año en que se firmó el contrato",
+  "type": "year",
+  "prefill": null,
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q13",
+  "section": "Solar Company & Contract Basics",
+  "section_es": "Compañía Solar y Datos Básicos del Contrato",
+  "label": "Where were the documents signed?",
+  "label_es": "¿Dónde se firmaron los documentos?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "At client's home (door-to-door)",
+   "In a business/office"
+  ],
+  "options_es": [
+   "En el hogar del cliente (puerta a puerta)",
+   "En una oficina/negocio"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q14",
+  "section": "Solar Company & Contract Basics",
+  "section_es": "Compañía Solar y Datos Básicos del Contrato",
+  "label": "Did you receive a 3-day cancellation notice?",
+  "label_es": "¿Recibió un aviso de cancelación de 3 días?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No",
+   "Not sure"
+  ],
+  "options_es": [
+   "Sí",
+   "No",
+   "No estoy seguro(a)"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q15",
+  "section": "Solar Company & Contract Basics",
+  "section_es": "Compañía Solar y Datos Básicos del Contrato",
+  "label": "Did you receive copies of all documents you signed?",
+  "label_es": "¿Recibió copias de todos los documentos que firmó?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No"
+  ],
+  "options_es": [
+   "Sí",
+   "No"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q16",
+  "section": "Sales Practices",
+  "section_es": "Prácticas de Venta",
+  "label": "How did the solar company first contact you?",
+  "label_es": "¿Cómo lo contactó la compañía solar por primera vez?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Door-to-door salesperson",
+   "Phone call (cold call)",
+   "I responded to a mailer or advertisement",
+   "Online inquiry I submitted",
+   "Referral from friend/family",
+   "Event or home show",
+   "Other"
+  ],
+  "options_es": [
+   "Vendedor puerta a puerta",
+   "Llamada telefónica (llamada en frío)",
+   "Respondí a un folleto o anuncio",
+   "Consulta en línea que envié",
+   "Referencia de un amigo/familiar",
+   "Evento o presentación en casa",
+   "Otro"
+  ],
+  "other": "Other",
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q17",
+  "section": "Sales Practices",
+  "section_es": "Prácticas de Venta",
+  "label": "Where did the main sales presentation take place?",
+  "label_es": "¿Dónde se llevó a cabo la presentación de ventas principal?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "At my home",
+   "At their office/sales center",
+   "Online/virtual meeting",
+   "Other"
+  ],
+  "options_es": [
+   "En mi casa",
+   "En su oficina/centro de ventas",
+   "En línea/reunión virtual",
+   "Otro"
+  ],
+  "other": "Other",
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q18",
+  "section": "Sales Practices",
+  "section_es": "Prácticas de Venta",
+  "label": "Approximately how long did the sales presentation(s) last?",
+  "label_es": "¿Aproximadamente cuánto duró la(s) presentación(es) de ventas?",
+  "type": "text",
+  "prefill": null,
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q19",
+  "section": "Sales Practices",
+  "section_es": "Prácticas de Venta",
+  "label": "Did the salesperson use high-pressure tactics? (check all that apply)",
+  "label_es": "¿El vendedor utilizó tácticas de alta presión? (Marque todas las que apliquen)",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "Limited-time offer",
+   "Told I had to sign immediately",
+   "Wouldn't allow me to review contract before signing",
+   "Long sales visit / repeated visits or calls",
+   "Said they were affiliated with utility/city/government"
+  ],
+  "options_es": [
+   "Oferta por tiempo limitado",
+   "Me dijeron que tenía que firmar de inmediato",
+   "No me permitieron revisar el contrato antes de firmar",
+   "Visita de ventas larga / visitas o llamadas repetidas",
+   "Dijeron que estaban afiliados con la ciudad, el gobierno o la compañía de servicios públicos"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q20",
+  "section": "Sales Practices",
+  "section_es": "Prácticas de Venta",
+  "label": "Promises made by salesperson (check all that apply)",
+  "label_es": "Promesas hechas por el vendedor (Marque todas las que apliquen)",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "No cost solar",
+   "Free solar",
+   "Bill will drop significantly",
+   "You won't pay the utility again",
+   "Guaranteed tax credit",
+   "No lien or UCC filing",
+   "Buyout available anytime",
+   "Zero maintenance required",
+   "Other"
+  ],
+  "options_es": [
+   "Energía solar sin costo",
+   "Solar gratis",
+   "La factura bajará significativamente",
+   "Ya no pagará a la compañía de servicios públicos",
+   "Crédito fiscal garantizado",
+   "Sin gravamen (lien) ni presentación UCC",
+   "Opción de compra disponible en cualquier momento",
+   "Cero mantenimiento requerido",
+   "Otro"
+  ],
+  "other": "Other",
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q21",
+  "section": "Sales Practices",
+  "section_es": "Prácticas de Venta",
+  "label": "Did you feel misled by the salesperson?",
+  "label_es": "¿Sintió que el vendedor lo engañó?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No",
+   "Unsure"
+  ],
+  "options_es": [
+   "Sí",
+   "No",
+   "No estoy seguro(a)"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q22",
+  "section": "Sales Practices",
+  "section_es": "Prácticas de Venta",
+  "label": "Were there any other promises later discovered to be untrue?",
+  "label_es": "¿Hubo otras promesas que después descubrió que eran falsas?",
+  "type": "textarea",
+  "prefill": null,
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q23",
+  "section": "Financial Terms",
+  "section_es": "Términos Financieros",
+  "label": "Monthly solar payment amount",
+  "label_es": "El pago solar mensual",
+  "type": "text",
+  "prefill": null,
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q24",
+  "section": "Financial Terms",
+  "section_es": "Términos Financieros",
+  "label": "Length of agreement / loan",
+  "label_es": "Duración del acuerdo/préstamo",
+  "type": "text",
+  "prefill": null,
+  "options": null,
+  "options_es": null,
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q25",
+  "section": "Financial Terms",
+  "section_es": "Términos Financieros",
+  "label": "Does your payment increase yearly?",
+  "label_es": "¿Su pago aumenta anualmente?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No",
+   "Not sure"
+  ],
+  "options_es": [
+   "Sí",
+   "No",
+   "No estoy seguro(a)"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q26",
+  "section": "Financial Terms",
+  "section_es": "Términos Financieros",
+  "label": "Has your combined solar + utility bill increased?",
+  "label_es": "¿Ha aumentado su factura combinada de solar + servicios públicos?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes, significantly",
+   "Yes, slightly",
+   "No, about the same",
+   "No, it decreased"
+  ],
+  "options_es": [
+   "Sí, significativamente",
+   "Sí, levemente",
+   "No, aproximadamente igual",
+   "No, disminuyó"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q27",
+  "section": "Financial Terms",
+  "section_es": "Términos Financieros",
+  "label": "Were you told your bill would be lower than it is now?",
+  "label_es": "¿Le dijeron que su factura sería más baja de lo que es ahora?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No"
+  ],
+  "options_es": [
+   "Sí",
+   "No"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q28",
+  "section": "System Performance & Installation",
+  "section_es": "Rendimiento del Sistema e Instalación",
+  "label": "Is your system working today?",
+  "label_es": "¿Su sistema está funcionando hoy?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No",
+   "Never turned on"
+  ],
+  "options_es": [
+   "Sí",
+   "No",
+   "Nunca se activó"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q29",
+  "section": "System Performance & Installation",
+  "section_es": "Rendimiento del Sistema e Instalación",
+  "label": "System performance issues (check all that apply)",
+  "label_es": "¿Ha tenido problemas de rendimiento del sistema? (Marque todos los que apliquen)",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "System shuts off / inconsistent performance",
+   "Not meeting performance projections",
+   "Battery not working (if applicable)",
+   "None - no issues"
+  ],
+  "options_es": [
+   "El sistema se apaga / rendimiento inconsistente",
+   "No cumple con las proyecciones de rendimiento",
+   "La batería no funciona (si aplica)",
+   "Ninguno - sin problemas"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q30",
+  "section": "System Performance & Installation",
+  "section_es": "Rendimiento del Sistema e Instalación",
+  "label": "Installation problems (check all that apply)",
+  "label_es": "Problemas de instalación (Marque todos los que apliquen)",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "Roof leaks",
+   "Structural damage",
+   "Shading issues",
+   "Design issues",
+   "Improper roof penetrations",
+   "Poor electrical work",
+   "Failed inspections",
+   "Installation delays",
+   "None - no issues"
+  ],
+  "options_es": [
+   "Filtraciones en el techo",
+   "Daño estructural",
+   "Problemas de sombra",
+   "Problemas de diseño",
+   "Penetraciones inadecuadas del techo",
+   "Trabajo eléctrico deficiente",
+   "Inspecciones fallidas",
+   "Retrasos en la instalación",
+   "Ninguno - sin problemas"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q31",
+  "section": "Billing, Service & Company Behavior",
+  "section_es": "Facturación, Servicio y Comportamiento de la Compañía",
+  "label": "Customer service issues experienced (check all that apply)",
+  "label_es": "Problemas de servicio al cliente experimentados (Marque todas las que apliquen)",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "No response / delayed response",
+   "Delayed repairs",
+   "Billing errors",
+   "Broken promises",
+   "None - no issues"
+  ],
+  "options_es": [
+   "Sin respuesta / respuesta demorada",
+   "Reparaciones demoradas",
+   "Errores de facturación",
+   "Promesas incumplidas",
+   "Ninguno - sin problemas"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q32",
+  "section": "Billing, Service & Company Behavior",
+  "section_es": "Facturación, Servicio y Comportamiento de la Compañía",
+  "label": "Has your installer or finance company gone out of business?",
+  "label_es": "¿Su instalador o compañía financiera ha cerrado operaciones?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No"
+  ],
+  "options_es": [
+   "Sí",
+   "No"
+  ],
+  "other": "Yes",
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q33",
+  "section": "Billing, Service & Company Behavior",
+  "section_es": "Facturación, Servicio y Comportamiento de la Compañía",
+  "label": "Have you filed complaints anywhere? (check all that apply)",
+  "label_es": "¿Ha presentado quejas en algún lugar? (Marque todas las que apliquen)",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "BBB",
+   "Attorney General",
+   "Utility",
+   "Finance company",
+   "FTC Complaint",
+   "None"
+  ],
+  "options_es": [
+   "BBB (Better Business Bureau)",
+   "Fiscal General (Attorney General)",
+   "Compañía de servicios públicos",
+   "Compañía financiera",
+   "Queja ante la FTC",
+   "Ninguna"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q34",
+  "section": "Home Sale, Liens & Title Issues",
+  "section_es": "Venta de Vivienda, Gravámenes y Problemas de Título",
+  "label": "Are you selling or attempting to sell your home?",
+  "label_es": "¿Está vendiendo o intentando vender su casa?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No"
+  ],
+  "options_es": [
+   "Sí",
+   "No"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q35",
+  "section": "Home Sale, Liens & Title Issues",
+  "section_es": "Venta de Vivienda, Gravámenes y Problemas de Título",
+  "label": "Has the solar agreement caused issues with the sale?",
+  "label_es": "¿El acuerdo solar ha causado problemas con la venta?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No"
+  ],
+  "options_es": [
+   "Sí",
+   "No"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q36",
+  "section": "Home Sale, Liens & Title Issues",
+  "section_es": "Venta de Vivienda, Gravámenes y Problemas de Título",
+  "label": "Was a UCC financing statement filed?",
+  "label_es": "¿Se presentó una declaración de financiamiento UCC?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No",
+   "Not sure"
+  ],
+  "options_es": [
+   "Sí",
+   "No",
+   "No estoy seguro(a)"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q37",
+  "section": "Personal Circumstances",
+  "section_es": "Circunstancias Personales",
+  "label": "Age range",
+  "label_es": "Rango de edad",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Under 40",
+   "40–64",
+   "65+"
+  ],
+  "options_es": [
+   "Menos de 40",
+   "40–64",
+   "65+"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q38",
+  "section": "Personal Circumstances",
+  "section_es": "Circunstancias Personales",
+  "label": "Limited English?",
+  "label_es": "¿Inglés limitado?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No"
+  ],
+  "options_es": [
+   "Sí",
+   "No"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q39",
+  "section": "Personal Circumstances",
+  "section_es": "Circunstancias Personales",
+  "label": "Was a credit check run?",
+  "label_es": "¿Se realizó una verificación de crédito?",
+  "type": "radio",
+  "prefill": null,
+  "options": [
+   "Yes",
+   "No",
+   "Unsure"
+  ],
+  "options_es": [
+   "Sí",
+   "No",
+   "No estoy seguro(a)"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q40",
+  "section": "Personal Circumstances",
+  "section_es": "Circunstancias Personales",
+  "label": "Has the solar panel contract caused financial hardship?",
+  "label_es": "¿El contrato de paneles solares le ha causado dificultades financieras?",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "Behind on payments",
+   "Damaged credit",
+   "No hardship"
+  ],
+  "options_es": [
+   "Atrasado(a) en pagos",
+   "Crédito dañado",
+   "Sin dificultades"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ },
+ {
+  "id": "q41",
+  "section": "Client Goal",
+  "section_es": "Meta del Cliente",
+  "label": "What outcome are you seeking?",
+  "label_es": "¿Qué resultado busca?",
+  "type": "multi",
+  "prefill": null,
+  "options": [
+   "Cancel the contract entirely",
+   "Remove lien",
+   "Fix the system",
+   "Lower payments"
+  ],
+  "options_es": [
+   "Cancelar el contrato por completo",
+   "Eliminar el gravamen (lien)",
+   "Reparar el sistema",
+   "Reducir los pagos"
+  ],
+  "other": null,
+  "required": false,
+  "showIf": null
+ }
+]
