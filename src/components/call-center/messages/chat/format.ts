@@ -1,3 +1,4 @@
+import { dividerId, groupsWith } from './message-logic'
 import type { Channel, Lang, Message } from './types'
 
 /** Pure helpers for the team chat screen (unit-tested in format.test.ts). */
@@ -22,7 +23,8 @@ export function dayLabel(ms: number, lang: Lang, now = Date.now()): string {
   const k = dayKey(ms)
   if (k === dayKey(now)) return lang === 'es' ? 'Hoy' : 'Today'
   if (k === dayKey(now - 86_400_000)) return lang === 'es' ? 'Ayer' : 'Yesterday'
-  return new Intl.DateTimeFormat(lang === 'es' ? 'es-MX' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: TZ }).format(new Date(ms))
+  const sameYear = dayKey(ms).slice(0, 4) === dayKey(now).slice(0, 4)
+  return new Intl.DateTimeFormat(lang === 'es' ? 'es-MX' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }), timeZone: TZ }).format(new Date(ms))
 }
 
 /** List-row time: a clock today, a short date before. */
@@ -37,14 +39,15 @@ export type Row =
   | { kind: 'msg'; message: Message; grouped: boolean }
 
 /**
- * Day separators, a "new messages" line after the read marker, and grouping:
- * the same author within 5 minutes shows without a repeated name.
+ * Day separators, the "New" line before the first unread message from someone
+ * else, and grouping: the same author within 5 minutes shows without a
+ * repeated name (message-logic.ts `groupsWith`, `dividerId`).
  */
-export function rowsFor(messages: Message[], lang: Lang, lastRead: string | null, meUid: string, now = Date.now()): Row[] {
+export function rowsFor(messages: Message[], lang: Lang, lastRead: string | null, meUid: string, now = Date.now(), unread = 0): Row[] {
   const out: Row[] = []
+  const divider = dividerId(messages, lastRead, unread, meUid)
   let prevDay = ''
   let prev: Message | null = null
-  let markedNew = false
   for (const m of messages) {
     const d = dayKey(m.created_at)
     if (d !== prevDay) {
@@ -52,13 +55,11 @@ export function rowsFor(messages: Message[], lang: Lang, lastRead: string | null
       prevDay = d
       prev = null
     }
-    if (!markedNew && lastRead && m.id > lastRead && m.uid !== meUid && !m.pending) {
+    if (m.id === divider) {
       out.push({ kind: 'new', key: `new-${m.id}` })
-      markedNew = true
       prev = null
     }
-    const grouped = Boolean(prev && prev.uid === m.uid && !prev.deleted && m.created_at - prev.created_at < 5 * 60_000 && Boolean(prev.client) === Boolean(m.client))
-    out.push({ kind: 'msg', message: m, grouped })
+    out.push({ kind: 'msg', message: m, grouped: groupsWith(prev, m) })
     prev = m
   }
   return out

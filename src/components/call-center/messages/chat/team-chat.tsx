@@ -76,6 +76,7 @@ type Action =
   | { type: 'read'; channel: string; uid: string; msg_id: string; mine: boolean }
   | { type: 'typing'; channel: string; uid: string; name: string }
   | { type: 'presence'; uid: string; online: boolean }
+  | { type: 'bump'; channel: string; root: string; at: number }
 
 const emptyPane: Pane = { list: [], hasMore: false, reads: {}, loaded: false }
 /** A message the server has (optimistic and refused copies carry a local `m_~` id). */
@@ -142,13 +143,19 @@ function reducer(s: State, a: Action): State {
       return { ...s, typing: { ...s.typing, [a.channel]: { ...(s.typing[a.channel] ?? {}), [a.uid]: { name: a.name, at: Date.now() } } } }
     case 'presence':
       return { ...s, online: { ...s.online, [a.uid]: a.online } }
+    case 'bump': {
+      // A new reply: the root's count and "last reply" move (C6).
+      const fix = (list: Message[]) => list.map((m) => (m.id === a.root ? { ...m, reply_count: m.reply_count + 1, last_reply_at: Math.max(m.last_reply_at ?? 0, a.at) } : m))
+      const cur = s.panes[a.channel]
+      return { ...s, panes: cur ? { ...s.panes, [a.channel]: { ...cur, list: fix(cur.list) } } : s.panes, thread: s.thread ? { ...s.thread, list: fix(s.thread.list) } : null }
+    }
   }
 }
 
 // ── App ─────────────────────────────────────────────────────────────────────
 
 export type ChatActions = {
-  send: (channel: string, body: string, o?: { parent?: string; attachments?: string[]; sms?: boolean; retryOf?: Message }) => Promise<void>
+  send: (channel: string, body: string, o?: { parent?: string; attachments?: string[]; mentions?: string[]; sms?: boolean; retryOf?: Message }) => Promise<void>
   edit: (m: Message, body: string) => Promise<void>
   remove: (m: Message) => Promise<void>
   react: (m: Message, emoji: string) => Promise<void>
@@ -178,6 +185,14 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
     stateRef.current = s
     activeRef.current = active
   })
+
+  // Replies already counted on their root (the socket echo and the send answer carry the same id).
+  const seenReplies = useRef(new Set<string>())
+  const bumpRoot = useCallback((m: Message) => {
+    if (!m.parent_id || m.pending || m.failed || seenReplies.current.has(m.id)) return
+    seenReplies.current.add(m.id)
+    dispatch({ type: 'bump', channel: m.channel, root: m.parent_id, at: m.created_at })
+  }, [])
 
   const toast = useCallback((msg: string) => {
     setToast(msg)
@@ -247,6 +262,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
       switch (ev.t) {
         case 'msg':
           dispatch({ type: 'msg', channel: ev.channel, message: ev.message })
+          bumpRoot({ ...ev.message, channel: ev.channel })
           if (ev.channel === activeRef.current && document.visibilityState === 'visible') window.setTimeout(() => void markRead(ev.channel), 300)
           else if (!stateRef.current.channels.some((c) => c.id === ev.channel)) void loadChannels()
           break
@@ -279,7 +295,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
           break
       }
     })
-  }, [api, loadChannels, markRead])
+  }, [api, loadChannels, markRead, bumpRoot])
 
   // Socket down: poll the list (and the open conversation) every 5 s while the tab is visible.
   useEffect(() => {
@@ -364,9 +380,10 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         try {
           const r = o.sms
             ? await api.req<{ message: Message }>('POST', `/api/cases/${channel}/sms`, { body })
-            : await api.req<{ message: Message }>('POST', `/api/channels/${channel}/messages`, { body, parent_id: o.parent ?? null, attachments: o.attachments ?? [], client_id: cid })
+            : await api.req<{ message: Message }>('POST', `/api/channels/${channel}/messages`, { body, parent_id: o.parent ?? null, attachments: o.attachments ?? [], client_id: cid, ...(o.mentions?.length ? { mentions: o.mentions } : {}) })
           dispatch({ type: 'drop', channel, id: local.id })
           dispatch({ type: 'msg', channel, message: { ...r.message, client_id: r.message.client_id ?? cid } })
+          bumpRoot({ ...r.message, channel })
         } catch (e) {
           dispatch({ type: 'patch', channel, id: local.id, patch: { pending: false, failed: e instanceof ChatError ? e.message : t.notSent } })
         }
@@ -419,7 +436,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         if (!api.send({ t: 'typing', channel })) void api.req('POST', `/api/channels/${channel}/typing`).catch(() => undefined)
       },
     }),
-    [api, toast, t.failed, t.notSent, t.tooBig],
+    [api, toast, bumpRoot, t.failed, t.notSent, t.tooBig],
   )
 
   async function switchLang() {

@@ -51,6 +51,9 @@ export type Channel = {
   notify: string
   last_read_msg_id: string | null
   case?: CaseView | null
+  /** Who made a group (pins and member edits are theirs too); null for auto channels. */
+  created_by?: string | null
+  archived_at?: number | null
   /** Socket hints: the row changed or left. */
   removed?: boolean
   refetch?: boolean
@@ -79,6 +82,7 @@ export type Message = {
   kind: string
   parent_id: string | null
   reply_count: number
+  last_reply_at?: number | null
   edited_at: number | null
   deleted: boolean
   pinned: boolean

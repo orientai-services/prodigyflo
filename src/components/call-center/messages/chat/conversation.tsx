@@ -1,16 +1,47 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChatApi } from './api'
 import { ChatError } from './api'
-import { channelLabel, clock, fmtDur, initials, insertMention, mentionQuery, rowsFor, seenCount, fold } from './format'
-import { AttachmentView, useRecorder, type Recording } from './media'
+import { EmojiPicker } from './emoji-picker'
+import { prepImage } from './image-compress'
+import { channelLabel, clock, fmtDur, initials, rowsFor } from './format'
+import { AttachmentView, VoicePlayer, canRecord, useRecorder, type Recording } from './media'
+import { ConfirmBox, MessageMenu, type MenuItem } from './message-menu'
+import {
+  ACCEPT,
+  MAX_BODY,
+  MAX_FILE,
+  MAX_FILES,
+  QUICK,
+  SMS_MAX_BODY,
+  canDeleteMessage,
+  canEditMessage,
+  canPinMessage,
+  counter,
+  draftKey,
+  enterSends,
+  fmtSize,
+  groupsWith,
+  isAllowedFile,
+  isJumbo,
+  mentionAt,
+  mentionItems,
+  pickedMentions,
+  receiptTarget,
+  receiptText,
+  relTime,
+  seenOf,
+  segments,
+  tickFor,
+  voiceFileName,
+  type MentionItem,
+} from './message-logic'
 import type { T } from './strings'
 import type { ChatActions } from './team-chat'
-import type { Channel, Lang, Me, Message } from './types'
+import type { Channel, Lang, Me, Message, Person } from './types'
 
 type Pane = { list: Message[]; hasMore: boolean; reads: Record<string, string>; loaded: boolean }
-const QUICK = ['👍', '✅', '🔥', '🙏', '😂', '❤️']
 
 type Props = {
   api: ChatApi
@@ -27,35 +58,200 @@ type Props = {
   onPins: () => void
 }
 
+const isPhone = () => window.matchMedia('(max-width: 760px)').matches
+const isCoarse = () => window.matchMedia('(pointer: coarse)').matches
+
+/** What every message row needs from the conversation around it. */
+type Ctx = {
+  api: ChatApi
+  t: T
+  lang: Lang
+  me: Me
+  channel: Channel
+  actions: ChatActions
+  reads: Record<string, string>
+  names: Map<string, string>
+  now: number
+  editing: string | null
+  setEditing: (id: string | null) => void
+  openMenu: (m: Message, inThread: boolean) => void
+  openPicker: (anchor: HTMLElement, pick: (e: string) => void) => void
+}
+
 export function Conversation({ api, t, lang, me, channel, pane, thread, typing, online, actions, onBack, onPins }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const [stick, setStick] = useState(true)
-  const [lastRead] = useState(channel.last_read_msg_id)
+  // The "New" line is placed once, from where I had read up to when I opened the chat; my own send clears it.
+  const [marker, setMarker] = useState({ lastRead: channel.last_read_msg_id, unread: channel.unread })
   const [mode, setMode] = useState<'team' | 'sms'>('team')
   const [now, setNow] = useState(() => Date.now())
-  const rows = useMemo(() => rowsFor(pane.list, lang, lastRead, me.uid, now), [pane.list, lang, lastRead, me.uid, now])
+  const [newBelow, setNewBelow] = useState(0)
+  const [divBelow, setDivBelow] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [menu, setMenu] = useState<{ m: Message; inThread: boolean } | null>(null)
+  const [picker, setPicker] = useState<{ anchor: HTMLElement; pick: (e: string) => void } | null>(null)
+  const [confirmDel, setConfirmDel] = useState<Message | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const dropMain = useRef<((files: File[]) => void) | null>(null)
+  const dropThread = useRef<((files: File[]) => void) | null>(null)
+  const rows = useMemo(() => rowsFor(pane.list, lang, marker.lastRead, me.uid, now, marker.unread), [pane.list, lang, marker, me.uid, now])
   const isCase = Boolean(channel.case)
   const canSms = Boolean(channel.case?.phone4) && !channel.case?.closed
   const others = channel.members.filter((m) => m.uid !== me.uid)
   const onlineCount = others.filter((m) => online[m.uid] ?? m.online).length
 
-  // Typing lines expire after 4 s; a tick also keeps day labels honest past midnight.
+  // uid → name for reaction tooltips, receipts and mentions.
+  const names = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const m of channel.members) map.set(m.uid, m.name)
+    for (const m of pane.list) if (m.name && !map.has(m.uid)) map.set(m.uid, m.name)
+    for (const m of thread?.list ?? []) if (m.name && !map.has(m.uid)) map.set(m.uid, m.name)
+    map.set(me.uid, me.name)
+    return map
+  }, [channel.members, pane.list, thread?.list, me.uid, me.name])
+
+  // Typing lines expire after 4 s; a tick also keeps day labels and "last reply" honest.
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 2000)
     return () => window.clearInterval(id)
   }, [])
 
-  useEffect(() => {
+  // First load: open at the "New" line (a third down), otherwise at the bottom.
+  const opened = useRef(false)
+  useLayoutEffect(() => {
     const el = scroller.current
-    if (el && stick) el.scrollTop = el.scrollHeight
-  }, [pane.list.length, stick, pane.loaded])
+    if (!el || !pane.loaded || opened.current) return
+    opened.current = true
+    const div = el.querySelector<HTMLElement>('.chat-new')
+    if (div) {
+      el.scrollTop = Math.max(0, div.offsetTop - el.clientHeight / 3)
+      setStick(false)
+    } else el.scrollTop = el.scrollHeight
+  }, [pane.loaded])
+
+  // Older messages land above: keep what I'm looking at in place.
+  const keepAnchor = useRef<{ h: number; top: number } | null>(null)
+  const loadingOlder = useRef(false)
+  const loadOlder = useCallback(async () => {
+    const el = scroller.current
+    if (loadingOlder.current || !pane.hasMore || !el) return
+    loadingOlder.current = true
+    keepAnchor.current = { h: el.scrollHeight, top: el.scrollTop }
+    try {
+      await actions.loadOlder(channel.id)
+    } catch {
+      keepAnchor.current = null
+      actions.toast(t.failed)
+    } finally {
+      loadingOlder.current = false
+    }
+  }, [actions, channel.id, pane.hasMore, t.failed])
+
+  // A new message at the end: follow it when I'm at the bottom, else count it on the "↓ New messages" pill.
+  const lastId = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const el = scroller.current
+    const k = keepAnchor.current
+    if (el && k) {
+      el.scrollTop = el.scrollHeight - k.h + k.top
+      keepAnchor.current = null
+    }
+    const last = pane.list.at(-1)
+    const prev = lastId.current
+    lastId.current = last?.id ?? null
+    if (!el || !opened.current || !last || last.id === prev) return
+    if (stick || last.uid === me.uid) el.scrollTop = el.scrollHeight
+    else if (prev && last.id > prev && !last.pending) setNewBelow((n) => n + 1)
+  }, [pane.list, stick, me.uid])
+
+  const onScroll = useCallback(() => {
+    const el = scroller.current
+    if (!el) return
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+    setStick(bottom)
+    if (bottom) setNewBelow(0)
+    const div = el.querySelector<HTMLElement>('.chat-new')
+    setDivBelow(Boolean(div && div.offsetTop > el.scrollTop + el.clientHeight))
+    if (el.scrollTop < 300 && pane.hasMore) void loadOlder()
+  }, [loadOlder, pane.hasMore])
+
+  function jump() {
+    const el = scroller.current
+    if (!el) return
+    const div = el.querySelector<HTMLElement>('.chat-new')
+    if (div && div.offsetTop > el.scrollTop + el.clientHeight) el.scrollTop = div.offsetTop - el.clientHeight / 3
+    else el.scrollTop = el.scrollHeight
+    setNewBelow(0)
+  }
 
   const typers = Object.entries(typing).filter(([uid, v]) => uid !== me.uid && now - v.at < 4000)
-  const lastMine = [...pane.list].reverse().find((m) => m.uid === me.uid && !m.pending && !m.deleted)
-  const seen = lastMine ? seenCount(pane.reads, lastMine.id, me.uid) : 0
+  const target = receiptTarget(pane.list, me.uid, channel.member_count)
+
+  const ctx: Ctx = {
+    api,
+    t,
+    lang,
+    me,
+    channel,
+    actions,
+    reads: pane.reads,
+    names,
+    now,
+    editing,
+    setEditing,
+    openMenu: (m, inThread) => setMenu({ m, inThread }),
+    openPicker: (anchor, pick) => setPicker({ anchor, pick }),
+  }
+
+  const menuItems = (m: Message, inThread: boolean): MenuItem[] => {
+    const close = () => setMenu(null)
+    const items: MenuItem[] = []
+    if (!inThread && !m.parent_id) items.push({ key: 'thread', icon: '💬', label: t.reply, run: () => { close(); actions.openThread(m) } })
+    if (m.body)
+      items.push({
+        key: 'copy',
+        icon: '📋',
+        label: t.copy,
+        run: () => {
+          close()
+          void navigator.clipboard?.writeText(m.body).then(() => actions.toast(t.copied), () => undefined)
+        },
+      })
+    if (canEditMessage(m, me, now)) items.push({ key: 'edit', icon: '✏️', label: t.edit, run: () => { close(); setEditing(m.id) } })
+    if (canPinMessage(m, me, channel.created_by)) items.push({ key: 'pin', icon: '📌', label: m.pinned ? t.unpin : t.pin, run: () => { close(); void run(() => actions.pin(m)) } })
+    if (canDeleteMessage(m, me)) items.push({ key: 'delete', icon: '🗑', label: t.del, danger: true, run: () => { close(); setConfirmDel(m) } })
+    return items
+  }
+
+  async function run(fn: () => Promise<void>) {
+    try {
+      await fn()
+    } catch (e) {
+      actions.toast(e instanceof ChatError ? e.message : t.failed)
+    }
+  }
+
+  const dragHandlers = (target: React.RefObject<((files: File[]) => void) | null>) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (![...e.dataTransfer.types].includes('Files')) return
+      e.preventDefault()
+      setDragging(true)
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false)
+    },
+    onDrop: (e: React.DragEvent) => {
+      // The thread drawer sits inside the conversation: its drop must not also land in the main composer.
+      e.stopPropagation()
+      setDragging(false)
+      if (!e.dataTransfer.files.length) return
+      e.preventDefault()
+      target.current?.([...e.dataTransfer.files])
+    },
+  })
 
   return (
-    <div className="chat-conv">
+    <div className={`chat-conv${dragging ? ' dragging' : ''}`} {...dragHandlers(dropMain)}>
       <header className="chat-head">
         <button type="button" className="chat-back" onClick={onBack} aria-label={t.back}>‹</button>
         <div className="chat-who">
@@ -73,34 +269,32 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
         )}
       </header>
       {channel.case ? <CaseCard c={channel} t={t} lang={lang} /> : null}
-      <div
-        className="chat-scroll"
-        ref={scroller}
-        role="log"
-        aria-live="polite"
-        aria-label={channelLabel(channel)}
-        onScroll={(e) => {
-          const el = e.currentTarget
-          setStick(el.scrollHeight - el.scrollTop - el.clientHeight < 80)
-        }}
-      >
-        {pane.hasMore ? (
-          <button type="button" className="chat-older" onClick={() => void actions.loadOlder(channel.id).catch(() => actions.toast(t.failed))}>
-            {t.older}
+      <div className="chat-wrapm">
+        <div className="chat-scroll" ref={scroller} role="log" aria-live="polite" aria-label={channelLabel(channel)} onScroll={onScroll}>
+          {pane.hasMore ? (
+            <button type="button" className="chat-older" onClick={() => void loadOlder()}>
+              {t.older}
+            </button>
+          ) : pane.loaded ? (
+            <Intro c={channel} t={t} />
+          ) : null}
+          {!pane.loaded ? <p className="chat-empty" aria-busy="true">{t.loading}</p> : null}
+          {rows.map((r) =>
+            r.kind === 'day' ? (
+              <div key={`d-${r.key}`} className="chat-day" role="separator"><span>{r.label}</span></div>
+            ) : r.kind === 'new' ? (
+              <div key={r.key} className="chat-new" role="separator"><span>{t.newDivider}</span></div>
+            ) : (
+              <MessageBlock key={r.message.id} ctx={ctx} m={r.message} grouped={r.grouped} inThread={false} receipt={target?.id === r.message.id} />
+            ),
+          )}
+        </div>
+        {newBelow > 0 || divBelow ? (
+          <button type="button" className="chat-jump" onClick={jump}>
+            ↓ {t.jump}{newBelow ? <b> {newBelow}</b> : null}
           </button>
         ) : null}
-        {pane.loaded && rows.length === 0 ? <p className="chat-empty">{t.empty}</p> : null}
-        {!pane.loaded ? <p className="chat-empty" aria-busy="true">{t.loading}</p> : null}
-        {rows.map((r) =>
-          r.kind === 'day' ? (
-            <div key={`d-${r.key}`} className="chat-day"><span>{r.label}</span></div>
-          ) : r.kind === 'new' ? (
-            <div key={r.key} className="chat-new"><span>{t.newDivider}</span></div>
-          ) : (
-            <MessageItem key={r.message.id} api={api} t={t} lang={lang} me={me} m={r.message} grouped={r.grouped} actions={actions} inThread={false} />
-          ),
-        )}
-        {lastMine && seen > 0 && channel.kind !== 'main' ? <p className="chat-seen">{t.seenBy(seen)}</p> : null}
+        {dragging ? <p className="chat-drop" aria-hidden="true">{t.dropHere}</p> : null}
       </div>
       <p className="chat-typing" aria-live="polite">{typers.length === 1 ? t.typing1(typers[0][1].name.split(' ')[0]) : typers.length > 1 ? t.typingN(typers.length) : ''}</p>
       {isCase ? (
@@ -112,18 +306,110 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
       {channel.can_post ? (
         <Composer
           key={mode}
+          api={api}
           t={t}
+          lang={lang}
           me={me}
           channel={channel}
           mode={isCase ? mode : 'team'}
           placeholder={mode === 'sms' ? t.placeholderSms : t.placeholder(channelLabel(channel))}
           actions={actions}
-          onSent={() => setStick(true)}
+          authors={pane.list}
+          dropRef={dropMain}
+          main
+          onSent={() => {
+            setStick(true)
+            setMarker({ lastRead: null, unread: 0 })
+            setNewBelow(0)
+          }}
         />
       ) : (
         <p className="chat-compose chat-compose-off">{t.readOnly}</p>
       )}
-      {thread ? <ThreadPane api={api} t={t} lang={lang} me={me} channel={channel} thread={thread} actions={actions} /> : null}
+      {thread ? <ThreadPane ctx={ctx} thread={thread} dropRef={dropThread} dragHandlers={dragHandlers(dropThread)} /> : null}
+      {menu ? (
+        <MessageMenu
+          t={t}
+          who={menu.m.uid === me.uid ? t.you : menu.m.name}
+          items={menuItems(menu.m, menu.inThread)}
+          onReact={(e) => {
+            const m = menu.m
+            setMenu(null)
+            void run(() => actions.react(m, e))
+          }}
+          onMore={(el) => {
+            const m = menu.m
+            setPicker({ anchor: el, pick: (e) => void run(() => actions.react(m, e)) })
+            setMenu(null)
+          }}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+      {confirmDel ? (
+        <ConfirmBox
+          title={t.delConfirm}
+          body={t.delP}
+          yes={t.yesDel}
+          no={t.cancel}
+          onClose={() => setConfirmDel(null)}
+          onYes={() => {
+            const m = confirmDel
+            setConfirmDel(null)
+            void run(() => actions.remove(m))
+          }}
+        />
+      ) : null}
+      {picker ? (
+        <EmojiPicker
+          anchor={picker.anchor.isConnected ? picker.anchor : null}
+          title={t.emojiT}
+          onClose={() => setPicker(null)}
+          onPick={(e) => {
+            const pick = picker.pick
+            setPicker(null)
+            pick(e)
+          }}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+/** The card at the top of a conversation once its first message is on screen. */
+function Intro({ c, t }: { c: Channel; t: T }) {
+  const n = c.name
+  let icon = '#'
+  let h: string
+  let p: string
+  if (c.case) {
+    icon = '👤'
+    h = t.introCase(n)
+    p = t.introCaseP
+  } else if (c.kind === 'main') {
+    h = t.introMain(n)
+    p = t.introMainP
+  } else if (c.kind === 'announcements') {
+    icon = '📣'
+    h = t.introAnn
+    p = t.introAnnP
+  } else if (c.kind === 'team') {
+    icon = '★'
+    h = t.introTeam(n)
+    p = t.introTeamP
+  } else if (c.kind === 'dm') {
+    icon = initials(n)
+    h = t.introDm(n)
+    p = t.introDmP
+  } else {
+    icon = '👥'
+    h = t.introGroup(n)
+    p = t.introGroupP
+  }
+  return (
+    <div className="chat-intro">
+      <div className={`chat-intro-big${c.kind === 'dm' && !c.case ? ' dm' : ''}`} aria-hidden="true">{icon}</div>
+      <h3>{h}</h3>
+      <p>{p}</p>
     </div>
   )
 }
@@ -150,19 +436,43 @@ function CaseCard({ c, t, lang }: { c: Channel; t: T; lang: Lang }) {
   )
 }
 
-function MessageItem({ api, t, lang, me, m, grouped, actions, inThread }: { api: ChatApi; t: T; lang: Lang; me: Me; m: Message; grouped: boolean; actions: ChatActions; inThread: boolean }) {
-  const [menu, setMenu] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(m.body)
+/** One message plus, under my newest one, the "Sent / Seen by …" line. */
+function MessageBlock({ ctx, m, grouped, inThread, receipt }: { ctx: Ctx; m: Message; grouped: boolean; inThread: boolean; receipt: boolean }) {
+  return (
+    <>
+      <MessageItem ctx={ctx} m={m} grouped={grouped} inThread={inThread} />
+      {receipt ? <Receipt ctx={ctx} m={m} /> : null}
+    </>
+  )
+}
+
+function Receipt({ ctx, m }: { ctx: Ctx; m: Message }) {
+  const { t, me, channel, reads, names } = ctx
+  const s = seenOf(reads, m.id, me.uid, channel.member_count)
+  const first = s.who.map((u) => (names.get(u) ?? '…').split(' ')[0])
+  const text = receiptText(channel.kind, first, s.all, { sent: t.sent, seen: t.seen, seenAll: t.seenAll, seenByNames: t.seenByNames, andMore: t.andMore })
+  return (
+    <p className={`chat-rcpt${first.length ? '' : ' sent'}`} title={s.who.map((u) => names.get(u) ?? u).join(', ')}>
+      <b aria-hidden="true">{first.length ? '✓✓' : '✓'}</b> {text}
+    </p>
+  )
+}
+
+const LP_SKIP = 'a, textarea, button, .chat-tools, .chat-reacts, .chat-vn, .chat-vx, .chat-state'
+
+function MessageItem({ ctx, m, grouped, inThread }: { ctx: Ctx; m: Message; grouped: boolean; inThread: boolean }) {
+  const { api, t, lang, me, channel, actions, reads, names, now } = ctx
   const mine = m.uid === me.uid
   const sms = m.client
-  // The 24 h edit window is the Worker's to enforce; a late edit comes back with its plain reason.
-  const canEdit = mine && !m.deleted && !sms && m.kind === 'message' && !m.pending
-  const canDelete = (mine || me.staff) && !m.deleted && !m.pending && !sms
+  const sys = m.kind === 'system'
   const reacts = Object.entries(m.reactions ?? {}).filter(([, uids]) => uids.length)
+  const tick = tickFor(m, reads, me.uid, channel.member_count)
+  const actionable = !m.deleted && !m.pending && !m.failed && !sys
+  const lp = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const lpFired = useRef(0)
+  const [hl, setHl] = useState(false)
 
   async function run(fn: () => Promise<void>) {
-    setMenu(false)
     try {
       await fn()
     } catch (e) {
@@ -170,46 +480,106 @@ function MessageItem({ api, t, lang, me, m, grouped, actions, inThread }: { api:
     }
   }
 
+  function openMenu() {
+    if (!actionable) return
+    ctx.openMenu(m, inThread)
+  }
+
+  const names4 = (uids: string[]) => uids.map((u) => (u === me.uid ? t.you : names.get(u) ?? '…')).join(', ')
+
   return (
-    <article className={`chat-msg${grouped ? ' grouped' : ''}${mine ? ' mine' : ''}${sms ? ` sms sms-${sms.dir}` : ''}${m.pending ? ' pending' : ''}${m.failed ? ' failed' : ''}${m.pinned ? ' pinned' : ''}`} aria-label={`${m.name}, ${clock(m.created_at, lang)}`}>
-      {!grouped ? <span className={`chat-av${sms?.dir === 'in' ? ' client' : ''}`} aria-hidden="true">{initials(m.name)}</span> : <span className="chat-av-gap" aria-hidden="true" />}
+    <article
+      className={`chat-msg${grouped ? ' grouped' : ''}${mine ? ' mine' : ''}${sms ? ` sms sms-${sms.dir}` : ''}${m.pending ? ' pending' : ''}${m.failed ? ' failed' : ''}${m.pinned ? ' pinned' : ''}${hl ? ' act' : ''}`}
+      aria-label={`${m.name}, ${clock(m.created_at, lang)}`}
+      data-id={m.id}
+      // Long-press on touch (480 ms, a 12 ms buzz) and right-click on desktop open the action sheet.
+      onPointerDown={(e) => {
+        if (e.pointerType === 'mouse' || !actionable || (e.target as Element).closest(LP_SKIP)) return
+        const { clientX: x, clientY: y } = e
+        if (lp.current) clearTimeout(lp.current.timer)
+        lp.current = {
+          x,
+          y,
+          timer: setTimeout(() => {
+            lp.current = null
+            lpFired.current = Date.now()
+            setHl(true)
+            navigator.vibrate?.(12)
+            openMenu()
+            setTimeout(() => setHl(false), 600)
+          }, 480),
+        }
+      }}
+      onPointerMove={(e) => {
+        const p = lp.current
+        if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) {
+          clearTimeout(p.timer)
+          lp.current = null
+        }
+      }}
+      onPointerUp={() => {
+        if (lp.current) clearTimeout(lp.current.timer)
+        lp.current = null
+        // The finger lifting after a long-press sends a click to whatever is under it now: the sheet's buttons.
+        // Swallow that one click before React sees it.
+        if (lpFired.current && Date.now() - lpFired.current < 10_000) {
+          lpFired.current = 0
+          const swallow = (ev: MouseEvent) => {
+            ev.preventDefault()
+            ev.stopPropagation()
+          }
+          document.addEventListener('click', swallow, { capture: true, once: true })
+          setTimeout(() => document.removeEventListener('click', swallow, true), 500)
+        }
+      }}
+      onPointerCancel={() => {
+        if (lp.current) clearTimeout(lp.current.timer)
+        lp.current = null
+      }}
+      onContextMenu={(e) => {
+        if (!actionable || (e.target as Element).closest('a, img, textarea')) return
+        e.preventDefault()
+        openMenu()
+      }}
+    >
+      {!grouped ? (
+        <span className={`chat-av${sms?.dir === 'in' ? ' client' : ''}`} aria-hidden="true">{initials(m.name)}</span>
+      ) : (
+        <time className="chat-av-gap" dateTime={new Date(m.created_at).toISOString()}>{clock(m.created_at, lang)}</time>
+      )}
       <div className="chat-msg-body">
         {!grouped ? (
           <p className="chat-msg-meta">
-            <b>{mine ? t.you : m.name}</b>
-            <time>{clock(m.created_at, lang)}</time>
+            <b>{m.name || (mine ? me.name : '…')}</b>
             {sms ? <span className="chat-tag">{sms.dir === 'in' ? t.smsTagIn : t.smsTagOut}{sms.via !== 'sms' ? ` · ${sms.via}` : ''}</span> : null}
-            {m.pinned ? <span className="chat-tag pin">📌</span> : null}
+            <time dateTime={new Date(m.created_at).toISOString()} title={new Date(m.created_at).toLocaleString(lang === 'es' ? 'es-MX' : 'en-US')}>{m.pending ? t.sending : clock(m.created_at, lang)}</time>
+            {m.pinned && !m.deleted ? <span className="chat-tag pin">📌 {t.pinnedM}</span> : null}
           </p>
+        ) : m.pinned && !m.deleted ? (
+          <span className="chat-tag pin">📌 {t.pinnedM}</span>
         ) : null}
         {m.deleted ? (
           <p className="chat-text gone">{t.deleted}</p>
-        ) : editing ? (
-          <form
-            className="chat-edit"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void run(async () => {
-                await actions.edit(m, draft.trim())
-                setEditing(false)
-              })
-            }}
-          >
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} maxLength={4000} aria-label={t.edit} autoFocus />
-            <span>
-              <button type="button" className="chat-btn ghost" onClick={() => setEditing(false)}>{t.cancel}</button>
-              <button type="submit" className="chat-btn" disabled={!draft.trim()}>{t.save}</button>
-            </span>
-          </form>
+        ) : ctx.editing === m.id ? (
+          <EditBox ctx={ctx} m={m} />
         ) : (
           <>
-            {m.body ? <p className="chat-text"><Highlighted body={m.body} meName={me.name} />{m.edited_at ? <small className="chat-edited"> ({t.edited})</small> : null}</p> : null}
-            {m.attachments.map((a) => (
-              <AttachmentView key={a.id} api={api} a={a} t={t} />
-            ))}
+            {m.body ? (
+              <p className={`chat-text${isJumbo(m.body) && !m.attachments.length ? ' jumbo' : ''}`}>
+                <Body body={m.body} names={names} meName={me.name} />
+                {m.edited_at ? <small className="chat-edited"> ({t.edited})</small> : null}
+              </p>
+            ) : null}
+            {m.attachments.length ? (
+              <div className="chat-att">
+                {m.attachments.map((a) => (
+                  <AttachmentView key={a.id} api={api} a={a} t={t} onError={actions.toast} />
+                ))}
+              </div>
+            ) : null}
           </>
         )}
-        {m.pending ? <small className="chat-state">{t.sending}</small> : null}
+        {m.pending && grouped ? <small className="chat-state">{t.sending}</small> : null}
         {m.failed ? (
           <small className="chat-state bad" role="alert">
             {m.failed}{' '}
@@ -217,83 +587,350 @@ function MessageItem({ api, t, lang, me, m, grouped, actions, inThread }: { api:
             <button type="button" className="chat-link-btn" onClick={() => actions.discard(m)}>{t.discard}</button>
           </small>
         ) : null}
-        {reacts.length ? (
+        {reacts.length && !m.deleted ? (
           <span className="chat-reacts">
             {reacts.map(([emoji, uids]) => (
-              <button key={emoji} type="button" className={uids.includes(me.uid) ? 'on' : ''} onClick={() => void run(() => actions.react(m, emoji))} aria-pressed={uids.includes(me.uid)} aria-label={`${emoji} ${uids.length}`}>
-                {emoji} {uids.length}
+              <button
+                key={emoji}
+                type="button"
+                className={uids.includes(me.uid) ? 'on' : ''}
+                onClick={() => void run(() => actions.react(m, emoji))}
+                aria-pressed={uids.includes(me.uid)}
+                aria-label={`${emoji} ${uids.length}: ${names4(uids)}`}
+                title={names4(uids)}
+              >
+                {emoji}<span>{uids.length}</span>
               </button>
             ))}
+            {actionable ? (
+              <button type="button" className="add" onClick={(e) => ctx.openPicker(e.currentTarget, (x) => void run(() => actions.react(m, x)))} aria-label={t.moreReact}>
+                +😀
+              </button>
+            ) : null}
           </span>
         ) : null}
-        {!inThread && m.reply_count > 0 ? (
-          <button type="button" className="chat-replies" onClick={() => actions.openThread(m)}>{t.replies(m.reply_count)} ›</button>
+        {!inThread && !m.deleted && m.reply_count > 0 ? (
+          <button type="button" className="chat-replies" onClick={() => actions.openThread(m)}>
+            💬 {t.replies(m.reply_count)}
+            {m.last_reply_at ? <small> · {t.lastReply} {relTime(m.last_reply_at, lang, now)}</small> : null}
+          </button>
         ) : null}
       </div>
-      {!m.deleted && !m.pending && !m.failed ? (
-        <div className={`chat-actions${menu ? ' open' : ''}`}>
-          <button type="button" className="chat-icon sm" onClick={() => setMenu((v) => !v)} aria-label={t.more} aria-expanded={menu}>⋯</button>
-          {menu ? (
-            <div className="chat-menu" role="menu">
-              <span className="chat-menu-quick">
-                {QUICK.map((e) => (
-                  <button key={e} type="button" role="menuitem" onClick={() => void run(() => actions.react(m, e))} aria-label={`${t.react} ${e}`}>{e}</button>
-                ))}
-              </span>
-              {!inThread && !sms ? <button type="button" role="menuitem" onClick={() => { setMenu(false); actions.openThread(m) }}>{t.reply}</button> : null}
-              {canEdit ? <button type="button" role="menuitem" onClick={() => { setMenu(false); setDraft(m.body); setEditing(true) }}>{t.edit}</button> : null}
-              {!inThread ? <button type="button" role="menuitem" onClick={() => void run(() => actions.pin(m))}>{m.pinned ? t.unpin : t.pin}</button> : null}
-              {m.body ? <button type="button" role="menuitem" onClick={() => { setMenu(false); void navigator.clipboard?.writeText(m.body) }}>{t.copy}</button> : null}
-              {canDelete ? (
-                <button type="button" role="menuitem" className="bad" onClick={() => { if (window.confirm(t.delConfirm)) void run(() => actions.remove(m)) }}>{t.del}</button>
-              ) : null}
-            </div>
+      {actionable ? (
+        <div className="chat-tools" role="toolbar" aria-label={t.actions}>
+          {QUICK.slice(0, 3).map((e) => (
+            <button key={e} type="button" tabIndex={-1} onClick={() => void run(() => actions.react(m, e))} aria-label={`${t.react} ${e}`}>{e}</button>
+          ))}
+          <button type="button" tabIndex={-1} onClick={(e) => ctx.openPicker(e.currentTarget, (x) => void run(() => actions.react(m, x)))} aria-label={t.moreReact}>😀</button>
+          {!inThread && !m.parent_id ? (
+            <button type="button" tabIndex={-1} onClick={() => actions.openThread(m)} aria-label={t.reply}>💬</button>
           ) : null}
+          <button type="button" className="more" onClick={openMenu} aria-label={t.actions} aria-haspopup="dialog">⋯</button>
         </div>
       ) : null}
+      {tick ? <span className={`chat-tk${tick.all ? ' all' : ''}`} aria-hidden="true">{tick.double ? '✓✓' : '✓'}</span> : null}
     </article>
   )
 }
 
-/** Bold "@Name" when it is me; links stay plain text (no HTML is ever injected). */
-function Highlighted({ body, meName }: { body: string; meName: string }) {
-  const first = fold(meName.split(' ')[0] ?? '')
-  const parts = body.split(/(@[\p{L}\p{N}_.]+(?:\s[\p{Lu}][\p{L}.]*)?)/u)
+/** Inline edit: Enter saves on a keyboard, Escape cancels; an empty edit is a cancel. */
+function EditBox({ ctx, m }: { ctx: Ctx; m: Message }) {
+  const { t, actions } = ctx
+  const [draft, setDraft] = useState(m.body)
+  const ta = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ta.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, (window.visualViewport?.height ?? window.innerHeight) * 0.35)}px`
+  }, [draft])
+  useEffect(() => {
+    const el = ta.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [])
+  async function save() {
+    const v = draft.trim()
+    if (!v || v === m.body) {
+      ctx.setEditing(null)
+      return
+    }
+    if (v.length > MAX_BODY) {
+      actions.toast(t.tooLong)
+      return
+    }
+    try {
+      await actions.edit(m, v)
+      ctx.setEditing(null)
+    } catch (e) {
+      actions.toast(e instanceof ChatError ? e.message : t.failed)
+    }
+  }
+  return (
+    <form
+      className="chat-edit"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void save()
+      }}
+    >
+      <textarea
+        ref={ta}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={2}
+        maxLength={4200}
+        aria-label={t.edit}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            e.stopPropagation()
+            ctx.setEditing(null)
+          } else if (enterSends(e.nativeEvent, isCoarse() && isPhone())) {
+            e.preventDefault()
+            void save()
+          }
+        }}
+      />
+      <span>
+        <button type="button" className="chat-btn ghost" onClick={() => ctx.setEditing(null)}>{t.cancel}</button>
+        <button type="submit" className="chat-btn" disabled={!draft.trim()}>{t.save}</button>
+      </span>
+    </form>
+  )
+}
+
+/** Message text: links open in a new tab (noopener), @mentions marked (mine stronger). No HTML is ever injected. */
+function Body({ body, names, meName }: { body: string; names: Map<string, string>; meName: string }) {
+  const segs = useMemo(() => segments(body, [...names.values()], meName), [body, names, meName])
   return (
     <>
-      {parts.map((p, i) =>
-        p.startsWith('@') ? (
-          <mark key={i} className={fold(p).startsWith('@' + first) ? 'me' : ''}>{p}</mark>
+      {segs.map((s, i) =>
+        s.kind === 'link' ? (
+          <a key={i} href={s.href} target="_blank" rel="noopener noreferrer">{s.text}</a>
+        ) : s.kind === 'mention' ? (
+          <mark key={i} className={s.me ? 'me' : ''}>{s.text}</mark>
         ) : (
-          <span key={i}>{p}</span>
+          <span key={i}>{s.text}</span>
         ),
       )}
     </>
   )
 }
 
-function Composer({ t, me, channel, mode, placeholder, actions, onSent, parent }: { t: T; me: Me; channel: Channel; mode: 'team' | 'sms'; placeholder: string; actions: ChatActions; onSent: () => void; parent?: string }) {
-  const [text, setText] = useState('')
-  const [caret, setCaret] = useState(0)
-  const [files, setFiles] = useState<Array<{ id: string; name: string }>>([])
+// ── Composer ────────────────────────────────────────────────────────────────
+
+/** Drafts survive switching conversations (memory) and a reload (this browser). */
+const drafts = new Map<string, string>()
+function readDraft(key: string): string {
+  if (drafts.has(key)) return drafts.get(key) ?? ''
+  try {
+    return window.localStorage.getItem(key) ?? ''
+  } catch {
+    return ''
+  }
+}
+function writeDraft(key: string, v: string) {
+  drafts.set(key, v)
+  try {
+    if (v) window.localStorage.setItem(key, v)
+    else window.localStorage.removeItem(key)
+  } catch {
+    // private mode: the in-memory copy still works this visit
+  }
+}
+
+/** The directory, for @mentions in channels too big to list their members (shared, 60 s). */
+let dirCache: { at: number; list: Person[]; p: Promise<Person[]> | null } = { at: 0, list: [], p: null }
+function loadDirectory(api: ChatApi): Promise<Person[]> {
+  if (Date.now() - dirCache.at < 60_000) return Promise.resolve(dirCache.list)
+  if (!dirCache.p)
+    dirCache.p = api
+      .req<Person[] | { people?: Person[] }>('GET', '/api/directory')
+      .then((r) => {
+        const list = Array.isArray(r) ? r : r.people ?? []
+        dirCache = { at: Date.now(), list, p: null }
+        return list
+      })
+      .catch(() => {
+        dirCache.p = null
+        return dirCache.list
+      })
+  return dirCache.p
+}
+
+type FileEnt = { key: string; name: string; type: string; size: number; status: 'up' | 'ok' | 'err'; id?: string; preview?: string }
+
+function Composer({
+  api,
+  t,
+  lang,
+  me,
+  channel,
+  mode,
+  placeholder,
+  actions,
+  authors,
+  dropRef,
+  main,
+  onSent,
+  parent,
+}: {
+  api: ChatApi
+  t: T
+  lang: Lang
+  me: Me
+  channel: Channel
+  mode: 'team' | 'sms'
+  placeholder: string
+  actions: ChatActions
+  authors: Message[]
+  dropRef: React.RefObject<((files: File[]) => void) | null>
+  main?: boolean
+  onSent: () => void
+  parent?: string
+}) {
+  const sms = mode === 'sms'
+  const dkey = main && !sms ? draftKey(me.uid, channel.id) : null
+  const [text, setText] = useState(() => (dkey ? readDraft(dkey) : ''))
+  const [files, setFiles] = useState<FileEnt[]>([])
   const [busy, setBusy] = useState(false)
+  const [mq, setMq] = useState<{ q: string; start: number; end: number } | null>(null)
+  const [sel, setSel] = useState(0)
+  const [dir, setDir] = useState<Person[] | null>(null)
+  const [emoji, setEmoji] = useState<HTMLElement | null>(null)
+  const [slide, setSlide] = useState(false)
+  const picked = useRef(new Map<string, string>())
   const lastTyping = useRef(0)
   const area = useRef<HTMLTextAreaElement>(null)
-  // Where the caret goes after a mention is inserted, applied before the next keystroke can land.
+  const fileIn = useRef<HTMLInputElement>(null)
+  const hold = useRef<{ x: number; id: number } | null>(null)
+  const touchAt = useRef(0)
+  // Where the caret goes after an insert, applied before the next keystroke can land.
   const nextCaret = useRef<number | null>(null)
+  const len = text.length
+  const cnt = counter(len)
+
   useLayoutEffect(() => {
-    if (nextCaret.current === null || !area.current) return
-    area.current.setSelectionRange(nextCaret.current, nextCaret.current)
-    nextCaret.current = null
-  })
-  const sms = mode === 'sms'
-  const q = sms ? null : mentionQuery(text, caret)
-  const options = q === null ? [] : channel.members.filter((p) => p.uid !== me.uid && fold(p.name).includes(fold(q))).slice(0, 6)
+    const el = area.current
+    if (!el) return
+    if (nextCaret.current !== null) {
+      el.setSelectionRange(nextCaret.current, nextCaret.current)
+      nextCaret.current = null
+    }
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, (window.visualViewport?.height ?? window.innerHeight) * 0.35)}px`
+  }, [text])
+
+  // Keep the draft (debounced so typing stays smooth).
+  useEffect(() => {
+    if (!dkey) return
+    drafts.set(dkey, text)
+    const id = window.setTimeout(() => writeDraft(dkey, text), 400)
+    return () => window.clearTimeout(id)
+  }, [dkey, text])
+
+  // Big channels list no members: mentions come from the directory.
+  useEffect(() => {
+    if (!mq || channel.members.length) return
+    let live = true
+    void loadDirectory(api).then((l) => live && setDir(l))
+    return () => {
+      live = false
+    }
+  }, [mq, channel.members.length, api])
+
+  const items: MentionItem[] = useMemo(
+    () =>
+      mq && !sms
+        ? mentionItems({ q: mq.q, members: channel.members, directory: dir, authors, meUid: me.uid, staff: me.staff, kind: channel.kind, lang })
+        : [],
+    [mq, sms, channel.members, channel.kind, dir, authors, me.uid, me.staff, lang],
+  )
+  const selIdx = items.length ? Math.min(sel, items.length - 1) : 0
+
+  function checkMention(value: string, caret: number) {
+    const at = sms ? null : mentionAt(value, caret)
+    setMq(at ? { q: at.q, start: at.start, end: caret } : null)
+    setSel(0)
+  }
+
+  function pickMention(u: MentionItem) {
+    if (!mq) return
+    const ins = `@${u.name} `
+    const next = text.slice(0, mq.start) + ins + text.slice(mq.end)
+    picked.current.set(u.uid, u.name)
+    nextCaret.current = mq.start + ins.length
+    setText(next)
+    setMq(null)
+    area.current?.focus()
+  }
+
+  function insertAt(s: string) {
+    const el = area.current
+    const a = el?.selectionStart ?? text.length
+    const b = el?.selectionEnd ?? a
+    nextCaret.current = a + s.length
+    setText(text.slice(0, a) + s + text.slice(b))
+    el?.focus()
+  }
+
+  const addFiles = useCallback(
+    (list: File[]) => {
+      if (sms || !list.length) return
+      let room = MAX_FILES - files.length
+      for (const file of list) {
+        if (!isAllowedFile(file.type, file.name)) {
+          actions.toast(t.badType)
+          continue
+        }
+        if (room <= 0) {
+          actions.toast(t.tooMany)
+          break
+        }
+        room--
+        const image = file.type.startsWith('image/')
+        const ent: FileEnt = { key: `${Date.now()}${Math.random()}`, name: file.name || 'image.png', type: file.type, size: file.size, status: 'up', preview: image ? URL.createObjectURL(file) : undefined }
+        setFiles((cur) => [...cur, ent])
+        void (async () => {
+          try {
+            let f: File = file
+            let w: number | undefined
+            let h: number | undefined
+            if (image) ({ file: f, w, h } = await prepImage(file))
+            if (f.size > MAX_FILE) throw new ChatError(413, 'too_large', t.tooBig)
+            const id = await actions.upload(channel.id, f, f.name || ent.name, w && h ? { w: String(w), h: String(h) } : {})
+            setFiles((cur) => cur.map((x) => (x.key === ent.key ? { ...x, id, status: 'ok', size: f.size, name: f.name || x.name } : x)))
+          } catch (e) {
+            setFiles((cur) => cur.map((x) => (x.key === ent.key ? { ...x, status: 'err' } : x)))
+            actions.toast(e instanceof ChatError ? e.message : t.uploadFail)
+          }
+        })()
+      }
+    },
+    [sms, files.length, actions, channel.id, t],
+  )
+
+  useEffect(() => {
+    dropRef.current = addFiles
+    return () => {
+      dropRef.current = null
+    }
+  }, [dropRef, addFiles])
+
+  function dropFile(key: string) {
+    setFiles((cur) => {
+      const gone = cur.find((x) => x.key === key)
+      if (gone?.preview) URL.revokeObjectURL(gone.preview)
+      return cur.filter((x) => x.key !== key)
+    })
+  }
+
   const sendVoice = async (r: Recording) => {
     setBusy(true)
     try {
-      const ext = r.type.includes('mp4') ? 'm4a' : 'webm'
-      const id = await actions.upload(channel.id, r.blob, `voice.${ext}`, { kind: 'voice', duration: String(r.duration), wave: r.wave })
+      const id = await actions.upload(channel.id, r.blob, voiceFileName(new Date(), r.type), { kind: 'voice', duration: String(r.duration), wave: r.wave })
       await actions.send(channel.id, '', { parent, attachments: [id] })
       onSent()
     } catch (e) {
@@ -302,37 +939,47 @@ function Composer({ t, me, channel, mode, placeholder, actions, onSent, parent }
       setBusy(false)
     }
   }
-  const rec = useRecorder(
-    (r: Recording) => void sendVoice(r),
-    (msg) => actions.toast(msg),
-    t,
-  )
-
-  async function attach(list: FileList | null) {
-    if (!list?.length) return
-    setBusy(true)
-    try {
-      for (const f of [...list].slice(0, 5)) {
-        const dims = f.type.startsWith('image/') ? await imageSize(f) : null
-        const id = await actions.upload(channel.id, f, f.name, dims ? { w: String(dims.w), h: String(dims.h) } : {})
-        setFiles((cur) => [...cur, { id, name: f.name }])
-      }
-    } catch (e) {
-      actions.toast(e instanceof ChatError ? e.message : t.failed)
-    } finally {
-      setBusy(false)
-    }
-  }
+  const rec = useRecorder((r) => void sendVoice(r), (msg) => actions.toast(msg), t)
+  const recording = rec.rec && rec.rec.state !== 'preview'
+  const preview = rec.rec?.state === 'preview'
 
   function submit() {
-    const body = text.trim()
-    if ((!body && !files.length) || busy) return
-    void actions.send(channel.id, body, { parent, attachments: files.map((f) => f.id), sms })
+    if (busy) return
+    const body = text.replace(/\s+$/, '')
+    if (sms) {
+      if (!body.trim()) return
+      if (body.length > SMS_MAX_BODY) {
+        actions.toast(t.tooLong)
+        return
+      }
+    } else {
+      if (files.some((f) => f.status === 'up')) {
+        actions.toast(t.waitUpload)
+        return
+      }
+      const ok = files.filter((f) => f.status === 'ok' && f.id)
+      if (!body.trim() && !ok.length) return
+      if (body.length > MAX_BODY) {
+        actions.toast(t.tooLong)
+        return
+      }
+    }
+    const ok = files.filter((f) => f.status === 'ok' && f.id)
+    void actions.send(channel.id, body.trim(), { parent, attachments: sms ? [] : ok.map((f) => f.id!), sms, mentions: sms ? [] : pickedMentions(body, picked.current) })
+    for (const f of files) if (f.preview) URL.revokeObjectURL(f.preview)
     setText('')
     setFiles([])
+    setMq(null)
+    picked.current.clear()
+    if (dkey) writeDraft(dkey, '')
     onSent()
     area.current?.focus()
   }
+
+  const hasContent = Boolean(text.trim() || files.length)
+  const canSend = (text.trim() || files.some((f) => f.status === 'ok')) && !files.some((f) => f.status === 'up') && len <= (sms ? SMS_MAX_BODY : MAX_BODY) && !busy
+  const showMic = !sms && !hasContent && canRecord()
+  const micLabel = rec.rec?.mode === 'tap' && recording ? t.stopLbl : typeof window !== 'undefined' && isCoarse() ? t.recHoldLbl : t.recLbl
 
   return (
     <form
@@ -343,119 +990,244 @@ function Composer({ t, me, channel, mode, placeholder, actions, onSent, parent }
       }}
     >
       {sms ? <p className="chat-sms-note">{t.smsNote}</p> : null}
-      {options.length ? (
-        <ul className="chat-mentions" role="listbox" aria-label="Mention">
-          {options.map((p) => (
-            <li key={p.uid}>
-              <button
-                type="button"
-                role="option"
-                aria-selected="false"
-                onClick={() => {
-                  const next = insertMention(text, caret, p.name)
-                  nextCaret.current = next.caret
-                  setText(next.text)
-                  setCaret(next.caret)
-                  area.current?.focus()
-                }}
-              >
-                <span className="chat-av sm" aria-hidden="true">{initials(p.name)}</span>
-                {p.name}
-              </button>
-            </li>
+      {items.length ? (
+        <div className="chat-mentions" role="listbox" aria-label="Mention" onMouseDown={(e) => e.preventDefault()}>
+          {items.map((u, i) => (
+            <button key={`${u.uid}-${u.name}`} type="button" role="option" aria-selected={i === selIdx} className={i === selIdx ? 'on' : ''} onClick={() => pickMention(u)}>
+              <span className="chat-av sm" aria-hidden="true">{u.special ? '@' : initials(u.name)}</span>
+              <span className="chat-mo-name">{u.special ? `@${u.name}` : u.name}</span>
+              <small>{u.special ? t.everyone : u.role ?? ''}</small>
+            </button>
           ))}
-        </ul>
+        </div>
       ) : null}
       {files.length ? (
-        <p className="chat-files">
+        <div className="chat-tray">
           {files.map((f) => (
-            <span key={f.id} className="chat-chip">
-              📎 {f.name}
-              <button type="button" aria-label={`${t.discard} ${f.name}`} onClick={() => setFiles((cur) => cur.filter((x) => x.id !== f.id))}>×</button>
-            </span>
+            <div key={f.key} className={`chat-chipf ${f.status}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- a local blob: preview of the picked file */}
+              {f.preview ? <img src={f.preview} alt="" /> : <span className="fi">PDF</span>}
+              <span>
+                {f.name}
+                <small>{f.status === 'up' ? t.sending : f.status === 'err' ? t.uploadFail : fmtSize(f.size)}</small>
+              </span>
+              <button type="button" aria-label={`${t.remove} ${f.name}`} onClick={() => dropFile(f.key)}>✕</button>
+            </div>
           ))}
-        </p>
-      ) : null}
-      {rec.rec ? (
-        <div className="chat-rec" role="status">
-          <span className="chat-rec-dot" style={{ opacity: 0.4 + rec.rec.level * 0.6 }} aria-hidden="true" />
-          <span>{fmtDur(rec.rec.elapsed)}</span>
-          <button type="button" className="chat-btn ghost" onClick={rec.cancel}>{t.cancel}</button>
-          <button type="button" className="chat-btn" onClick={rec.stop}>{t.stop}</button>
         </div>
-      ) : (
-        <div className="chat-compose-row">
-          {!sms ? (
-            <label className="chat-icon" title={t.attach}>
-              <span className="sr">{t.attach}</span>
-              <input type="file" accept="image/*,application/pdf" multiple onChange={(e) => { void attach(e.target.files); e.target.value = '' }} hidden />
-              <span aria-hidden="true">📎</span>
-            </label>
-          ) : null}
-          <label className="chat-input">
-            <span className="sr">{placeholder}</span>
-            <textarea
-              ref={area}
-              value={text}
-              rows={1}
-              maxLength={sms ? 1500 : 4000}
-              placeholder={placeholder}
+      ) : null}
+      <div className={`chat-compose-row${recording ? ' recmode' : ''}${preview ? ' preview' : ''}`}>
+        {rec.rec ? (
+          <div className={`chat-rec${slide ? ' cancel' : ''}`} role="status">
+            {preview && rec.rec.url ? (
+              <>
+                <button type="button" className="chat-icon" onClick={rec.cancel} aria-label={t.discardV}>🗑</button>
+                <VoicePlayer aid="pv" dur={rec.rec.dur ?? 0} wave={rec.rec.wave} getUrl={() => Promise.resolve(rec.rec!.url!)} t={t} onError={actions.toast} />
+                <button type="button" className="chat-send icon" onClick={rec.sendPreview} aria-label={t.sendV}><SendIcon /></button>
+              </>
+            ) : (
+              <>
+                {rec.rec.mode === 'tap' ? <button type="button" className="chat-icon" onClick={rec.cancel} aria-label={t.discardV}>🗑</button> : null}
+                <span className="chat-rec-dot" aria-hidden="true" />
+                <span className="chat-rtime">{fmtDur(Math.floor(rec.rec.elapsed))}</span>
+                <span className="chat-rlev" aria-hidden="true">
+                  {rec.rec.levels.map((v, i) => (
+                    <i key={i} style={{ height: Math.max(3, Math.round(v * 28)) }} />
+                  ))}
+                </span>
+                {rec.rec.mode === 'hold' ? <span className="chat-rhint">{slide ? t.releaseCancel : t.slideCancel}</span> : null}
+              </>
+            )}
+          </div>
+        ) : null}
+        {!sms ? (
+          <>
+            <button type="button" className="chat-icon" onClick={() => fileIn.current?.click()} aria-label={t.attach} title={t.attach}>📎</button>
+            <input
+              ref={fileIn}
+              type="file"
+              accept={ACCEPT}
+              multiple
+              hidden
               onChange={(e) => {
-                setText(e.target.value)
-                setCaret(e.target.selectionStart ?? e.target.value.length)
-                if (!sms && Date.now() - lastTyping.current > 3000) {
-                  lastTyping.current = Date.now()
-                  actions.typing(channel.id)
-                }
-              }}
-              onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(pointer: fine)').matches) {
-                  e.preventDefault()
-                  if (options.length) {
-                    const next = insertMention(text, caret, options[0].name)
-                    nextCaret.current = next.caret
-                    setText(next.text)
-                    setCaret(next.caret)
-                  } else submit()
-                }
+                addFiles([...(e.target.files ?? [])])
+                e.target.value = ''
               }}
             />
-          </label>
-          {!text.trim() && !files.length && !sms ? (
-            <button type="button" className="chat-send voice" onClick={() => void rec.start()} aria-label={t.record} title={t.record} disabled={busy}>🎤</button>
-          ) : (
-            <button type="submit" className="chat-send" disabled={busy || (!text.trim() && !files.length)}>{busy ? t.sending : t.send}</button>
-          )}
-        </div>
-      )}
+          </>
+        ) : null}
+        <label className="chat-input">
+          <span className="sr">{placeholder}</span>
+          <textarea
+            ref={area}
+            value={text}
+            rows={1}
+            maxLength={sms ? SMS_MAX_BODY : 4200}
+            placeholder={placeholder}
+            enterKeyHint="send"
+            onChange={(e) => {
+              setText(e.target.value)
+              checkMention(e.target.value, e.target.selectionStart ?? e.target.value.length)
+              if (!sms && e.target.value.trim() && Date.now() - lastTyping.current > 3000) {
+                lastTyping.current = Date.now()
+                actions.typing(channel.id)
+              }
+            }}
+            onSelect={(e) => {
+              const el = e.currentTarget
+              if (mq) checkMention(el.value, el.selectionStart ?? 0)
+            }}
+            onBlur={() => window.setTimeout(() => setMq(null), 150)}
+            onPaste={(e) => {
+              const fs = [...(e.clipboardData?.items ?? [])].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter((f): f is File => Boolean(f))
+              if (fs.length && !sms) {
+                e.preventDefault()
+                addFiles(fs)
+              }
+            }}
+            onKeyDown={(e) => {
+              if (items.length) {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setSel((selIdx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length)
+                  return
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault()
+                  pickMention(items[selIdx])
+                  return
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setMq(null)
+                  return
+                }
+              }
+              if (enterSends(e.nativeEvent, isCoarse() && isPhone())) {
+                e.preventDefault()
+                submit()
+              }
+            }}
+          />
+        </label>
+        <button type="button" className="chat-icon emo" onClick={(e) => setEmoji(emoji ? null : e.currentTarget)} aria-label={t.emojiT} title={t.emojiT}>😀</button>
+        {showMic || recording ? (
+          <button
+            type="button"
+            className={`chat-send voice${rec.rec ? ' on' : ''}`}
+            aria-label={micLabel}
+            title={micLabel}
+            disabled={busy}
+            onPointerDown={(e) => {
+              if (e.pointerType === 'mouse' || e.button > 0) return
+              e.preventDefault()
+              touchAt.current = Date.now()
+              if (rec.rec) return
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId)
+              } catch {
+                // capture is a nicety: the slide still works inside the button
+              }
+              hold.current = { x: e.clientX, id: e.pointerId }
+              setSlide(false)
+              void rec.start('hold')
+            }}
+            onPointerMove={(e) => {
+              const h = hold.current
+              if (!h || e.pointerId !== h.id) return
+              const dx = e.clientX - h.x
+              setSlide(dx < -40)
+              if (dx < -110) {
+                hold.current = null
+                setSlide(false)
+                rec.stop('cancel')
+              }
+            }}
+            onPointerUp={(e) => {
+              const h = hold.current
+              if (!h || e.pointerId !== h.id) return
+              hold.current = null
+              touchAt.current = Date.now()
+              const slid = slide
+              setSlide(false)
+              if (rec.releaseEarly()) return
+              rec.stop(slid ? 'cancel' : 'send')
+            }}
+            onPointerCancel={(e) => {
+              const h = hold.current
+              if (!h || e.pointerId !== h.id) return
+              hold.current = null
+              setSlide(false)
+              rec.stop('cancel')
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+            onClick={() => {
+              if (Date.now() - touchAt.current < 700) return
+              if (rec.rec?.mode === 'tap' && recording) rec.stop('preview')
+              else if (!rec.rec) void rec.start('tap')
+            }}
+          >
+            {rec.rec?.mode === 'tap' && recording ? '■' : '🎤'}
+          </button>
+        ) : (
+          <button type="submit" className="chat-send icon" disabled={!canSend} aria-label={t.send} title={t.send}>
+            {busy ? '…' : <SendIcon />}
+          </button>
+        )}
+      </div>
+      <div className="chat-hint">
+        <span className="kb">{t.kbHint}</span>
+        <span className={`len${cnt.over ? ' over' : ''}`} aria-live="polite">{sms ? (len > SMS_MAX_BODY - 200 ? `${len}/${SMS_MAX_BODY}` : '') : cnt.text}</span>
+      </div>
+      {emoji ? (
+        <EmojiPicker
+          anchor={emoji}
+          title={t.emojiT}
+          onClose={() => setEmoji(null)}
+          onPick={(e) => {
+            setEmoji(null)
+            insertAt(e)
+          }}
+        />
+      ) : null}
     </form>
   )
 }
 
-function imageSize(f: File): Promise<{ w: number; h: number } | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(f)
-    const img = new Image()
-    img.onload = () => {
-      resolve({ w: img.naturalWidth, h: img.naturalHeight })
-      URL.revokeObjectURL(url)
-    }
-    img.onerror = () => {
-      resolve(null)
-      URL.revokeObjectURL(url)
-    }
-    img.src = url
-  })
-}
+const SendIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="20" height="20"><path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z" /></svg>
+)
 
-function ThreadPane({ api, t, lang, me, channel, thread, actions }: { api: ChatApi; t: T; lang: Lang; me: Me; channel: Channel; thread: { root: string; list: Message[] }; actions: ChatActions }) {
-  const end = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    end.current?.scrollIntoView({ block: 'end' })
+function ThreadPane({
+  ctx,
+  thread,
+  dropRef,
+  dragHandlers,
+}: {
+  ctx: Ctx
+  thread: { root: string; list: Message[] }
+  dropRef: React.RefObject<((files: File[]) => void) | null>
+  dragHandlers: Record<string, (e: React.DragEvent) => void>
+}) {
+  const { api, t, lang, me, channel, actions } = ctx
+  const box = useRef<HTMLDivElement>(null)
+  const atBottom = useRef(true)
+  const root = thread.list.find((m) => m.id === thread.root) ?? null
+  const replies = thread.list.filter((m) => m.id !== thread.root)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight
   }, [thread.list.length])
   return (
-    <aside className="chat-threadpane" aria-label={t.thread}>
+    <aside
+      className="chat-threadpane"
+      aria-label={t.thread}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !e.defaultPrevented) actions.openThread(null)
+      }}
+      {...dragHandlers}
+    >
       <header className="chat-head">
         <button type="button" className="chat-back always" onClick={() => actions.openThread(null)} aria-label={t.closeThread}>‹</button>
         <div className="chat-who">
@@ -464,13 +1236,31 @@ function ThreadPane({ api, t, lang, me, channel, thread, actions }: { api: ChatA
         </div>
         <button type="button" className="chat-icon desk-only" onClick={() => actions.openThread(null)} aria-label={t.closeThread}>×</button>
       </header>
-      <div className="chat-scroll" role="log" aria-live="polite">
-        {thread.list.map((m) => (
-          <MessageItem key={m.id} api={api} t={t} lang={lang} me={me} m={m} grouped={false} actions={actions} inThread />
+      <div
+        className="chat-scroll"
+        ref={box}
+        role="log"
+        aria-live="polite"
+        onScroll={(e) => {
+          const el = e.currentTarget
+          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+        }}
+      >
+        {root ? (
+          <>
+            <div className="chat-thr-root">
+              <MessageItem ctx={ctx} m={root} grouped={false} inThread />
+            </div>
+            <p className="chat-thr-cnt">{t.replies(replies.length || root.reply_count || 0)}</p>
+          </>
+        ) : null}
+        {replies.map((m, i) => (
+          <MessageItem key={m.id} ctx={ctx} m={m} grouped={groupsWith(replies[i - 1] ?? null, m)} inThread />
         ))}
-        <div ref={end} />
       </div>
-      {channel.can_post ? <Composer t={t} me={me} channel={channel} mode="team" placeholder={t.placeholderThread} actions={actions} onSent={() => undefined} parent={thread.root} /> : null}
+      {channel.can_post ? (
+        <Composer api={api} t={t} lang={lang} me={me} channel={channel} mode="team" placeholder={t.placeholderThread} actions={actions} authors={thread.list} dropRef={dropRef} onSent={() => (atBottom.current = true)} parent={thread.root} />
+      ) : null}
     </aside>
   )
 }
