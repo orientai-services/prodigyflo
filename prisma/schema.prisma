@@ -2657,6 +2657,10 @@ model PropertyRecordsJob {
   nextAttemptAt DateTime @default(now())
   claimedAt DateTime?
   claimToken String?
+  /// Parcel number staff entered when the county did not list the house; sent as `apn` so the address search is skipped.
+  staffApn String?
+  /// First time the county locator confirmed the house but the assessor had no parcel (recent sale). Daily retries stop ~30 days later.
+  notListedSince DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   client Client @relation(fields:[clientId],references:[id],onDelete:Cascade)

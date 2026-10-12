@@ -7,7 +7,7 @@ import {sha256,validateUpload} from '@/lib/extraction/sniff'
 import {scsRequirementId} from '@/lib/intake/scs-document-requirements'
 import {isSyntheticClient} from '@/lib/intake/synthetic'
 import {asRecord} from '@/lib/packet/schema'
-import {addressVersion,isSameFiling,normalizeAddress,permitTileLabel,recordFileNote,uccTileLabel,validateRecordsResult,type PropertyAddress} from './contract'
+import {NOT_LISTED_GIVE_UP_MS,NOT_LISTED_NOTE,NOT_LISTED_RETRY_MS,addressVersion,isSameFiling,normalizeAddress,permitTileLabel,recordFileNote,uccTileLabel,validateRecordsResult,type PropertyAddress} from './contract'
 
 type ImportedRecord={id:string; priorStatus?:DocumentStatus; suspendedAt?:string}
 function importedRecord(value:unknown):ImportedRecord|null {
@@ -73,6 +73,22 @@ export async function queuePropertyRecords(args:{organizationId:string;clientId:
 }
 
 /** Transient county/service failures retry with backoff through the cron, then stop for a human. */
+/** A not-yet-listed or staff-APN lookup must reach the county again, not the service's cached reply. */
+export function recordsIdempotencyKey(job:{id:string;staffApn?:string|null;notListedSince?:Date|null},now=Date.now()) {
+  if(!job.staffApn&&!job.notListedSince) return job.id
+  return `${job.id}:${job.staffApn?`apn-${job.staffApn.replace(/-/g,'')}`:'listed-check'}:${Math.floor(now/86_400_000)}`
+}
+
+/** Staff typed the parcel number: re-queue this property's job with it. The address search is skipped; nothing is guessed. */
+export async function requeueWithStaffApn(args:{clientId:string;organizationId:string;apn:string}) {
+  return db.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT id FROM "Client" WHERE id=${args.clientId} FOR UPDATE`
+    const job=await tx.propertyRecordsJob.findFirst({where:{clientId:args.clientId,organizationId:args.organizationId,status:{notIn:['SUPERSEDED','RUNNING']}},orderBy:{updatedAt:'desc'}})
+    if(!job) throw Error('No county records lookup to re-run for this property')
+    return tx.propertyRecordsJob.update({where:{id:job.id},data:{staffApn:args.apn,status:'PENDING',attempts:0,result:Prisma.DbNull,error:null,claimToken:null,claimedAt:null,nextAttemptAt:new Date()}})
+  })
+}
+
 export const MAX_ATTEMPTS=5
 export const NEEDS_HUMAN_CHECK='Needs human check after repeated failures: '
 const RETRY_DELAYS_MS=[2*60_000,10*60_000,30*60_000,2*60*60_000]
@@ -80,13 +96,13 @@ export function retryDelayMs(attempts:number) {return RETRY_DELAYS_MS[Math.min(M
 
 /** Result and file commits are fenced by the live primary address and claim. */
 export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
-  const counts={completed:0,failed:0,paused:0}
+  const counts={completed:0,failed:0,paused:0,notListed:0}
   if(process.env.PROPERTY_RECORDS_PROVIDER!=='records') return {...counts,disabled:true}
   for(let i=0;i<limit;i++) {
     const token=randomUUID()
     const rows=await db.$queryRaw<{id:string}[]>`WITH due AS (
       SELECT id FROM "PropertyRecordsJob" WHERE ("clientId"=${clientId??null} OR ${clientId??null}::text IS NULL) AND attempts<${MAX_ATTEMPTS} AND "nextAttemptAt"<=now()
-       AND (status IN ('PENDING','FAILED') OR status='RUNNING' AND "claimedAt"<now()-interval '10 minutes')
+       AND (status IN ('PENDING','FAILED','NOT_LISTED') OR status='RUNNING' AND "claimedAt"<now()-interval '10 minutes')
       ORDER BY "nextAttemptAt","createdAt" FOR UPDATE SKIP LOCKED LIMIT 1
     ) UPDATE "PropertyRecordsJob" j SET status='RUNNING',"claimToken"=${token},"claimedAt"=now(),"updatedAt"=now() FROM due WHERE j.id=due.id RETURNING j.id`
     if(!rows.length) break
@@ -106,7 +122,7 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
         logJobFinish(job,'SUPERSEDED','Property changed before lookup execution',job.attempts,null)
         continue
       }
-      const response=job.result?null:await fetch(new URL('/api/service/property-records',base),{method:'POST',headers:{...headers,'Content-Type':'application/json','idempotency-key':job.id},body:JSON.stringify({address,address_version:job.addressVersion}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(180_000)}).catch((error:unknown)=>{throw serviceUnreachable(error)})
+      const response=job.result?null:await fetch(new URL('/api/service/property-records',base),{method:'POST',headers:{...headers,'Content-Type':'application/json','idempotency-key':recordsIdempotencyKey(job)},body:JSON.stringify({address,address_version:job.addressVersion,...(job.staffApn?{apn:job.staffApn}:{})}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(180_000)}).catch((error:unknown)=>{throw serviceUnreachable(error)})
       if(response&&!response.ok) throw Error(response.status===404?'Records service endpoint not found (404)':response.status===503?'County records temporarily unavailable (503)':`Records service returned ${response.status}`)
       const result=validateRecordsResult(job.result??await response!.json(),job.caseKey,address)
       const persisted=await db.$transaction(async tx=>{
@@ -118,6 +134,16 @@ export async function runPropertyRecordsJobs(limit=1,clientId?:string) {
       })
       if(!persisted) continue
       if(result.status==='paused') {await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token},data:{status:'PAUSED',claimedAt:null,error:'Records provider budget/configuration paused; staff action required.'}});logJobFinish(job,'PAUSED','Records provider budget/configuration paused; staff action required.',job.attempts,result);counts.paused++;continue}
+      if(result.status==='not_listed') {
+        // The county has not listed this parcel yet. Retry daily without spending the 5 failure attempts; stop for a human after ~30 days.
+        const since=job.notListedSince??new Date()
+        const expired=Date.now()-since.getTime()>=NOT_LISTED_GIVE_UP_MS
+        const stored=expired?`${NEEDS_HUMAN_CHECK}${NOT_LISTED_NOTE} for 30 days — enter the parcel number`:NOT_LISTED_NOTE
+        await db.propertyRecordsJob.updateMany({where:{id:job.id,claimToken:token},data:{status:expired?'PAUSED':'NOT_LISTED',result:Prisma.DbNull,notListedSince:since,claimedAt:null,error:stored,nextAttemptAt:new Date(Date.now()+NOT_LISTED_RETRY_MS)}})
+        logJobFinish(job,expired?'PAUSED':'NOT_LISTED',stored,job.attempts,result)
+        if(expired) counts.paused++; else counts.notListed++
+        continue
+      }
       for(const original of result.originals) {
         const latest=await db.propertyRecordsJob.findUniqueOrThrow({where:{id:job.id}})
         if(asRecord(latest.importedFiles)[original.sha256]) continue
