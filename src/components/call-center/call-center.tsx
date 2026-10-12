@@ -22,6 +22,7 @@ import {
   todayBadge,
   todayCounts,
   updatedLabel,
+  badgeText,
   type DeskFilter,
   type ShellRoute,
 } from '@/lib/call-center/app-shell'
@@ -182,8 +183,8 @@ export function CallCenter({
   slot?: React.ReactNode
   /** Unread inbound texts (the Messages badge). */
   unread?: number
-  /** The same badge split into lead texts and team chat, so the shell can keep each live (use-chat-host.ts). */
-  unreadSplit?: { sms: number; team: number } | null
+  /** The same badge split into lead texts and team chat, so the shell can keep each live (use-chat-host.ts); `cases` = case-chat unread per lead id. */
+  unreadSplit?: { sms: number; team: number; cases?: Record<string, number> } | null
   /** Today's server numbers and team feed (Today only). */
   today?: TodayServer | null
   /** The team list (Team only). */
@@ -196,7 +197,7 @@ export function CallCenter({
   const voice = useVoice()
   const section = route.section
   // The Messages badge, the "(n) " title prefix, the open conversation's name and chat notification taps.
-  const chatHost = useChatHost({ sms: unreadSplit?.sms ?? unread, team: unreadSplit?.team ?? 0, onMessages: section === 'messages' })
+  const chatHost = useChatHost({ sms: unreadSplit?.sms ?? unread, team: unreadSplit?.team ?? 0, cases: unreadSplit?.cases, onMessages: section === 'messages' })
   const leadsList = section === 'leads' && !route.ads
   /** Today and Leads hold the lead panel, the tools and the shortcuts. */
   const deskSection = section === 'today' || leadsList
@@ -961,6 +962,12 @@ export function CallCenter({
                         <Link className="btn secondary cc-teamchat" href={chatHref({ lead: selected.id })} scroll={false}>
                           <MessageSquare aria-hidden="true" />
                           Team chat
+                          {chatHost.cases[selected.id] ? (
+                            <>
+                              <span className="cc-badge" aria-hidden="true">{badgeText(chatHost.cases[selected.id])}</span>
+                              <span className="sr">{`, ${chatHost.cases[selected.id]} unread`}</span>
+                            </>
+                          ) : null}
                         </Link>
                       </div>
                     ) : null}

@@ -9,7 +9,7 @@ import { linkedSunoffIdById } from './link'
  * The team chat's fallback notice for ProdigyFlo-only people
  * (docs/TEAM_CHAT_PARITY.md F4, sunoff-chat docs/CHAT_CONTRACT.md §7):
  *
- *   POST /api/bridge/chat/notify {uid, pf_user_id, title, body, url, count, lang?}  (signed with PF_CHAT_KEY)
+ *   POST /api/bridge/chat/notify {uid, pf_user_id, title, body, url, count, lang}  (signed with PF_CHAT_KEY)
  *   → {ok:true, sent:boolean}
  *
  * The chat Worker calls it when someone's unread messages have waited over
@@ -41,7 +41,7 @@ export function parseChatNotice(raw: unknown): ChatNoticeInput | null {
   if (typeof r.body !== 'string' || !r.body.trim()) return null
   const count = Math.floor(Number(r.count))
   const title = typeof r.title === 'string' ? clean(r.title, 80) : ''
-  // The Worker words the summary in the person's language; `lang` is optional, its title says which otherwise.
+  // The Worker sends the person's `lang` (contract §14); an older Worker without it is read from its title.
   const lang = r.lang === 'es' || r.lang === 'en' ? r.lang : /^chat del equipo/i.test(title) ? 'es' : 'en'
   return {
     uid: r.uid,

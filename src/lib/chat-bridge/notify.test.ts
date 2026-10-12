@@ -39,6 +39,10 @@ describe('chat notice parsing', () => {
     expect(n.url).toBe(PF_CHAT_HOME)
     expect(n.lang).toBe('en')
     expect(parseChatNotice({ uid: 'u16', pf_user_id: 'usr_1', title: 'Chat del equipo', body: 'hola', url: '', count: 1 })!.lang).toBe('es')
+    // The body's `lang` wins over the title.
+    expect(parseChatNotice({ uid: 'u16', pf_user_id: 'usr_1', title: 'Team chat', body: 'hola', url: '', count: 1, lang: 'es' })!.lang).toBe('es')
+    expect(parseChatNotice({ uid: 'u16', pf_user_id: 'usr_1', title: 'Chat del equipo', body: 'hi', url: '', count: 1, lang: 'en' })!.lang).toBe('en')
+    expect(parseChatNotice({ uid: 'u16', pf_user_id: 'usr_1', title: 'Chat del equipo', body: 'hi', url: '', count: 1, lang: 'fr' })!.lang).toBe('es')
     expect(parseChatNotice({ uid: '16', pf_user_id: 'usr_1', body: 'x' })).toBeNull()
     expect(parseChatNotice({ uid: 'u16', pf_user_id: 'a b', body: 'x' })).toBeNull()
     expect(parseChatNotice({ uid: 'u16', pf_user_id: 'usr_1', body: '  ' })).toBeNull()

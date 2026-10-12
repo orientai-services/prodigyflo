@@ -35,18 +35,44 @@ export async function pingChatCases(leadIds: string[] = []): Promise<boolean> {
   return Boolean(res?.ok)
 }
 
-/** Unread team-chat messages and @mentions for the shell badge. Zeros when unlinked, never opened, or the chat is unreachable. */
-export async function teamChatCounts(user: SessionUser): Promise<{ total: number; mentions: number }> {
-  const sunoffId = await linkedSunoffId(user)
-  if (!sunoffId) return { total: 0, mentions: 0 }
-  const res = await signedFetch('GET', `/api/internal/pf/unread?uid=u${sunoffId}`)
-  if (!res?.ok) return { total: 0, mentions: 0 }
-  const data = (await res.json().catch(() => null)) as { unread_total?: unknown; mentions?: unknown } | null
-  const count = (v: unknown) => {
-    const n = Number(v)
-    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 999) : 0
+export type TeamChatCounts = { total: number; mentions: number; cases: Record<string, number> }
+const NONE: TeamChatCounts = { total: 0, mentions: 0, cases: {} }
+const CASE_MAX = 200
+
+const count = (v: unknown) => {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 999) : 0
+}
+
+/**
+ * The Worker's badge answer → counts. `cases` is per-case unread keyed by the
+ * ProdigyFlo lead id (sunoff-chat docs/CHAT_CONTRACT.md §14: n > 0 only, at
+ * most 200); anything that isn't a lead id or a positive count is dropped.
+ */
+export function parseUnreadAnswer(data: unknown): TeamChatCounts {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { ...NONE, cases: {} }
+  const d = data as { unread_total?: unknown; mentions?: unknown; cases?: unknown }
+  const cases: Record<string, number> = {}
+  if (d.cases && typeof d.cases === 'object' && !Array.isArray(d.cases)) {
+    for (const [lead, n] of Object.entries(d.cases as Record<string, unknown>)) {
+      if (Object.keys(cases).length >= CASE_MAX) break
+      const c = count(n)
+      if (c > 0 && /^[A-Za-z0-9_:.-]{1,120}$/.test(lead)) cases[lead] = c
+    }
   }
-  return { total: count(data?.unread_total), mentions: count(data?.mentions) }
+  return { total: count(d.unread_total), mentions: count(d.mentions), cases }
+}
+
+/**
+ * Unread team-chat messages, @mentions and per-lead case-chat unread, in one signed call (one per page load or
+ * poll, never per lead row). Zeros when unlinked, never opened, or the chat is unreachable; never throws.
+ */
+export async function teamChatCounts(user: SessionUser): Promise<TeamChatCounts> {
+  const sunoffId = await linkedSunoffId(user).catch(() => null)
+  if (!sunoffId) return { ...NONE, cases: {} }
+  const res = await signedFetch('GET', `/api/internal/pf/unread?uid=u${sunoffId}`)
+  if (!res?.ok) return { ...NONE, cases: {} }
+  return parseUnreadAnswer(await res.json().catch(() => null))
 }
 
 /** Unread team-chat messages for the shell badge. 0 when unlinked, never opened, or the chat is unreachable. */

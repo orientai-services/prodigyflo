@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { chatSignature, signedHeaders, verifyChatRequest } from './sign'
 import { chatDisplayName, CHAT_TOKEN_TTL_SECONDS, mintChatToken } from './jwt'
+import { parseUnreadAnswer } from './remote'
 
 /**
  * The chat bridge's pure pieces: the request signature shared with the chat
@@ -52,6 +53,21 @@ describe('chat SSO token', () => {
   it('never sends an email or a full surname as the display name', () => {
     expect(chatDisplayName('  Mara   Ellis ')).toBe('Mara E.')
     expect(chatDisplayName('')).toBe('ProdigyFlo')
+  })
+})
+
+describe('chat badge answer', () => {
+  it('reads totals, mentions and per-lead case counts, dropping junk', () => {
+    expect(parseUnreadAnswer({ unread_total: 7, mentions: 2, cases: { 'meta:org1:123': 3, L9: 0, 'bad key!': 4, x: 'two', y: -1 } })).toEqual({
+      total: 7,
+      mentions: 2,
+      cases: { 'meta:org1:123': 3 },
+    })
+    // An older Worker without `cases`, or no answer at all.
+    expect(parseUnreadAnswer({ unread_total: 1 })).toEqual({ total: 1, mentions: 0, cases: {} })
+    expect(parseUnreadAnswer(null)).toEqual({ total: 0, mentions: 0, cases: {} })
+    const many = Object.fromEntries(Array.from({ length: 250 }, (_, i) => [`L${i}`, 1]))
+    expect(Object.keys(parseUnreadAnswer({ unread_total: 250, cases: many }).cases)).toHaveLength(200)
   })
 })
 

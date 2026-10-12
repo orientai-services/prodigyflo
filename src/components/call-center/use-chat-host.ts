@@ -21,11 +21,20 @@ import { chatHref, onChatState, onChatTitle, onChatUnread, emitChatGo, parseChat
 export const UNREAD_POLL_MS = 45_000
 const FRESH_MS = 40_000
 
-type Counts = { team: number; sms: number; mentions: number }
+type Counts = { team: number; sms: number; mentions: number; cases: Record<string, number> }
+const NO_CASES: Record<string, number> = {}
 
-export function useChatHost({ sms, team, onMessages }: { sms: number; team: number; onMessages: boolean }) {
+/** The poll's per-lead case-chat unread ({<lead id>: n}); anything else is dropped. */
+function readCases(v: unknown): Record<string, number> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return NO_CASES
+  const out: Record<string, number> = {}
+  for (const [k, n] of Object.entries(v as Record<string, unknown>)) if (Number(n) > 0) out[k] = Math.floor(Number(n))
+  return out
+}
+
+export function useChatHost({ sms, team, cases = NO_CASES, onMessages }: { sms: number; team: number; cases?: Record<string, number>; onMessages: boolean }) {
   const router = useRouter()
-  const [counts, setCounts] = useState<Counts>({ team, sms, mentions: 0 })
+  const [counts, setCounts] = useState<Counts>({ team, sms, mentions: 0, cases })
   const [chatTitle, setChatTitle] = useState<string | null>(null)
   const chat = useRef<ChatState>({ mounted: false, live: false })
   /** The same, as state, for the render below. */
@@ -34,11 +43,12 @@ export function useChatHost({ sms, team, onMessages }: { sms: number; team: numb
 
   // A fresh server render (navigation or the 20 s refresh) brings both counts. The team count is the chat's own
   // while it is live, so a refresh that started before a read can't bring an old number back.
-  const serverKey = `${sms}|${team}`
+  // Per-case counts only come from the server and the poll (the chat's socket sends totals).
+  const serverKey = `${sms}|${team}|${JSON.stringify(cases)}`
   const [serverSeen, setServerSeen] = useState(serverKey)
   if (serverKey !== serverSeen) {
     setServerSeen(serverKey)
-    setCounts((c) => ({ ...c, sms, team: chatLive ? c.team : team }))
+    setCounts((c) => ({ ...c, sms, cases, team: chatLive ? c.team : team }))
   }
 
   useEffect(() => {
@@ -72,11 +82,11 @@ export function useChatHost({ sms, team, onMessages }: { sms: number; team: numb
       try {
         const res = await fetch('/api/chat/unread', { cache: 'no-store', credentials: 'same-origin' })
         if (!res.ok) return
-        const data = (await res.json()) as { team?: unknown; sms?: unknown; mentions?: unknown }
+        const data = (await res.json()) as { team?: unknown; sms?: unknown; mentions?: unknown; cases?: unknown }
         if (stop) return
         heard.current = Date.now()
         const n = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : 0)
-        setCounts((c) => ({ sms: n(data.sms), team: chat.current.mounted && chat.current.live ? c.team : n(data.team), mentions: n(data.mentions) }))
+        setCounts((c) => ({ sms: n(data.sms), team: chat.current.mounted && chat.current.live ? c.team : n(data.team), mentions: n(data.mentions), cases: readCases(data.cases) }))
       } catch {
         // Offline: the badge keeps its last number.
       }
@@ -137,5 +147,5 @@ export function useChatHost({ sms, team, onMessages }: { sms: number; team: numb
     return () => navigator.serviceWorker.removeEventListener('message', onMsg)
   }, [router])
 
-  return { team: counts.team, sms: counts.sms, mentions: counts.mentions, total, chatTitle: onMessages ? chatTitle : null }
+  return { team: counts.team, sms: counts.sms, mentions: counts.mentions, cases: counts.cases, total, chatTitle: onMessages ? chatTitle : null }
 }
