@@ -611,17 +611,36 @@ export async function listMissed(user: SessionUser, limit = 100): Promise<Missed
     },
     orderBy: [{ callbackRequested: 'desc' }, { startedAt: 'desc' }],
     take: limit,
+    // Only what the list shows (no SIDs, no carrier payloads).
+    select: {
+      id: true,
+      startedAt: true,
+      phoneNumberId: true,
+      clientId: true,
+      remoteLast4: true,
+      remoteSecret: true,
+      recordingSid: true,
+      recordingKind: true,
+      recordingDurationSeconds: true,
+      callbackRequested: true,
+      transcript: true,
+      outcome: true,
+      stage: true,
+    },
   })
   if (rows.length === 0) return []
 
   const lineIds = [...new Set(rows.map((r) => r.phoneNumberId).filter((v): v is string => Boolean(v)))]
   const clientIds = [...new Set(rows.map((r) => r.clientId).filter((v): v is string => Boolean(v)))]
+  // An empty id list skips its query rather than asking for nothing.
   const [lines, clients] = await Promise.all([
-    db.phoneNumber.findMany({ where: { id: { in: lineIds } }, select: { id: true, friendlyName: true } }),
-    db.client.findMany({
-      where: { AND: [clientScope(user), { id: { in: clientIds } }] },
-      select: { id: true, firstName: true, lastName: true },
-    }),
+    lineIds.length ? db.phoneNumber.findMany({ where: { id: { in: lineIds } }, select: { id: true, friendlyName: true } }) : [],
+    clientIds.length
+      ? db.client.findMany({
+          where: { AND: [clientScope(user), { id: { in: clientIds } }] },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : [],
   ])
   const lineName = new Map(lines.map((l) => [l.id, l.friendlyName]))
   const clientName = new Map(clients.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]))
