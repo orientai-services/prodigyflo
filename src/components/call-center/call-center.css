@@ -306,13 +306,18 @@
 }
 
 /* ── Dial pad (docs/DIAL_PAD.md): a popover under its button on a desk, a
-   bottom sheet on a phone. 40 px keys on a desk, 44 px on a phone. ── */
+   bottom sheet on a phone. Laid out like a phone's keypad: twelve keys of one
+   fixed size in a 3 × 4 grid, the digit centred with its letters under it,
+   and everything (number, keys, Call) in one column as wide as the keys,
+   centred in the sheet. ── */
 .final-desk.call-center .pad-anchor { position: relative; display: inline-flex; }
 .final-desk.call-center .pad-backdrop,
 .final-desk.call-center .pad-grab { display: none; }
 .final-desk.call-center .pad {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 300px;
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px;
+  --key-w: 80px; --key-h: 48px; --key-gap: 10px;
+  --pad-col: calc(3 * var(--key-w) + 2 * var(--key-gap));
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: calc(var(--pad-col) + 30px);
+  display: grid; grid-template-columns: minmax(0, var(--pad-col)); justify-content: center; gap: 10px; padding: 14px;
   background: var(--card); border: 1px solid var(--line); border-radius: 16px;
   box-shadow: 0 16px 40px rgba(18, 32, 44, .18);
 }
@@ -339,16 +344,26 @@
   font-variant-numeric: tabular-nums; letter-spacing: .02em;
 }
 .final-desk.call-center .pad-display input::placeholder { font-size: 15px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
-.final-desk.call-center .pad-keys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.final-desk.call-center .pad-key {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; height: 40px;
-  background: #fff; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); line-height: 1;
-  touch-action: manipulation; user-select: none;
+.final-desk.call-center .pad-keys {
+  display: grid; grid-template-columns: repeat(3, var(--key-w)); grid-auto-rows: var(--key-h); gap: var(--key-gap);
 }
-.final-desk.call-center .pad-key:hover { background: #f6f1e6; }
+.final-desk.call-center .pad-key {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  width: 100%; height: 100%; background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  color: var(--ink); line-height: 1; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Hover only where there is a pointer: a tapped key on a phone would keep its hover colour. */
+@media (hover: hover) { .final-desk.call-center .pad-key:hover { background: #f6f1e6; } }
 .final-desk.call-center .pad-key:active { background: var(--teal2); border-color: #c5e0de; }
-.final-desk.call-center .pad-key b { font-size: 17px; font-weight: 600; }
-.final-desk.call-center .pad-key small { margin-top: 2px; font-size: 8px; letter-spacing: .14em; color: var(--muted); }
+.final-desk.call-center .pad-key b { display: block; font-size: 20px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+/* Letter-spacing trails the last letter; the matching left padding keeps the letters centred under the digit. */
+.final-desk.call-center .pad-key small {
+  display: block; padding-left: .14em; font-size: 9px; font-weight: 600; line-height: 1; letter-spacing: .14em; color: var(--muted);
+}
+/* An asterisk sits at cap height in every font; a phone keypad draws it larger, level with the digits.
+   A transform, so the key's layout box stays the same as its row's. */
+.final-desk.call-center .pad-star b { transform: translateY(.2em) scale(1.35); }
 .final-desk.call-center .pad-call,
 .final-desk.call-center .pad-call > div { display: grid; width: 100%; }
 .final-desk.call-center .pad-call .btn { width: 100%; justify-content: center; }
@@ -374,6 +389,8 @@
 @media (max-width: 767.98px) {
   .final-desk.call-center .pad-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
   .final-desk.call-center .pad {
+    /* Up to 96 px keys; on a 320 px phone they shrink so the grid still fits the 16 px gutters. */
+    --key-gap: 14px; --key-h: 60px; --key-w: min(96px, calc((100vw - 32px - 2 * var(--key-gap)) / 3));
     position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto;
     max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; gap: 12px;
     padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
@@ -383,10 +400,16 @@
   .final-desk.call-center .pad-close,
   .final-desk.call-center .pad-back { width: 44px; height: 44px; }
   .final-desk.call-center .pad-display input { font-size: 24px; }
-  .final-desk.call-center .pad-key { height: 44px; }
-  .final-desk.call-center .pad-key b { font-size: 19px; }
+  .final-desk.call-center .pad-key { border-radius: 14px; }
+  .final-desk.call-center .pad-key b { font-size: 28px; font-weight: 400; }
+  .final-desk.call-center .pad-key small { font-size: 10px; }
   .final-desk.call-center .pad-call .btn { min-height: 48px; font-size: 16px; }
   .final-desk.call-center .pad-recent button { min-height: 36px; padding: 0 12px; font-size: 14px; }
+}
+/* A short phone (iPhone SE, landscape) keeps the whole sheet on screen. */
+@media (max-width: 767.98px) and (max-height: 700px) {
+  .final-desk.call-center .pad { --key-gap: 12px; --key-h: 52px; gap: 10px; }
+  .final-desk.call-center .pad-key b { font-size: 24px; }
 }
 
 /* ── Phone status pill: PhoneStatusPill owns its look (phone-pill.css). The
