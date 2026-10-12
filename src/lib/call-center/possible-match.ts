@@ -142,7 +142,8 @@ export type PossibleMatch = {
   canLink: boolean
 }
 
-function mayLink(user: SessionUser): boolean {
+/** clients:reassign or Super Admin. */
+export function mayLink(user: SessionUser): boolean {
   return user.role === 'SUPER_ADMIN' || can(user, 'clients:reassign')
 }
 

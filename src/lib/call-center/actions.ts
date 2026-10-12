@@ -16,7 +16,7 @@ import {
   type IntakeLinkResult,
 } from './desk'
 import type { CallCenterContact, DeskOutcome, DeskResult } from './desk-types'
-import { findPossibleMatch, linkLeadToClientFor, type LinkLeadResult, type PossibleMatch } from './possible-match'
+import { findPossibleMatch, linkLeadToClientFor, mayLink, type LinkLeadResult } from './possible-match'
 
 async function actor() {
   const user = await requireUser()
@@ -61,10 +61,21 @@ export async function scsIntakeTextStatus(leadId: string): Promise<{ ok: true } 
   return scsIntakeTextStatusFor(user, leadId)
 }
 
-/** The one recent Client with this lead's phone, for the "Possible match" card; null when none or several. */
-export async function possibleMatchFor(leadId: string): Promise<PossibleMatch | null> {
+/**
+ * The "Possible match" card: the one recent Client with this lead's phone
+ * (null when none or several), and whether this viewer may press Link.
+ */
+export async function possibleMatchFor(leadId: string): Promise<
+  | { ok: true; match: { clientId: string; firstName: string; createdAt: string } | null; canLink: boolean }
+  | { ok: false; reason: string }
+> {
   const user = await requireUser()
-  return findPossibleMatch(user, leadId)
+  const found = await findPossibleMatch(user, leadId)
+  return {
+    ok: true,
+    match: found ? { clientId: found.clientId, firstName: found.firstName, createdAt: found.createdAt } : null,
+    canLink: mayLink(user),
+  }
 }
 
 /** Link the lead to a Client by hand (clients:reassign or Super Admin). Never replaces an existing link. */
