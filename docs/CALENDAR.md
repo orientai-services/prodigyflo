@@ -8,6 +8,10 @@ grid and 30-minute time chips, reminders. It is built natively in this repo
 from this document; no code, data or design file from any other product is
 read or copied.
 
+The one approved exception (owner, 2026-10-12): the two SunOff bridges, CYS
+sign-up hand-off and team chat, exactly as `docs/CYS_BRIDGE.md` specifies.
+Nothing else crosses.
+
 Keep Dakota's backend (`src/lib/call-center/calendar/*`, model
 `CallCenterSlot`, flag `CALL_CENTER_CALENDAR`, reminders 24 h / 3 h, autobook)
 and the rules in `config.ts` (90-minute visits, 30-minute steps, starts

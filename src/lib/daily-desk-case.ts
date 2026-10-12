@@ -237,7 +237,7 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
   }
 }
 
-function verbatimIntake(schema: unknown, answers: Record<string, unknown>): { question: string; answer: string }[] {
+export function verbatimIntake(schema: unknown, answers: Record<string, unknown>): { question: string; answer: string }[] {
   const rows: { question: string; answer: string }[] = []
   const seen = new Set<string>()
   const sections = Array.isArray(schema) ? schema : []

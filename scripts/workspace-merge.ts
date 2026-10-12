@@ -13,6 +13,8 @@ const ORG_TABLES = [
   'Sequence', 'Survey', 'Team', 'TelephonyWallet', 'User', 'VoiceCall', 'WalletEntry',
   // Meta Ads reporting (docs/META_ADS_SCS.md): the merge refuses while the source holds any of these.
   'MetaAccountSnapshot', 'MetaAd', 'MetaAdAccount', 'MetaBillingEvent', 'MetaInsightDaily', 'MetaInsightSummary', 'MetaLeadTouch', 'MetaSpendCycle',
+  // CYS bridge (docs/CYS_BRIDGE.md): SunOff keys these by "pf:<organizationId>:<lead>", so the merge refuses while the source holds any.
+  'SunoffHandoff',
 ].sort()
 // Org-scoped rows that are only a live heartbeat (no id, nothing to keep):
 // cleared for both organizations instead of moved.
@@ -43,6 +45,7 @@ export async function mergeWorkspace(pg: PoolClient, options: MergeOptions): Pro
     if ((await pg.query(`SELECT id FROM "PhoneNumber" WHERE "organizationId"=$1 AND status <> 'RELEASED'`, [sourceId])).rowCount) throw new Error('Legacy phone numbers require a provider retirement/repointing plan first.')
     if ((await pg.query(`SELECT id FROM "TelephonyWallet" WHERE "organizationId"=$1 AND ("balanceCents" <> 0 OR "autoReloadEnabled")`, [sourceId])).rowCount) throw new Error('Reconcile the legacy wallet before consolidation; balances are never silently combined.')
     for (const table of META_ADS_TABLES) if ((await pg.query(`SELECT 1 FROM ${q(table)} WHERE "organizationId"=$1 LIMIT 1`, [sourceId])).rowCount) throw new Error('Meta Ads reporting data exists in the source workspace; the ad account binding needs an explicit decision first.')
+    if ((await pg.query(`SELECT 1 FROM "SunoffHandoff" WHERE "organizationId"=$1 LIMIT 1`, [sourceId])).rowCount) throw new Error('CYS hand-offs to SunOff exist in the source workspace; SunOff keys them by workspace, so they need an explicit decision first.')
     for (const field of ['email', 'emailAlias']) {
       const collision = await pg.query(`SELECT 1 FROM "User" a JOIN "User" b ON lower(a.${q(field)})=lower(b.${q(field)}) WHERE a."organizationId"=$1 AND b."organizationId"=$2 LIMIT 1`, both)
       if (collision.rowCount) throw new Error(`User ${field} collision requires a reviewed identity mapping.`)

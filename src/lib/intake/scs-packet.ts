@@ -7,6 +7,8 @@ import { refreshCysMirror } from '@/lib/cys/data'
 import { SCHEMA_VERSION, asRecord, str, type DocumentRef } from '@/lib/packet/schema'
 import { queueScsDocumentImports, retireSupersededScsDocuments } from './scs-document-import'
 import { profileAddressAfterPacket } from './property-identity'
+import { verifyIntakeToken } from '@/lib/call-center/intake-link'
+import { applyLeadLink, type AssistedIntake } from '@/lib/call-center/possible-match'
 
 export function isSchema42Payload(raw: unknown): boolean {
   const top = asRecord(raw)
@@ -61,7 +63,73 @@ export function intakeAnswersFromPacket(raw: Record<string, unknown>): Record<st
   const sources = { ...typedSources, ...provenance }
   const answerProvenance = Object.fromEntries(Object.keys(merged).filter(key => sources[key]).map(key => [key, sources[key]]))
   const dispositions=asRecord(data.questionnaire_dispositions??raw.questionnaire_dispositions)
-  return {...merged,...(Object.keys(answerProvenance).length?{_scs_answer_provenance:answerProvenance}:{}),...(Object.keys(dispositions).length?{_scs_questionnaire_dispositions:dispositions}:{})}
+  const assisted=assistedFromPacket(raw)
+  return {...merged,...(Object.keys(answerProvenance).length?{_scs_answer_provenance:answerProvenance}:{}),...(Object.keys(dispositions).length?{_scs_questionnaire_dispositions:dispositions}:{}),...(assisted?{_scs_assisted:assisted}:{})}
+}
+
+/**
+ * Rep-assisted intake (docs/CYS_BRIDGE.md §F D1): SCS records who filled or
+ * finished the form with the homeowner as `data.assisted {by, at, mode}`.
+ * Kept on the Client's intake SurveyResponse as `_scs_assisted` (underscore
+ * keys are never shown as homeowner answers), so a later client-only packet
+ * does not erase it.
+ */
+export function assistedFromPacket(raw: Record<string, unknown>): AssistedIntake | null {
+  const block = asRecord(asRecord(raw.data).assisted ?? raw.assisted)
+  const by = str(block.by).trim().slice(0, 120)
+  if (!by) return null
+  const at = new Date(str(block.at))
+  return {
+    by,
+    at: Number.isNaN(at.getTime()) ? '' : at.toISOString(),
+    mode: (str(block.mode).trim() || 'rep').slice(0, 40),
+  }
+}
+
+/** The `pfl` token SCS copied from the intake link into the packet's attribution. */
+export function intakeLinkTokenFrom(raw: Record<string, unknown>): string | null {
+  const data = asRecord(raw.data)
+  return str(asRecord(data.attribution).pfl) || str(asRecord(raw.attribution).pfl) || null
+}
+
+/**
+ * Link the Call Center lead that sent this homeowner to SCS (§B1). A bad,
+ * expired or foreign token, or any error here, is audited or logged and the
+ * intake carries on: a failed link never fails the intake. Inside the
+ * receiver's transaction the step runs under a savepoint for that reason.
+ */
+async function linkCallCenterLead(opts: { organizationId: string; clientId: string }, raw: Record<string, unknown>, store: Prisma.TransactionClient): Promise<void> {
+  const token = intakeLinkTokenFrom(raw)
+  if (!token) return
+  const inTx = store !== db
+  if (inTx) await store.$executeRawUnsafe('SAVEPOINT pf_lead_link')
+  try {
+    const check = verifyIntakeToken(token)
+    if (!check.ok) {
+      await store.auditEvent.create({ data: {
+        organizationId: opts.organizationId, actorLabel: 'SCS intake', action: 'call_center.link_rejected',
+        entityType: 'Client', entityId: opts.clientId, summary: `SCS intake link not accepted (${check.reason})`,
+        after: { reason: check.reason, scsLeadId: str(raw.lead_id) || null },
+      } })
+    } else {
+      // Scoped to the receiving source's org: a token for another org's lead finds nothing.
+      const outcome = await applyLeadLink(store, {
+        organizationId: opts.organizationId, leadId: check.leadId, clientId: opts.clientId,
+        actor: { id: null, label: 'SCS intake' }, via: 'intake_token', tokenId: check.tokenId, assisted: assistedFromPacket(raw),
+      })
+      if (outcome === 'missing') {
+        await store.auditEvent.create({ data: {
+          organizationId: opts.organizationId, actorLabel: 'SCS intake', action: 'call_center.link_rejected',
+          entityType: 'Client', entityId: opts.clientId, summary: 'SCS intake link names no lead in this workspace',
+          after: { reason: 'no_lead', tokenId: check.tokenId },
+        } })
+      }
+    }
+    if (inTx) await store.$executeRawUnsafe('RELEASE SAVEPOINT pf_lead_link')
+  } catch (err) {
+    if (inTx) await store.$executeRawUnsafe('ROLLBACK TO SAVEPOINT pf_lead_link')
+    console.error('[intake] call center lead link skipped', err instanceof Error ? err.message : err)
+  }
 }
 
 function documentsFrom(raw: Record<string, unknown>): DocumentRef[] {
@@ -79,6 +147,7 @@ export async function ingestScsPacket(opts: {
   rawPayload: unknown
 }, store: Prisma.TransactionClient = db): Promise<void> {
   const raw = asRecord(opts.rawPayload)
+  await linkCallCenterLead(opts, raw, store)
   // Extract-backed finance stays in the immutable submission payload and in
   // document review. It must not masquerade as a homeowner's survey answer.
   const incoming = intakeAnswersFromPacket(raw)

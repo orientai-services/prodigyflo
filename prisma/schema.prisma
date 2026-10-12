@@ -382,6 +382,7 @@ model Organization {
   voiceCalls             VoiceCall[]
   callCenterSlots        CallCenterSlot[]
   callCenterRepHours     CallCenterRepHours[]
+  sunoffHandoffs         SunoffHandoff[]
 
   // Meta Ads reporting (one bound workspace; see docs/META_ADS_SCS.md).
   metaAdAccounts       MetaAdAccount[]
@@ -2696,6 +2697,8 @@ enum CallCenterEventType {
   NOTE
   INTAKE_LINK
   LOCK
+  /// CYS sign-up hand-off to SunOff (docs/CYS_BRIDGE.md §B3).
+  HANDOFF
 }
 
 model CallCenterLead {
@@ -2748,6 +2751,8 @@ model CallCenterLead {
   events       CallCenterEvent[]
   /// Call Center Calendar holds (back-relation only, no column on this table).
   calendarSlots CallCenterSlot[]
+  /// CYS sign-up hand-off to SunOff (back-relation only, no column on this table).
+  sunoffHandoff SunoffHandoff?
 
   @@index([organizationId, status])
   @@index([organizationId, nextAttemptAt])
@@ -2780,6 +2785,59 @@ model CallCenterEvent {
   @@index([leadId, createdAt])
   @@index([type, direction, readAt])
   @@index([externalRef])
+}
+
+/// docs/CYS_BRIDGE.md Â§B3: where a desk lead stands after "CYS Sign up".
+/// SENDING while a request is in flight, ERROR when SunOff did not answer;
+/// STANDBY -> STARTED -> SUBMITTED come from SunOff and never move backwards
+/// (WITHDRAWN is the one exception, and a fresh send can leave it).
+enum SunoffHandoffStatus {
+  SENDING
+  STANDBY
+  STARTED
+  SUBMITTED
+  WITHDRAWN
+  ERROR
+}
+
+/// One per desk lead: what ProdigyFlo sent to SunOff. The revision is the
+/// sha256 of the payload, the manifest lists the only files SunOff may pull,
+/// and nonces holds the status-hook request keys seen in the last 24 h.
+model SunoffHandoff {
+  id               String              @id @default(cuid())
+  organizationId   String
+  callCenterLeadId String              @unique
+  /// The linked Client at the last send. No foreign key, like CallCenterLead.clientId.
+  clientId         String
+  sunoffLeadId     Int?
+  status           SunoffHandoffStatus @default(SENDING)
+  /// sha256 of the last payload SunOff accepted. Null until the first accept.
+  revision         String?
+  payloadVersion   String              @default("pf-handoff/v1")
+  /// [{ id, kind: 'document' | 'packet-review' | 'packet-pitch' }]. The file routes serve nothing else.
+  manifest         Json                @default("[]")
+  /// { "<Idempotency-Key>": <unix seconds> } of inbound status hooks, pruned after 24 h.
+  nonces           Json                @default("{}")
+  lastSentAt       DateTime?
+  startedAt        DateTime?
+  submittedAt      DateTime?
+  withdrawnAt      DateTime?
+  lastError        String?
+  /// Requests sent so far. Also the Idempotency-Key suffix, so every request is unique.
+  attempts         Int                 @default(0)
+  /// Queued re-sends after the profile changed (cron, STANDBY only).
+  resendTries      Int                 @default(0)
+  nextResendAt     DateTime?
+  /// Staff user id. No relation, so User stays unchanged.
+  createdById      String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         CallCenterLead @relation(fields: [callCenterLeadId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([status, nextResendAt])
 }
 
 model CallCenterSuppression {

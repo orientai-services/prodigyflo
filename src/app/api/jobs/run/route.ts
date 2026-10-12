@@ -125,11 +125,16 @@ async function run(request: NextRequest) {
   const callCenterCalendar = calendarEnabled()
     ? await (await import('@/lib/call-center/calendar/service')).runCalendarReminders(new Date()).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }))
     : null
+  // CYS bridge: re-send profiles that changed while SunOff holds them on standby
+  // (docs/CYS_BRIDGE.md §B3.2). Off until PF_SUNOFF_BRIDGE_KEY is set. Never throws.
+  const sunoffResends = process.env.PF_SUNOFF_BRIDGE_KEY
+    ? await (await import('@/lib/sunoff-bridge/handoff')).resendStaleHandoffs().catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }))
+    : null
   if (new URL(request.url).searchParams.get('scope') === 'scs-document-extractions') {
     return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentExtractions })
   }
   if (process.env.PRODIGYFLO_FINAL_DESK === 'true') {
-    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, recordsStaff, propertyRecords, telephonySweep, callCenterCalendar, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
+    return Response.json({ ok: true, tookMs: Date.now() - startedAt, scsDocumentImports, scsDocumentExtractions, recordsStaff, propertyRecords, telephonySweep, callCenterCalendar, sunoffResends, legacyAutomation: { status: 'DISABLED_FOR_FINAL_DESK' } })
   }
   const counts = await runDueWork(new Date())
   const scores = await freshenScores()
@@ -141,7 +146,7 @@ async function run(request: NextRequest) {
   // month per line. A wallet that cannot cover it suspends the line (never
   // releases it) and tells the account's admins.
   const telephony = await renewNumbers(new Date())
-  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine: { status: 'RETIRED' }, telephony, telephonySweep, callCenterCalendar, scsDocumentImports, scsDocumentExtractions })
+  return Response.json({ ok: true, tookMs: Date.now() - startedAt, ...counts, scores, digest, engine: { status: 'RETIRED' }, telephony, telephonySweep, callCenterCalendar, sunoffResends, scsDocumentImports, scsDocumentExtractions })
 }
 
 export const POST = run

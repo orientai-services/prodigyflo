@@ -1,0 +1,278 @@
+{
+ "_source": "sunoff_work/_rd/cys6/intake_guide.py QMAP (read-only copy, 2026-10-12)",
+ "qmap": {
+  "q1": {
+   "kind": "fn",
+   "fact": "client.first"
+  },
+  "q2": {
+   "kind": "fn",
+   "fact": "client.address"
+  },
+  "q3": {
+   "kind": "text",
+   "fact": "client.mailing_address"
+  },
+  "q4_phone": {
+   "kind": "text",
+   "fact": "client.phone"
+  },
+  "q4_email": {
+   "kind": "text",
+   "fact": "client.email"
+  },
+  "q5": {
+   "kind": "fn",
+   "fact": "client.sole_owner"
+  },
+  "q6": {
+   "kind": "text",
+   "fact": "client.contract_names"
+  },
+  "q7": {
+   "kind": "enum",
+   "fact": "client.property_type",
+   "codes": {
+    "single_family": 0,
+    "condo_townhome": 1,
+    "manufactured": 2,
+    "commercial": 3
+   }
+  },
+  "q8": {
+   "kind": "text",
+   "fact": "system.sales_company"
+  },
+  "q9": {
+   "kind": "text",
+   "fact": "system.installer"
+  },
+  "q10": {
+   "kind": "text",
+   "fact": "finance.finance_company"
+  },
+  "q11": {
+   "kind": "multi",
+   "fact": "finance.contract_type",
+   "codes": {
+    "loan": 0,
+    "lease": 1,
+    "purchase": 2,
+    "ppa": 3,
+    "cash": 4,
+    "warranty": 5
+   }
+  },
+  "q12": {
+   "kind": "fn",
+   "fact": "sale.signed_year"
+  },
+  "q13": {
+   "kind": "enum",
+   "fact": "sale.signed_where",
+   "codes": {
+    "home": 0,
+    "office": 1
+   }
+  },
+  "q14": {
+   "kind": "yn3",
+   "fact": "sale.three_day_notice"
+  },
+  "q15": {
+   "kind": "bool",
+   "fact": "sale.got_copies"
+  },
+  "q16": {
+   "kind": "enum",
+   "fact": "sale.first_contact",
+   "codes": {
+    "door": 0,
+    "cold_call": 1,
+    "mailer": 2,
+    "online": 3,
+    "referral": 4,
+    "event": 5,
+    "other": 6
+   }
+  },
+  "q17": {
+   "kind": "enum",
+   "fact": "sale.presentation_where",
+   "codes": {
+    "home": 0,
+    "office": 1,
+    "online": 2,
+    "other": 3
+   }
+  },
+  "q18": {
+   "kind": "text",
+   "fact": "sale.presentation_length"
+  },
+  "q19": {
+   "kind": "multi",
+   "fact": "sale.tactics",
+   "codes": {
+    "limited_time": 0,
+    "sign_now": 1,
+    "no_review": 2,
+    "long_visit": 3,
+    "utility_affiliation": 4
+   }
+  },
+  "q20": {
+   "kind": "multi",
+   "fact": "issue.promised",
+   "codes": {
+    "no_cost": 0,
+    "free": 1,
+    "bill_drop": 2,
+    "no_utility_bill": 3,
+    "tax_credit": 4,
+    "no_lien": 5,
+    "buyout_anytime": 6,
+    "zero_maintenance": 7,
+    "other": 8
+   }
+  },
+  "q21": {
+   "kind": "yn3",
+   "fact": "issue.misled"
+  },
+  "q22": {
+   "kind": "fn",
+   "fact": "issue.promises"
+  },
+  "q23": {
+   "kind": "fn",
+   "fact": "finance.monthly"
+  },
+  "q24": {
+   "kind": "fn",
+   "fact": "finance.term_years"
+  },
+  "q25": {
+   "kind": "fn",
+   "fact": "finance.escalator_pct"
+  },
+  "q26": {
+   "kind": "enum",
+   "fact": "issue.bill_change",
+   "codes": {
+    "up_a_lot": 0,
+    "up_a_little": 1,
+    "same": 2,
+    "down": 3
+   }
+  },
+  "q27": {
+   "kind": "bool",
+   "fact": "issue.told_bill_lower"
+  },
+  "q28": {
+   "kind": "enum",
+   "fact": "system.producing",
+   "codes": {
+    "yes": 0,
+    "no": 1,
+    "never": 2
+   }
+  },
+  "q29": {
+   "kind": "multi",
+   "fact": "issue.performance",
+   "codes": {
+    "shutoffs": 0,
+    "under_projection": 1,
+    "battery": 2,
+    "none": 3
+   }
+  },
+  "q30": {
+   "kind": "multi",
+   "fact": "issue.install_problems",
+   "codes": {
+    "roof_leak": 0,
+    "structural": 1,
+    "shading": 2,
+    "design": 3,
+    "roof_penetrations": 4,
+    "electrical": 5,
+    "failed_inspection": 6,
+    "delays": 7,
+    "none": 8
+   }
+  },
+  "q31": {
+   "kind": "multi",
+   "fact": "issue.service_problems",
+   "codes": {
+    "no_response": 0,
+    "repair_delay": 1,
+    "billing_errors": 2,
+    "broken_promises": 3,
+    "none": 4
+   }
+  },
+  "q32": {
+   "kind": "fn",
+   "fact": "system.installer_status"
+  },
+  "q33": {
+   "kind": "multi",
+   "fact": "issue.complaints_filed",
+   "codes": {
+    "bbb": 0,
+    "attorney_general": 1,
+    "utility": 2,
+    "finance_company": 3,
+    "ftc": 4,
+    "none": 5
+   }
+  },
+  "q34": {
+   "kind": "bool",
+   "fact": "issue.selling_home"
+  },
+  "q35": {
+   "kind": "bool",
+   "fact": "issue.sale_blocked"
+  },
+  "q36": {
+   "kind": "yn3",
+   "fact": "finance.ucc_filed"
+  },
+  "q37": {
+   "kind": "fn",
+   "fact": "client.age_band"
+  },
+  "q38": {
+   "kind": "bool",
+   "fact": "client.language_barrier"
+  },
+  "q39": {
+   "kind": "yn3",
+   "fact": "sale.credit_check"
+  },
+  "q40": {
+   "kind": "multi",
+   "fact": "issue.hardship",
+   "codes": {
+    "behind_payments": 0,
+    "credit_damage": 1,
+    "none": 2
+   }
+  },
+  "q41": {
+   "kind": "multi",
+   "fact": "issue.outcome_wanted",
+   "codes": {
+    "cancel": 0,
+    "remove_lien": 1,
+    "fix_system": 2,
+    "lower_payments": 3
+   }
+  }
+ }
+}

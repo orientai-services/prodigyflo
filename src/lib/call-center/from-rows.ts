@@ -3,7 +3,7 @@
  * An empty list stays on the dummy seed. A real row never carries a full phone.
  */
 
-import { deriveFollowUp, seedLeads, type CallLead, type LeadChannel, type LeadLanguage, type LeadStatus, type TrailEvent, type TrailKind } from './model'
+import { deriveFollowUp, isHandoffStatus, seedLeads, type CallLead, type IntakeMode, type LeadChannel, type LeadHandoff, type LeadIntake, type LeadLanguage, type LeadStatus, type TrailEvent, type TrailKind } from './model'
 import { SCS_ENGLISH_PAGE_ID, readFacebookFormEvent } from './meta-route'
 
 export type StoredCallCenterEvent = {
@@ -27,6 +27,10 @@ export type StoredCallCenterLead = {
   events: StoredCallCenterEvent[]
   /** IANA zone staff set on the lead. Optional so older callers keep compiling. */
   timeZone?: string | null
+  /** The linked Client. Left out (undefined) by loaders that don't read it, so the desk keeps what it had. */
+  clientId?: string | null
+  /** First time an intake link went out. */
+  intakeLinkSentAt?: Date | null
 }
 
 function last4(value: string | null): string | null {
@@ -117,6 +121,7 @@ function trailLabel(type: string): string {
     case 'LOCK': return 'Lock'
     case 'INTAKE_LINK': return 'Intake link'
     case 'MESSENGER': return 'Messenger'
+    case 'HANDOFF': return 'CYS Sign up'
     default: return 'Update'
   }
 }
@@ -133,6 +138,17 @@ function trailDetail(type: string, body: string, page: string, viewerId?: string
     return viewerId && copy.userId === viewerId ? 'You took this lead' : `${name} took this lead`
   }
   if (type === 'LOCK' && copy?.action === 'skip') return 'Skipped'
+  if (type === 'INTAKE_LINK' && !copy?.detail) {
+    if (isLinkedMarker(body)) return 'Intake linked to a Client'
+    const mode = readJson(body)?.mode
+    if (mode === 'open') return 'SCS Intake opened with the client'
+    if (mode === 'text') return 'SCS Intake link texted'
+    if (mode === 'copy') return 'SCS Intake link copied'
+  }
+  if (type === 'HANDOFF' && !copy?.detail) {
+    const status = readJson(body)?.status
+    if (typeof status === 'string') return `SunOff · ${status.toLowerCase()}`
+  }
   if (copy?.detail) return safeText(copy.detail) || trailLabel(type)
   return safeText(body) || trailLabel(type)
 }
@@ -151,6 +167,43 @@ function personZip(row: StoredCallCenterLead): string | null {
     if (event.type !== 'FORM') continue
     const read = readFacebookFormEvent(event.body)
     if (read.zip) return read.zip
+  }
+  return null
+}
+
+function readJson(body: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(body) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/** The receiver's (or a manual) INTAKE_LINK row, body {action:'linked', clientId, via}, records the link, not a send. */
+function isLinkedMarker(body: string): boolean {
+  return body.trim() === 'linked' || readJson(body)?.action === 'linked'
+}
+
+/** The newest intake link sent: INTAKE_LINK events (body {mode, tokenId}), else intakeLinkSentAt. */
+export function intakeOf(row: Pick<StoredCallCenterLead, 'events' | 'intakeLinkSentAt'>): LeadIntake | null {
+  for (let i = row.events.length - 1; i >= 0; i -= 1) {
+    const event = row.events[i]
+    if (event.type !== 'INTAKE_LINK' || isLinkedMarker(event.body)) continue
+    const mode = readJson(event.body)?.mode
+    return { sentAt: event.createdAt.toISOString(), mode: mode === 'open' || mode === 'text' || mode === 'copy' ? (mode as IntakeMode) : null }
+  }
+  return row.intakeLinkSentAt ? { sentAt: row.intakeLinkSentAt.toISOString(), mode: null } : null
+}
+
+/** The newest CYS hand-off status on the trail (HANDOFF events carry {status}). */
+export function handoffOf(row: Pick<StoredCallCenterLead, 'events'>): LeadHandoff | null {
+  for (let i = row.events.length - 1; i >= 0; i -= 1) {
+    const event = row.events[i]
+    if (event.type !== 'HANDOFF') continue
+    const status = readJson(event.body)?.status
+    const upper = typeof status === 'string' ? status.toUpperCase() : null
+    if (isHandoffStatus(upper)) return { status: upper, at: event.createdAt.toISOString() }
   }
   return null
 }
@@ -242,7 +295,43 @@ export function callLeadFromRow(
     ...(extras.missedCallId ? { missedCallId: extras.missedCallId } : {}),
     ...(extras.missedCallId && extras.missedCallAt ? { missedCallAt: extras.missedCallAt } : {}),
     ...(extras.callbackRequested ? { callbackRequested: true } : {}),
+    ...(row.clientId !== undefined ? { clientId: row.clientId } : {}),
+    intake: intakeOf(row),
+    handoff: handoffOf(row),
   }
+}
+
+/** What load-leads reads beside the desk rows: the link, the first send, and the texting gates. */
+export type DeskLinkRow = {
+  id: string
+  clientId: string | null
+  intakeLinkSentAt: Date | null
+  consentAt: Date | null
+  consentRevokedAt: Date | null
+  doNotCallAt: Date | null
+}
+
+/** Why "Text link" is off, or null. Quiet hours are checked on the screen at click time. */
+export function intakeTextBlock(row: Omit<DeskLinkRow, 'id' | 'clientId' | 'intakeLinkSentAt'>, smsLive: boolean): string | null {
+  if (row.doNotCallAt) return 'Do not call'
+  if (!row.consentAt || row.consentRevokedAt) return 'No texting consent on file'
+  if (!smsLive) return 'Texting isn’t live yet'
+  return null
+}
+
+/** Fill clientId, intake and the texting gate on desk rows from DeskLinkRow. Seed rows pass through. */
+export function withDeskLinks(leads: CallLead[], rows: readonly DeskLinkRow[], smsLive: boolean): CallLead[] {
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  return leads.map((lead) => {
+    const row = lead.persisted ? byId.get(lead.id) : undefined
+    if (!row) return lead
+    return {
+      ...lead,
+      clientId: row.clientId,
+      intake: lead.intake ?? (row.intakeLinkSentAt ? { sentAt: row.intakeLinkSentAt.toISOString(), mode: null } : null),
+      intakeTextBlock: intakeTextBlock(row, smsLive),
+    }
+  })
 }
 
 /** Real rows replace the seed. An empty table keeps the dummy desk. */
