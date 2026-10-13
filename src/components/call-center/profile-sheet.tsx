@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { profileInitials, profileName } from '@/lib/people/profile-name'
 import { squareCrop } from '@/lib/profile/avatar-crop'
+import { SheetGrab } from './native/sheet-grab'
 
 /** Who is signed in, as the Call Center header shows them. */
 export type ViewerProfile = {
@@ -233,6 +234,7 @@ export function ProfileButton({ profile }: { profile: ViewerProfile }) {
           'max-md:rounded-b-none max-md:pb-[calc(env(safe-area-inset-bottom)+1.25rem)]',
         ].join(' ')}
       >
+        <SheetGrab onClose={() => onOpenChange(false)} />
         <DialogHeader>
           <DialogTitle>Your profile</DialogTitle>
           <DialogDescription>How your teammates see you in the dialer and the team chat.</DialogDescription>

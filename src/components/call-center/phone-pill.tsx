@@ -6,6 +6,7 @@ import { Settings2, X } from 'lucide-react'
 import { phoneStatus, type PhoneStatus } from '@/lib/telephony/ui/phone-status'
 import { PhoneSettings } from '@/components/voice/phone-settings'
 import { useVoice } from '@/components/voice/voice-provider'
+import { useSheet } from './native/use-sheet'
 import './phone-pill.css'
 
 /** Below this width the sheet is a bottom sheet instead of a popover under the pill. */
@@ -97,6 +98,7 @@ function PhoneSheet({
 }) {
   const voice = useVoice()
   const rootRef = useRef<HTMLDivElement>(null)
+  useSheet(rootRef, onClose)
   const live = useRef({ onClose, pill })
   useEffect(() => {
     live.current = { onClose, pill }

@@ -2,11 +2,13 @@
 
 import { useEffect, useRef } from 'react'
 import { QUICK } from './message-logic'
+import { useSheet } from '../../native/use-sheet'
 import type { T } from './strings'
 
 /** A modal sheet (bottom on phones, centered on desktop) that closes on Escape, a backdrop tap or ×. */
 function Modal({ label, onClose, children, className = '' }: { label: string; onClose: () => void; children: React.ReactNode; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null)
+  useSheet(ref, onClose)
   const downOnBackdrop = useRef(false)
   // No close() in a cleanup: it fires `close`, which would unmount the sheet on React's dev double-mount.
   useEffect(() => {

@@ -7,6 +7,7 @@ import { channelLabel, groupPeople, listTime } from './format'
 import { Face } from './face'
 import type { T } from './strings'
 import type { Channel, FlaggedAnswer, Lang, Message, Person, SearchHit } from './types'
+import { useSheet } from '../../native/use-sheet'
 
 /** Where a search, pin or flag result leads: the message in its channel, or inside its thread. */
 export type Goto = { channel: string; id: string; parent: string | null }
@@ -14,6 +15,7 @@ export type Goto = { channel: string; id: string; parent: string | null }
 /** Bottom sheets on phones, centered dialogs on desktop (docs/MOBILE.md). */
 export function Sheet({ title, kicker, sub, foot, onClose, children }: { title: string; kicker?: string; sub?: ReactNode; foot?: ReactNode; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null)
+  useSheet(ref, onClose)
   // No close() in a cleanup: it fires `close`, which would unmount the sheet on React's dev double-mount.
   useEffect(() => {
     const d = ref.current
