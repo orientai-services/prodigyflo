@@ -15,6 +15,8 @@ export function staffRouteAllowed(role: RoleKey, path: string): boolean {
   if (role === 'SUPER_ADMIN') return !/^\/agency(\/|$)/.test(path) && (process.env.PRODIGYFLO_FINAL_DESK === 'true' || !/^\/engine(\/|$)/.test(path))
   if (role !== 'CLOSER') return false
   if (path === '/api/desk' && process.env.PRODIGYFLO_FINAL_DESK === 'true') return true
+  // The Call Center's live-refresh fingerprint (an opaque hash): wherever a Closer may open the Call Center.
+  if (path === '/api/call-center/version') return true
   return /^\/(board|call-center|clients|queue|documents|submissions|profile|notifications|forbidden)(\/|$)/.test(path)
     || /^\/api\/(documents|cys|submissions|notifications|search|profile|signout|messages|templates|voice|chat)(\/|$)/.test(path)
     || path === '/settings/profile' || path === '/' || path === '/app'

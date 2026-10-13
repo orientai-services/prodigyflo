@@ -89,6 +89,7 @@ import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
 import { usePowerMode } from './use-power-mode'
 import { useChatHost, type TeamChatPromise } from './use-chat-host'
 import { useFullTrail } from './use-full-trail'
+import { useDeskVersion } from './use-desk-version'
 import { chatHref } from './messages/chat/host-bus'
 import { haptic } from './native/haptics'
 import { useEdgeSwipeBack, usePullToRefresh, useSectionScroll } from './native/use-native-shell'
@@ -294,6 +295,13 @@ export function CallCenter({
   const noteRef = useRef<HTMLTextAreaElement>(null)
   const callRef = useRef<HTMLSpanElement>(null)
   const clock = useDeskClock(renderedAt ? Date.parse(renderedAt) : 0)
+  // Today, Leads and Team re-read on the 20 s tick only when the desk changed (use-desk-version.ts); the other
+  // sections, and pull to refresh, re-read as before.
+  const deskVersion = useDeskVersion(
+    `${routeKey}:${route.filter ?? ''}`,
+    renderedAt,
+    section === 'today' || section === 'team' || (section === 'leads' && !route.ads),
+  )
   const leads = draft && draft.source === initialLeads ? draft.leads : (initialLeads ?? seedLeads())
 
   function replace(next: CallLead) {
@@ -651,7 +659,7 @@ export function CallCenter({
         adsAllowed={adsAllowed}
         phone={phoneStatus}
         line={line ? (line.label && line.label !== line.display ? `${line.label} · ${line.display}` : line.display) : null}
-        updated={updatedLabel(renderedAt ? Date.parse(renderedAt) : clock, clock)}
+        updated={updatedLabel(Math.max(renderedAt ? Date.parse(renderedAt) : clock, deskVersion.checkedAt), clock)}
         viewer={viewer}
         toggle={navRef}
         onClose={() => setMoreOpen(false)}
@@ -704,10 +712,15 @@ export function CallCenter({
     return () => window.clearTimeout(timer)
   }, [pendingSection])
   const switching = Boolean(pendingSection && pendingSection !== routeKey)
-  useLiveRefresh(refresh, () => {
-    if (busy || scheduling || booking || power.phase === 'dialing') return false
-    return !voice || (voice.status === 'idle' && !voice.activeTarget && !voice.incoming)
-  })
+  useLiveRefresh(
+    refresh,
+    () => {
+      if (busy || scheduling || booking || power.phase === 'dialing') return false
+      return !voice || (voice.status === 'idle' && !voice.activeTarget && !voice.incoming)
+    },
+    undefined,
+    deskVersion.changed,
+  )
 
   return (
     <div
