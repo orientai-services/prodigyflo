@@ -198,4 +198,14 @@ describe('call center history loaders', () => {
     expect(averyLines.filter((t) => t === 'New lead')).toHaveLength(1)
     expect((await loadActivity(blake, {}, NOW)).rows).toEqual([])
   })
+
+  it("puts the calendar's own trail lines in words", async () => {
+    const note = await db.callCenterEvent.create({ data: { leadId: lead.mara, type: 'NOTE', body: 'Calendar hold placed (dakota)', createdAt: ago(1) } })
+    try {
+      const row = (await loadActivity(admin, {}, NOW)).rows.find((r) => r.key === `ev:${note.id}`)
+      expect(row?.detail).toBe('Calendar hold placed with Dakota')
+    } finally {
+      await db.callCenterEvent.delete({ where: { id: note.id } })
+    }
+  })
 })

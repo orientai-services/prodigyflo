@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
 import { ACTIVE_STATUSES, TERMINAL_STATUSES, recordingPath, visibleCallsWhere } from '@/lib/telephony/voice-calls'
 import { calendarReps } from './calendar/config'
+import { calendarTrailText } from './calendar/trail-text'
 import { leadHref } from './lead-link'
 import { readFacebookFormEvent } from './meta-route'
 import {
@@ -582,7 +583,8 @@ export async function loadActivity(
   for (const e of events) {
     const json = readJson(e.body)
     const label = safe(str(json?.label)) ?? ''
-    const detail = safe(str(json?.detail) ?? (json ? null : e.body))
+    // The calendar's own lines ("Calendar hold placed (dakota)") in words, as on the lead trail.
+    const detail = safe(str(json?.detail) ?? (json ? null : (calendarTrailText(e.body) ?? e.body)))
     const who = nameOf(str(json?.userId), str(json?.name)) ?? holder(e.leadId, e.createdAt)
     const base = { key: `ev:${e.id}`, ...stamp(e.createdAt), ...aboutLead(e.leadId) }
     switch (e.type) {
