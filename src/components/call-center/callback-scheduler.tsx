@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { callbackChips, daySlots, safeZone, slotDays, zonedLabel } from '@/lib/call-center/cadence'
+import { callbackChips, daySlots, firstOpenDay, safeZone, slotDays, zonedLabel } from '@/lib/call-center/cadence'
 
 function viewerZone(): string {
   try {
@@ -42,10 +42,11 @@ export function CallbackScheduler({
   const leadZone = safeZone(zone)
   const [mine] = useState(viewerZone)
   const [picked, setPicked] = useState<string | null>(null)
-  const [dayIndex, setDayIndex] = useState(0)
   const at = new Date(now)
-  const chips = callbackChips(at, leadZone)
   const days = slotDays(at, leadZone)
+  // Late in the evening today has no slots left: open on the first day that does.
+  const [dayIndex, setDayIndex] = useState(() => firstOpenDay(days, leadZone, at))
+  const chips = callbackChips(at, leadZone)
   const day = days[dayIndex] ?? days[0]
   const slots = daySlots(day, leadZone, at)
   const differs = mine !== leadZone && zonedLabel(at.toISOString(), mine, false) !== zonedLabel(at.toISOString(), leadZone, false)
