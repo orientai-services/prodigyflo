@@ -232,6 +232,7 @@
 .final-desk.call-center .cal-times button.off { background: #f3f0ea; color: #a5abb1; font-weight: 400; text-decoration: line-through; cursor: not-allowed; }
 .final-desk.call-center .cal-times button.on { background: var(--teal); border-color: var(--teal); color: #fff; }
 .final-desk.call-center .cal-pick { font-weight: 600; font-size: 14px; }
+.final-desk.call-center .cal-sched-foot { display: grid; gap: 10px; }
 .final-desk.call-center .cal-sched-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .final-desk.call-center .cal-sched-acts .btn { min-height: 42px; }
 
@@ -313,10 +314,11 @@
   .final-desk.call-center .cal-rep-btn { flex: 0 0 auto; min-height: 44px; font-size: 14px; }
   .final-desk.call-center .cal-times { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .final-desk.call-center .cal-times button { min-height: 44px; font-size: 14px; }
-  .final-desk.call-center .cal-sched-acts {
-    position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 -16px;
+  .final-desk.call-center .cal-sched-foot {
+    position: sticky; bottom: 0; gap: 8px; margin: 0 -16px;
     padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line);
   }
+  .final-desk.call-center .cal-sched-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .final-desk.call-center .cal-sched-acts .btn { width: 100%; min-height: 48px; }
   .final-desk.call-center .cal-sched-acts .btn:first-child { grid-column: 1 / -1; }
 }
