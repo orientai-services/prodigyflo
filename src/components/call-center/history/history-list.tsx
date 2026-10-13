@@ -21,9 +21,18 @@ const SPEEDS = [1, 1.5, 2] as const
 /** One recording at a time: opening another row's player unmounts this one, which stops it. */
 function InlinePlayer({ src, rate, onRate, name }: { src: string; rate: number; onRate: (r: number) => void; name: string }) {
   const ref = useRef<HTMLAudioElement>(null)
+  const [failed, setFailed] = useState(false)
   useEffect(() => {
     if (ref.current) ref.current.playbackRate = rate
   }, [rate])
+  if (failed) {
+    // The route answers 404/503 when the carrier can't hand the file over: say so instead of a dead 0:00 player.
+    return (
+      <div className="hist-player">
+        <p className="hist-player-error" role="status">This recording can&rsquo;t be played right now. Try again in a minute.</p>
+      </div>
+    )
+  }
   return (
     <div className="hist-player">
       <audio
@@ -36,6 +45,7 @@ function InlinePlayer({ src, rate, onRate, name }: { src: string; rate: number; 
         onLoadedMetadata={(e) => {
           e.currentTarget.playbackRate = rate
         }}
+        onError={() => setFailed(true)}
       >
         <a href={src}>Download the recording</a>
       </audio>

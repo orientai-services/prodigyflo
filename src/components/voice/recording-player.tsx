@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import { clockLabel } from '@/lib/telephony/ui/result'
 
 /**
@@ -20,9 +23,14 @@ export function RecordingPlayer({
   label?: string
   className?: string
 }) {
+  // A 404/503 from the proxy (the carrier can't hand the file over) leaves a dead 0:00 player: say so instead.
+  const [failed, setFailed] = useState(false)
   return (
     <div className={['flex flex-wrap items-center gap-2', className].filter(Boolean).join(' ')}>
-      <audio controls preload="none" src={src} className="h-10 w-full max-w-full min-w-0 basis-full sm:h-8 sm:w-auto sm:flex-1 sm:basis-auto">
+      {failed ? (
+        <span className="text-destructive text-sm" role="status">This recording can&rsquo;t be played right now.</span>
+      ) : null}
+      <audio hidden={failed} onError={() => setFailed(true)} controls preload="none" src={src} className="h-10 w-full max-w-full min-w-0 basis-full sm:h-8 sm:w-auto sm:flex-1 sm:basis-auto">
         <a href={src}>Download the recording</a>
       </audio>
       <span className="text-muted-foreground text-xs tabular-nums whitespace-nowrap">
