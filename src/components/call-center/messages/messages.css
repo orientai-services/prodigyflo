@@ -105,15 +105,15 @@
 .final-desk.call-center .msg-send:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
 .final-desk.call-center .msg-compose-off { display: block; font-size: 14px; color: var(--muted); }
 
-/* ── Phones and tablets: an open thread covers the page, like the lead panel. ── */
-@media (max-width: 1023.98px) {
+/* ── Phones: an open thread covers the page, like the lead panel. ── */
+@media (max-width: 767.98px) {
   .final-desk.call-center .msg-has-thread .msg-thread-pane {
     position: fixed; inset: 0; z-index: 40; height: 100dvh;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--voice-dock-h, 0px) env(safe-area-inset-left);
+    padding: var(--cc-sat, env(safe-area-inset-top)) env(safe-area-inset-right) var(--voice-dock-h, 0px) env(safe-area-inset-left);
     background: var(--cream);
   }
   .final-desk.call-center .msg-has-thread .msg-thread { height: 100%; }
-  .final-desk.call-center .msg-compose { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .final-desk.call-center .msg-compose { padding-bottom: calc(10px + var(--cc-sab, env(safe-area-inset-bottom))); }
 }
 @media (max-width: 420px) {
   .final-desk.call-center .msg-open { padding: 0 10px; font-size: 13px; }
@@ -121,8 +121,8 @@
   .final-desk.call-center .msg-bubble-row { max-width: 86%; }
 }
 
-/* ── Desktop: list and thread side by side, the thread scrolling on its own. ── */
-@media (min-width: 1024px) {
+/* ── Tablets and desks: list and thread side by side, the thread scrolling on its own. ── */
+@media (min-width: 768px) {
   .final-desk.call-center .msg {
     grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); align-items: stretch;
     height: min(calc(100dvh - 220px), 820px); min-height: 480px;

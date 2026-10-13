@@ -13,7 +13,14 @@ import { SettingsSheet } from './settings-sheet'
 import { FlaggedSheet, NewChatSheet, PinsSheet, SearchSheet, type Goto } from './sheets'
 import { strings, type T } from './strings'
 import type { Channel, ChatEvent, Lang, Me, MeAnswer, MePrefs, Message, RoomsAnswer, VoiceDraft } from './types'
+import { useEdgeSwipeBack } from '../../native/use-native-shell'
 import './chat.css'
+
+/** A phone's edge swipe presses the pane's own ‹ back (the innermost visible one: a thread's before its conversation's). */
+function pressBack(pane: HTMLElement | null, selector: string) {
+  const buttons = Array.from(pane?.querySelectorAll<HTMLElement>(selector) ?? []).filter((el) => el.offsetParent !== null)
+  buttons.at(-1)?.click()
+}
 
 /**
  * ProdigyFlo's team chat (docs/CYS_BRIDGE.md §B4, owner decision D4): the one
@@ -229,7 +236,7 @@ type SheetState =
   | { k: 'flagged' }
   | { k: 'settings' }
 
-const DESK = '(min-width: 1024px)'
+const DESK = '(min-width: 768px)'
 const isDesk = () => typeof window !== 'undefined' && window.matchMedia(DESK).matches
 const CAT_KEY = 'chat_cat'
 const hashChannel = () => /#c=(c_[0-9a-z]{15})/.exec(window.location.hash)?.[1] ?? null
@@ -830,6 +837,10 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
     }
   }
 
+  // A phone's open conversation is a pushed screen: swipe from the left edge to go back (docs/NATIVE_FEEL.md).
+  const mainRef = useRef<HTMLDivElement>(null)
+  useEdgeSwipeBack(mainRef, Boolean(active) && phase === 'ready', () => pressBack(mainRef.current, '.chat-back'))
+
   if (phase === 'not_linked') return <LinkCard t={t} onLinked={() => window.location.reload()} />
   if (phase === 'error')
     return (
@@ -885,7 +896,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         onSync={() => void syncNow()}
         onSettings={() => setSheet({ k: 'settings' })}
       />
-      <div className="chat-main">
+      <div ref={mainRef} className="chat-main">
         {channel && s.me ? (
           <Conversation
             key={channel.id}
