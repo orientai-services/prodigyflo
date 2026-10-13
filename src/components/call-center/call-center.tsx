@@ -34,7 +34,6 @@ import type { TeamMember } from '@/lib/call-center/team'
 import type { MissedCallVM, TwilioStatusVM } from '@/lib/telephony/voice-contract'
 import type { PhoneSetupVM } from '@/lib/telephony/ui/phone-setup-data'
 import { CallButton } from '@/components/voice/call-button'
-import { RecordingPlayer } from '@/components/voice/recording-player'
 import { useVoice } from '@/components/voice/voice-provider'
 import { MissedCalls } from '@/components/telephony/missed-calls'
 import { PhoneSetupSheet } from '@/components/telephony/phone-setup-sheet'
@@ -81,6 +80,9 @@ import { MoreSheet } from './more-sheet'
 import { PhoneStatusPill, usePhoneStatus } from './phone-pill'
 import { BookVisit } from './calendar/scheduler'
 import { PowerBar, WrapUp } from './power-panel'
+import { ChoiceSelect } from './choice-select'
+import { CommsTrail } from './comms-trail'
+import { OUTCOME_PLACEHOLDER, outcomeGroups } from './outcome-choices'
 import { TeamView } from './team-view'
 import { TodayView, type TodayServer } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
@@ -920,17 +922,13 @@ export function CallCenter({
                       scheduler(selected)
                     ) : (
                       <div className="actions outcomes">
-                        {OUTCOMES.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className="btn secondary"
-                            disabled={busy || !canRecordOutcome(selected, who) || !holding(selected)}
-                            onClick={() => { void recordOutcome(selected, item.id) }}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
+                        <ChoiceSelect
+                          groups={outcomeGroups()}
+                          placeholder={OUTCOME_PLACEHOLDER}
+                          label={`Result for ${selected.name}`}
+                          disabled={busy || !canRecordOutcome(selected, who) || !holding(selected)}
+                          onChoose={(outcome) => { void recordOutcome(selected, outcome) }}
+                        />
                         {calendarAllowed && selected.persisted ? (
                           <button
                             type="button"
@@ -999,21 +997,7 @@ export function CallCenter({
                       </button>
                     </div>
                     <h3>Comms</h3>
-                    <ol className="trail">
-                      {selected.trail.map((event, index) => (
-                        <li key={`${event.at}-${event.kind}-${index}`}>
-                          <time dateTime={event.at}>{formatWhen(event.at)}</time>
-                          <b>{event.label}</b>
-                          <div className="muted">{event.detail}</div>
-                          {event.recording ? (
-                            <RecordingPlayer src={event.recording.src} seconds={event.recording.seconds} className="mt-1.5" />
-                          ) : null}
-                          {event.recording?.transcript ? (
-                            <blockquote className="muted transcript">&ldquo;{event.recording.transcript}&rdquo;</blockquote>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ol>
+                    <CommsTrail key={selected.id} trail={selected.trail} />
                     </div>
                     <aside ref={profileRef} className="lead-profile-col" aria-label="Client profile">
                       <LeadProfile api={handoff} now={clock} sheetHost={sheetHost} />

@@ -1,13 +1,15 @@
 'use client'
 
-import { OUTCOMES, type CallLead, type LeadOutcome } from '@/lib/call-center/model'
+import type { CallLead, LeadOutcome } from '@/lib/call-center/model'
 import { CONNECTED_SECONDS } from '@/lib/call-center/cadence'
 import { clockLabel } from '@/lib/telephony/ui/result'
 import type { EndedCall } from '@/components/voice/voice-provider'
 import type { PowerMode } from './use-power-mode'
+import { ChoiceSelect } from './choice-select'
+import { OUTCOME_PLACEHOLDER, outcomeGroups } from './outcome-choices'
 
 /**
- * After a call to a lead ends: what happened, and the result buttons. With
+ * After a call to a lead ends: what happened, and the result dropdown. With
  * power mode on, a result is required before the next dial; with it off the
  * rep may leave it for later.
  */
@@ -47,17 +49,13 @@ export function WrapUp({
       {error ? <p className="muted" role="status">{error}</p> : null}
       {scheduler ?? (
         <div className="actions outcomes">
-          {OUTCOMES.map((item, index) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`btn secondary${short && item.id === 'no_answer' ? ' suggest' : ''}`}
-              disabled={busy}
-              onClick={() => onOutcome(item.id)}
-            >
-              <kbd>{index + 1}</kbd> {item.label}
-            </button>
-          ))}
+          <ChoiceSelect
+            groups={outcomeGroups({ keys: true, suggest: short ? 'no_answer' : null })}
+            placeholder={OUTCOME_PLACEHOLDER}
+            label={`Result for the call with ${lead.name}`}
+            disabled={busy}
+            onChoose={onOutcome}
+          />
           {!required ? (
             <button type="button" className="linkish" onClick={onLater}>Later</button>
           ) : null}

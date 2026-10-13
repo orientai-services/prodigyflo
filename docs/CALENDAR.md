@@ -69,8 +69,9 @@ Extend the service where this document needs more; never weaken a rule.
 - **Click a block** → a side panel (desk) or bottom sheet (phone) with the
   lead's name, time, rep, status, language, the lead's last note, buttons:
   **Open lead** (`/call-center?lead=…`), **Confirm** (HOLD only, "on the
-  call"), **Outcome** (Sat / No-show / Rescheduled / Cancelled, as
-  `recordSlotOutcome`), **Reschedule** (opens the scheduler with this lead,
+  call"), **Outcome** (one dropdown: Happened: Sat · Didn't happen:
+  No-show / Rescheduled / Cancel visit, as `recordSlotOutcome`; Sat and
+  No-show only once confirmed; Cancel visit then asks "Yes, cancel it"), **Reschedule** (opens the scheduler with this lead,
   records RESCHEDULED on the old slot and holds the new one, linked via
   `rescheduledToId`), **Cancel**.
 - **Rail** (desk right column; on a phone, a collapsible section above the

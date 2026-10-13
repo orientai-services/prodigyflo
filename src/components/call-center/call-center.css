@@ -49,6 +49,8 @@
 .final-desk.call-center .player small,
 .final-desk.call-center .trail time { display: block; color: var(--muted); font-size: 11px; }
 .final-desk.call-center .trail { list-style: none; display: grid; gap: 8px; margin-top: 8px; }
+.final-desk.call-center .trail-more { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
+.final-desk.call-center .trail-more .linkish { min-height: 32px; margin: 0; font-weight: 600; }
 .final-desk.call-center .trail li { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 .final-desk.call-center .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .final-desk.call-center .banner.quiet { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
@@ -111,7 +113,24 @@
 .final-desk.call-center .wrap { margin-bottom: 14px; border-color: #c5e0de; }
 .final-desk.call-center .wrap h3 { color: var(--ink); }
 .final-desk.call-center .wrap-ask { margin: 6px 0 10px; font-weight: 600; font-size: 14px; }
-.final-desk.call-center .btn.suggest { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); }
+/* Result dropdowns (choice-select.tsx): one native select in place of a row of
+   result buttons. 16px text and 44px height on phones (docs/MOBILE.md). */
+.final-desk.call-center .choice { display: grid; gap: 4px; flex: 1 1 240px; min-width: 0; max-width: 360px; }
+.final-desk.call-center .choice select {
+  width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; color: var(--ink); font-size: 14px; cursor: pointer;
+}
+.final-desk.call-center .choice select:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.final-desk.call-center .choice select:disabled { opacity: .5; cursor: not-allowed; }
+.final-desk.call-center .choice-hint { font-size: 12px; color: var(--muted); }
+.final-desk.call-center .actions.outcomes { align-items: center; }
+.final-desk.call-center .missed-select { max-width: none; flex: 0 1 260px; }
+.final-desk.call-center .cal-outcome { align-items: center; }
+@media (max-width: 767.98px) {
+  .final-desk.call-center .choice,
+  .final-desk.call-center .missed-select { flex: 1 1 100%; width: 100%; max-width: none; grid-column: 1 / -1; }
+  .final-desk.call-center .choice select { height: auto; min-height: 44px; font-size: 16px; }
+}
 .final-desk.call-center kbd {
   display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid var(--line); border-bottom-width: 2px;
   border-radius: 5px; background: #fff; font: 600 11px/16px var(--font-ibm-plex), system-ui, sans-serif; color: var(--muted); text-align: center;
@@ -150,9 +169,6 @@
   .final-desk.call-center .power-acts .btn { flex: 1; }
   /* Today rows are cards, not a table: no forced table width or sideways scroll. */
   .final-desk.call-center .today .card { overflow-x: visible; }
-}
-@media (max-width: 640px) {
-  .final-desk.call-center .wrap .actions .btn { flex: 1 1 calc(50% - 8px); }
 }
 
 .call-center .trail .transcript { margin: 4px 0 0; padding-left: 8px; border-left: 2px solid var(--line, #ddd); font-style: italic; white-space: pre-wrap; }
@@ -260,6 +276,7 @@
   .final-desk.call-center .call-slot > div { display: grid; width: 100%; }
   .final-desk.call-center .note { min-height: 88px; font-size: 16px; }
   .final-desk.call-center .banner.quiet { flex-direction: column; align-items: stretch; }
+  .final-desk.call-center .trail-more .linkish { min-height: 44px; font-size: 15px; }
   .final-desk.call-center .banner .linkish { min-height: 44px; margin: 0; font-size: 14px; text-align: left; }
 
   /* Power mode: pinned just above the call bar, buttons in thumb reach. */

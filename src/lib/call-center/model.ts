@@ -58,6 +58,16 @@ export const OUTCOMES: { id: LeadOutcome; label: string }[] = [
 ]
 
 /**
+ * How the result dropdown groups OUTCOMES. Display only: OUTCOMES keeps its
+ * order because the 1–9 shortcut keys follow it.
+ */
+export const OUTCOME_GROUPS: { label: string; ids: LeadOutcome[] }[] = [
+  { label: 'Reached', ids: ['talked', 'callback', 'appointment'] },
+  { label: 'Didn’t reach', ids: ['voicemail', 'no_answer', 'busy'] },
+  { label: 'Close out', ids: ['wrong_number', 'not_interested', 'do_not_call'] },
+]
+
+/**
  * Why a lead has a next attempt: the rep agreed a time with them ('callback'),
  * or the no-answer cadence set it ('cadence'). An answered call clears only
  * the cadence kind.

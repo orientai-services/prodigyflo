@@ -6,6 +6,10 @@ import { confirmCalendarSlot, saveCalendarOutcome, type CalendarResult } from '@
 import type { CalendarOutcome } from '@/lib/call-center/calendar/outcomes'
 import { isLive, reasonText, statusLook, visitWhen, type RepVM, type VisitVM } from '@/lib/call-center/calendar/planner'
 import { leadHref } from '@/lib/call-center/lead-link'
+import { ChoiceSelect, type ChoiceGroup } from '../choice-select'
+
+/** 'cancel' asks first; the others save at once. */
+type VisitChoice = 'sat' | 'no-show' | 'rescheduled' | 'cancel'
 
 const DONE: Record<string, string> = {
   confirm: 'Visit confirmed.',
@@ -13,6 +17,20 @@ const DONE: Record<string, string> = {
   'no-show': 'Saved as a no-show. The lead is back on the desk for a call back in 2 hours.',
   rescheduled: 'Marked rescheduled.',
   cancelled: 'Visit cancelled.',
+}
+
+function visitGroups(confirmed: boolean): ChoiceGroup<VisitChoice>[] {
+  return [
+    { label: 'Happened', options: confirmed ? [{ value: 'sat', label: 'Sat' }] : [] },
+    {
+      label: 'Didn’t happen',
+      options: [
+        ...(confirmed ? [{ value: 'no-show' as const, label: 'No-show' }] : []),
+        { value: 'rescheduled', label: 'Rescheduled' },
+        { value: 'cancel', label: 'Cancel visit' },
+      ],
+    },
+  ]
 }
 
 /**
@@ -99,19 +117,20 @@ export function VisitPanel({
         {live ? (
           <>
             <h4>Outcome</h4>
-            <div className="cal-panel-acts">
-              {visit.status === 'CONFIRMED' ? (
-                <>
-                  <button type="button" className="btn secondary" disabled={busy} onClick={() => { void outcome('sat') }}>Sat</button>
-                  <button type="button" className="btn secondary" disabled={busy} onClick={() => { void outcome('no-show') }}>No-show</button>
-                </>
-              ) : null}
-              <button type="button" className="btn secondary" disabled={busy} onClick={() => { void outcome('rescheduled') }}>Rescheduled</button>
+            <div className="cal-panel-acts cal-outcome">
+              <ChoiceSelect
+                groups={visitGroups(visit.status === 'CONFIRMED')}
+                placeholder="Choose an outcome…"
+                label={`Outcome of the visit with ${visit.name}`}
+                disabled={busy}
+                onChoose={(choice) => {
+                  if (choice === 'cancel') setAskCancel(true)
+                  else void outcome(choice)
+                }}
+              />
               {askCancel ? (
                 <button type="button" className="btn cal-danger" disabled={busy} onClick={() => { void outcome('cancelled') }}>Yes, cancel it</button>
-              ) : (
-                <button type="button" className="btn secondary" disabled={busy} onClick={() => setAskCancel(true)}>Cancel visit</button>
-              )}
+              ) : null}
             </div>
             {visit.status === 'HOLD' ? <p className="muted">Sat and No-show open once the hold is confirmed on a call.</p> : null}
           </>
