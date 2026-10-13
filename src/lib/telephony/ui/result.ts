@@ -38,13 +38,18 @@ export function thrownMessage(err: unknown): string {
   return 'Could not reach the server. Check the connection and try again.'
 }
 
-/** "2026-10-08T15:04:00Z" → "Oct 8, 3:04 pm" in the viewer's zone. */
+/**
+ * "2026-10-08T15:04:00Z" → "Oct 8, 8:04 am", in Pacific time like the rest of
+ * the desk. A fixed zone on purpose: these labels are server-rendered (on UTC
+ * servers) and hydrated in the browser, and a zone-dependent string made the
+ * two disagree (React #418 on a ?missed= deep link).
+ */
 export function whenLabel(iso: string | null | undefined): string {
   if (!iso) return '—'
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return '—'
   return at
-    .toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    .toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     .replace(' AM', ' am')
     .replace(' PM', ' pm')
 }
