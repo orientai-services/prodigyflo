@@ -12,7 +12,10 @@ import { chatHref, onChatState, onChatTitle, onChatUnread, emitChatGo, parseChat
  * One source of truth per count, once hydrated:
  *  - team: the chat's own `unread` socket events while the chat is on screen
  *    with its socket up; otherwise the server render (the 20 s refresh) or
- *    this hook's poll, whichever came last.
+ *    this hook's poll, whichever came last. The server sends the team counts
+ *    as `teamChat`, a promise that streams in after the page (the chat Worker
+ *    is another network hop and must never hold the desk up); until it lands
+ *    the badge keeps its last number.
  *  - sms: the server render or the poll, whichever came last.
  * The poll (GET /api/chat/unread) runs every 45 s while the tab is visible,
  * only when no other source has spoken for 40 s and the chat isn't live.
@@ -22,6 +25,8 @@ export const UNREAD_POLL_MS = 45_000
 const FRESH_MS = 40_000
 
 type Counts = { team: number; sms: number; mentions: number; cases: Record<string, number> }
+/** The server's team-chat answer, streamed beside the page (lib/chat-bridge/remote.ts teamChatCounts). */
+export type TeamChatPromise = Promise<{ total: number; cases: Record<string, number> }>
 const NO_CASES: Record<string, number> = {}
 
 /** The poll's per-lead case-chat unread ({<lead id>: n}); anything else is dropped. */
@@ -32,7 +37,20 @@ function readCases(v: unknown): Record<string, number> {
   return out
 }
 
-export function useChatHost({ sms, team, cases = NO_CASES, onMessages }: { sms: number; team: number; cases?: Record<string, number>; onMessages: boolean }) {
+export function useChatHost({
+  sms,
+  team,
+  cases = NO_CASES,
+  teamChat,
+  onMessages,
+}: {
+  sms: number
+  team: number
+  cases?: Record<string, number>
+  /** When set, team and cases come from this streamed answer instead of `team` / `cases`. */
+  teamChat?: TeamChatPromise | null
+  onMessages: boolean
+}) {
   const router = useRouter()
   const [counts, setCounts] = useState<Counts>({ team, sms, mentions: 0, cases })
   const [chatTitle, setChatTitle] = useState<string | null>(null)
@@ -44,16 +62,40 @@ export function useChatHost({ sms, team, cases = NO_CASES, onMessages }: { sms: 
   // A fresh server render (navigation or the 20 s refresh) brings both counts. The team count is the chat's own
   // while it is live, so a refresh that started before a read can't bring an old number back.
   // Per-case counts only come from the server and the poll (the chat's socket sends totals).
-  const serverKey = `${sms}|${team}|${JSON.stringify(cases)}`
+  const streamed = Boolean(teamChat)
+  const serverKey = streamed ? `${sms}` : `${sms}|${team}|${JSON.stringify(cases)}`
   const [serverSeen, setServerSeen] = useState(serverKey)
   if (serverKey !== serverSeen) {
     setServerSeen(serverKey)
-    setCounts((c) => ({ ...c, sms, cases, team: chatLive ? c.team : team }))
+    setCounts((c) => (streamed ? { ...c, sms } : { ...c, sms, cases, team: chatLive ? c.team : team }))
   }
 
   useEffect(() => {
     heard.current = Date.now()
   }, [serverKey])
+
+  // The streamed team counts: each server render (navigation or the 20 s refresh) brings a fresh promise.
+  useEffect(() => {
+    if (!teamChat) return
+    let current = true
+    teamChat.then(
+      (answer) => {
+        if (!current) return
+        heard.current = Date.now()
+        setCounts((c) => ({
+          ...c,
+          cases: readCases(answer?.cases),
+          team: chat.current.mounted && chat.current.live ? c.team : Math.max(0, Math.floor(Number(answer?.total)) || 0),
+        }))
+      },
+      () => {
+        // The chat being unreachable leaves the badge as it was; the poll tries again.
+      },
+    )
+    return () => {
+      current = false
+    }
+  }, [teamChat])
 
   useEffect(() => {
     const offUnread = onChatUnread((u) => {

@@ -12,12 +12,25 @@ import './chat.css'
  * chat slot (docs/CYS_BRIDGE.md §B4). Team chat is the default; `?view=sms`
  * picks the lead text inbox. Server-rendered, so the screen never reads env.
  */
-export function MessagesSwitch({ base, view, teamUnread, smsUnread }: { base: string; view: 'sms' | 'team'; teamUnread: number; smsUnread: number }): JSX.Element {
+export function MessagesSwitch({
+  base,
+  view,
+  teamUnread,
+  teamBadge,
+  smsUnread,
+}: {
+  base: string
+  view: 'sms' | 'team'
+  teamUnread: number
+  /** Stands in for the Team chat count when it streams in on its own (a Suspense-wrapped Badge). */
+  teamBadge?: React.ReactNode
+  smsUnread: number
+}): JSX.Element {
   return (
     <nav className="chat-switch" aria-label="Messages view">
       <Link href={messagesHref(base, { view: null, t: null, q: null })} aria-current={view === 'team' ? 'page' : undefined} className={view === 'team' ? 'on' : ''} scroll={false}>
         Team chat
-        <Badge n={teamUnread} />
+        {teamBadge ?? <Badge n={teamUnread} />}
       </Link>
       <Link href={messagesHref(base, { view: 'sms', t: null })} aria-current={view === 'sms' ? 'page' : undefined} className={view === 'sms' ? 'on' : ''} scroll={false}>
         Leads (SMS)
@@ -27,7 +40,7 @@ export function MessagesSwitch({ base, view, teamUnread, smsUnread }: { base: st
   )
 }
 
-function Badge({ n }: { n: number }): JSX.Element | null {
+export function Badge({ n }: { n: number }): JSX.Element | null {
   return n > 0 ? <span className="chat-badge" aria-label={`${n} unread`}>{n > 99 ? '99+' : n}</span> : null
 }
 

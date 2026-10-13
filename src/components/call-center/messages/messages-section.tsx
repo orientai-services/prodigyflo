@@ -1,10 +1,10 @@
-import type { JSX } from 'react'
+import { Suspense, type JSX } from 'react'
 import type { SessionUser } from '@/lib/rbac'
 import { countUnreadMessages, listThreads, loadThread, type ThreadVM } from '@/lib/call-center/messages'
 import { messagesHref, parseThreadKey } from '@/lib/call-center/messages-core'
 import { MessagesView } from './messages-view'
-import { teamChatUnread as teamUnreadFor } from '@/lib/chat-bridge/remote'
-import { MessagesSwitch, TeamChatSection } from './chat/team-chat-section'
+import { teamChatCountsOnce, teamChatUnread as teamUnreadFor } from '@/lib/chat-bridge/remote'
+import { Badge, MessagesSwitch, TeamChatSection } from './chat/team-chat-section'
 
 /**
  * Messages, the dialer's text inbox (docs/DIALER_APP.md §4, lane C). Lane A
@@ -33,15 +33,21 @@ export async function MessagesSection(props: {
   const smsBase = messagesHref(base, { view: 'sms' })
   const now = new Date()
   const key = parseThreadKey(params.t)
-  const [threads, thread, teamUnread] = await Promise.all([
+  const [threads, thread] = await Promise.all([
     listThreads(user, now),
     key ? loadThread(user, key) : Promise.resolve<ThreadVM | null>(null),
-    teamUnreadFor(user),
   ])
   const q = Array.isArray(params.q) ? params.q[0] : params.q
+  // The Team chat badge comes from the chat Worker: it streams in rather than holding the inbox up, and shares
+  // the page's one chat call for this render (teamChatCountsOnce).
+  const teamBadge = (
+    <Suspense fallback={null}>
+      <TeamUnreadBadge counts={teamChatCountsOnce(user)} />
+    </Suspense>
+  )
   return (
     <>
-      <MessagesSwitch base={base} view="sms" teamUnread={teamUnread} smsUnread={0} />
+      <MessagesSwitch base={base} view="sms" teamUnread={0} teamBadge={teamBadge} smsUnread={0} />
       <MessagesView
         base={smsBase}
         threads={threads}
@@ -52,6 +58,10 @@ export async function MessagesSection(props: {
       />
     </>
   )
+}
+
+async function TeamUnreadBadge({ counts }: { counts: ReturnType<typeof teamChatCountsOnce> }): Promise<JSX.Element | null> {
+  return <Badge n={(await counts).total} />
 }
 
 /** Team chat first; the SMS inbox only when asked for or when a thread / search is in the URL. */

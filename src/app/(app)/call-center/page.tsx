@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { CallCenter, type CallCenterPhone } from '@/components/call-center/call-center'
 import { HistorySection } from '@/components/call-center/history/history-section'
 import { MessagesSection, unreadMessageCount } from '@/components/call-center/messages/messages-section'
-import { teamChatCounts } from '@/lib/chat-bridge/remote'
+import { teamChatCountsOnce } from '@/lib/chat-bridge/remote'
 import { ADS_BASE, HISTORY_BASE, MESSAGES_BASE, resolveRoute } from '@/lib/call-center/app-shell'
 import { missingRelation } from '@/lib/call-center/desk'
 import { leadIdParam } from '@/lib/call-center/lead-link'
@@ -65,17 +65,21 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   const route = resolveRoute(params, { adsAllowed })
   const now = new Date()
 
-  const [desk, voice, missed, setup, status, unread, stats, team, me] = await Promise.all([
+  // The team chat lives on another server (the chat Worker), so its counts
+  // are never awaited here: the promise streams to the shell after the page
+  // (use-chat-host.ts), and a slow or unreachable chat no longer holds up the
+  // desk or the 20 s refresh.
+  const teamChat = teamChatCountsOnce(user)
+
+  const [desk, voice, missed, setup, status, sms, stats, team, me] = await Promise.all([
     loadCallCenterDesk(),
     getVoiceSetup().catch((): VoiceSetup => ({ ready: false, reason: "Phone calling isn't set up yet." })),
     listMissedCalls().catch(() => [] as MissedCallVM[]),
     owner ? loadPhoneSetup(user).catch(() => null) : Promise.resolve(null),
     owner ? getTwilioStatus(false).catch(() => null) : Promise.resolve(null),
-    // Lead texts plus the team chat: one Messages badge (the shell keeps both live between renders, use-chat-host.ts).
-    // One chat call per page load also brings each lead's case-chat unread for the lead panel's Team chat button.
-    Promise.all([unreadMessageCount(user).catch(() => 0), teamChatCounts(user).catch(() => ({ total: 0, mentions: 0, cases: {} }))]).then(
-      ([sms, chat]) => ({ sms, team: chat.total, cases: chat.cases }),
-    ),
+    // Lead texts; with the streamed team chat they make one Messages badge (the shell keeps both live between
+    // renders, use-chat-host.ts). The chat answer also brings each lead's case-chat unread for the lead panel.
+    unreadMessageCount(user).catch(() => 0),
     route.section === 'today' ? soft(loadTodayStats(user, now), 'today stats') : Promise.resolve(null),
     route.section === 'today' || route.section === 'team' ? soft(loadTeamToday(user, now), 'team today') : Promise.resolve(null),
     // The header's profile picture: the session row has no nickname, and a name saved a moment ago must show.
@@ -120,8 +124,8 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       adsAllowed={adsAllowed}
       calendarAllowed={calendarOn}
       slot={slot}
-      unread={unread.sms + unread.team}
-      unreadSplit={unread}
+      unread={sms}
+      unreadSplit={{ sms, team: 0, teamChat }}
       today={route.section === 'today' ? { stats, feed: team?.feed ?? null, count: team?.count ?? 0 } : null}
       team={route.section === 'team' ? (team?.members ?? []) : null}
       viewer={{ name: shownName, role: user.roleName }}
