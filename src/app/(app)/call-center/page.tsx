@@ -15,6 +15,8 @@ import { loadPhoneSetup } from '@/lib/telephony/ui/phone-setup-data'
 import { MetaAdsContent } from '@/app/(app)/marketing/meta/dashboard'
 import { calendarEnabled } from '@/lib/call-center/calendar/config'
 import { CallCenterCalendarTab } from '@/components/call-center/calendar/calendar-tab'
+import { db } from '@/lib/db'
+import { profileName } from '@/lib/people/profile-name'
 
 export const metadata: Metadata = { title: 'Call Center' }
 // The dialer is an app-style page with a bottom tab bar: `cover` lets it run
@@ -65,7 +67,7 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   const route = resolveRoute(params, { adsAllowed })
   const now = new Date()
 
-  const [desk, voice, missed, setup, status, unread, stats, team] = await Promise.all([
+  const [desk, voice, missed, setup, status, unread, stats, team, me] = await Promise.all([
     loadCallCenterDesk(),
     getVoiceSetup().catch((): VoiceSetup => ({ ready: false, reason: "Phone calling isn't set up yet." })),
     listMissedCalls().catch(() => [] as MissedCallVM[]),
@@ -78,7 +80,17 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
     ),
     route.section === 'today' ? soft(loadTodayStats(user, now), 'today stats') : Promise.resolve(null),
     route.section === 'today' || route.section === 'team' ? soft(loadTeamToday(user, now), 'team today') : Promise.resolve(null),
+    // The header's profile picture: the session row has no nickname, and a name saved a moment ago must show.
+    soft(db.user.findUnique({ where: { id: user.id }, select: { name: true, nickname: true, avatarUrl: true } }), 'profile'),
   ])
+  const profile = {
+    name: me?.name ?? user.name,
+    nickname: me?.nickname ?? null,
+    email: user.email,
+    role: user.roleName,
+    avatarUrl: me ? me.avatarUrl : user.avatarUrl,
+  }
+  const shownName = profileName(profile) ?? 'You'
 
   const phone: CallCenterPhone = {
     voiceNote: voice.ready ? null : voice.reason,
@@ -114,7 +126,8 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       unreadSplit={unread}
       today={route.section === 'today' ? { stats, feed: team?.feed ?? null, count: team?.count ?? 0 } : null}
       team={route.section === 'team' ? (team?.members ?? []) : null}
-      viewer={{ name: user.name, role: user.roleName }}
+      viewer={{ name: shownName, role: user.roleName }}
+      profile={profile}
       threadOpen={route.section === 'messages' && Boolean(params.t)}
     />
   )

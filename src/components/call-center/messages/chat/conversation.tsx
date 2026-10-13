@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ChatApi } from './api'
 import { ChatError } from './api'
 import { EmojiPicker } from './emoji-picker'
 import { prepImage } from './image-compress'
-import { channelLabel, clock, fmtDur, initials, rowsFor } from './format'
+import { avatarMap, channelLabel, clock, dmAvatar, fmtDur, initials, rowsFor } from './format'
+import { Face } from './face'
 import { AttachmentView, VoicePlayer, canRecord, useRecorder, type Recording } from './media'
 import { ConfirmBox, MessageMenu, type MenuItem } from './message-menu'
 import {
@@ -74,6 +75,8 @@ type Ctx = {
   actions: ChatActions
   reads: Record<string, string>
   names: Map<string, string>
+  /** uid → picture (me and the channel's members); a message's own `avatar` wins. */
+  faces: Map<string, string>
   now: number
   editing: string | null
   setEditing: (id: string | null) => void
@@ -201,6 +204,7 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
   const typers = Object.entries(typing).filter(([uid, v]) => uid !== me.uid && now - v.at < 4000)
   const target = receiptTarget(pane.list, me.uid, channel.member_count)
 
+  const faces = useMemo(() => avatarMap([me], channel.members), [me, channel.members])
   const ctx: Ctx = {
     api,
     t,
@@ -210,6 +214,7 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
     actions,
     reads: pane.reads,
     names,
+    faces,
     now,
     editing,
     setEditing,
@@ -396,7 +401,7 @@ export function Conversation({ api, t, lang, me, channel, pane, thread, typing, 
 /** The card at the top of a conversation once its first message is on screen. */
 function Intro({ c, t }: { c: Channel; t: T }) {
   const n = c.name
-  let icon = '#'
+  let icon: ReactNode = '#'
   let h: string
   let p: string
   if (c.case) {
@@ -415,7 +420,8 @@ function Intro({ c, t }: { c: Channel; t: T }) {
     h = t.introTeam(n)
     p = t.introTeamP
   } else if (c.kind === 'dm') {
-    icon = initials(n)
+    const pic = dmAvatar(c)
+    icon = pic ? <Face name={n} avatar={pic} size={64} className="intro" /> : initials(n)
     h = t.introDm(n)
     p = t.introDmP
   } else {
@@ -561,7 +567,7 @@ function MessageItem({ ctx, m, grouped, inThread }: { ctx: Ctx; m: Message; grou
       }}
     >
       {!grouped ? (
-        <span className={`chat-av${sms?.dir === 'in' ? ' client' : ''}`} aria-hidden="true">{initials(m.name)}</span>
+        <Face name={m.name} avatar={sms?.dir === 'in' ? null : (m.avatar ?? ctx.faces.get(m.uid))} size={36} className={sms?.dir === 'in' ? 'client' : ''} />
       ) : (
         <time className="chat-av-gap" dateTime={new Date(m.created_at).toISOString()}>{clock(m.created_at, lang)}</time>
       )}
@@ -868,6 +874,7 @@ function Composer({
         : [],
     [mq, sms, channel.members, channel.kind, dir, authors, me.uid, me.staff, lang],
   )
+  const mentionFaces = useMemo(() => (items.length ? avatarMap(channel.members, dir) : new Map<string, string>()), [items.length, channel.members, dir])
   const selIdx = items.length ? Math.min(sel, items.length - 1) : 0
 
   function checkMention(value: string, caret: number) {
@@ -1006,7 +1013,7 @@ function Composer({
         <div className="chat-mentions" role="listbox" aria-label="Mention" onMouseDown={(e) => e.preventDefault()}>
           {items.map((u, i) => (
             <button key={`${u.uid}-${u.name}`} type="button" role="option" aria-selected={i === selIdx} className={i === selIdx ? 'on' : ''} onClick={() => pickMention(u)}>
-              <span className="chat-av sm" aria-hidden="true">{u.special ? '@' : initials(u.name)}</span>
+              {u.special ? <span className="chat-av sm" aria-hidden="true">@</span> : <Face name={u.name} avatar={mentionFaces.get(u.uid)} size={28} className="sm" />}
               <span className="chat-mo-name">{u.special ? `@${u.name}` : u.name}</span>
               <small>{u.special ? t.everyone : u.role ?? ''}</small>
             </button>

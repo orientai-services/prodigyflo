@@ -77,6 +77,7 @@ import { CallbackScheduler } from './callback-scheduler'
 import { DialPad } from './dial-pad'
 import { HandoffGroup, LeadProfile, useLeadHandoff } from './lead-profile'
 import { MoreSheet } from './more-sheet'
+import { ProfileButton, type ViewerProfile } from './profile-sheet'
 import { PhoneStatusPill, usePhoneStatus } from './phone-pill'
 import { BookVisit } from './calendar/scheduler'
 import { PowerBar, WrapUp } from './power-panel'
@@ -168,6 +169,7 @@ export function CallCenter({
   today = null,
   team = null,
   viewer = null,
+  profile = null,
   threadOpen = false,
 }: {
   initialLeads?: CallLead[]
@@ -192,6 +194,8 @@ export function CallCenter({
   /** The team list (Team only). */
   team?: TeamMember[] | null
   viewer?: { name: string; role: string } | null
+  /** The signed-in user's photo and names: the header's profile picture and its Profile sheet. */
+  profile?: ViewerProfile | null
   /** A Messages thread fills the phone screen: the tab bar steps aside. */
   threadOpen?: boolean
 }) {
@@ -643,6 +647,7 @@ export function CallCenter({
             </button>
             {padOpen ? dialPad() : null}
           </span>
+          {profile ? <ProfileButton profile={profile} /> : null}
           {phone.setup ? (
             // Opened from the phone sheet; the sheet's own trigger stays out of the header.
             <PhoneSetupSheet

@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import type { ChatApi } from './api'
 import { ChatError } from './api'
-import { channelLabel, initials } from './format'
+import { channelLabel } from './format'
+import { Face } from './face'
 import { ConfirmSheet, Sheet } from './sheets'
 import type { T } from './strings'
 import type { Channel, Me, Notify } from './types'
@@ -118,7 +119,7 @@ export function ChannelSheet({ api, t, me, channel, online, onClose, onChanged, 
             {members.map((m) => (
               <li key={m.uid} className="chat-prow static">
                 <span className="chat-prow-main">
-                  <span className="chat-av" aria-hidden="true">{initials(m.name)}<i className={`chat-dot${m.online ? ' on' : ''}`} /></span>
+                  <Face name={m.name} avatar={m.avatar ?? (m.uid === me.uid ? me.avatar : null)}><i className={`chat-dot${m.online ? ' on' : ''}`} /></Face>
                   <span className="chat-row-main">
                     <b>{m.name}{m.uid === me.uid ? ` (${t.you})` : ''}</b>
                     <span className="chat-snip">{[t.role[m.role] ?? m.role, m.online ? t.online : ''].filter(Boolean).join(' · ')}</span>

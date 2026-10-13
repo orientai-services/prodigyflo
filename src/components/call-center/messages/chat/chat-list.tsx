@@ -1,7 +1,8 @@
 'use client'
 
 import type { ReactNode, RefObject } from 'react'
-import { CATS, badgeText, byActivity, catOf, channelLabel, filterChannels, initials, listTime, listable, rowPreview, tickOf, unseen, type Cat } from './format'
+import { CATS, badgeText, byActivity, catOf, channelLabel, dmAvatar, filterChannels, listTime, listable, rowPreview, tickOf, unseen, type Cat } from './format'
+import { Face } from './face'
 import { Skeleton } from './sheets'
 import type { T } from './strings'
 import type { Channel, ChatFeatures, Lang, Me, RoomsAnswer } from './types'
@@ -148,7 +149,7 @@ export function ChatList({ searchRef, ...p }: Props) {
       {me ? (
         <footer className="chat-foot">
           <span className="chat-me">
-            <span className="chat-av sm" aria-hidden="true">{initials(me.name)}</span>
+            <Face name={me.name} avatar={me.avatar} size={28} className="sm" />
             <b>{me.name}</b>
           </span>
           <span className={`chat-live ${p.live}`} title={liveTxt}>{liveTxt}</span>
@@ -181,10 +182,15 @@ function ChannelRow({ c, t, lang, me, on, online, onOpen }: { c: Channel; t: T; 
   const icon = c.case ? (c.case.closed ? '📁' : '👤') : c.kind === 'announcements' ? '📣' : c.kind === 'team' ? c.badge?.emoji || '★' : c.kind === 'group' ? '👥' : '#'
   return (
     <button type="button" className={`chat-row${on ? ' on' : ''}${unread ? ' unread' : ''}${c.muted ? ' muted' : ''}`} onClick={onOpen} aria-current={on ? 'true' : undefined} aria-label={t.rowAl(channelLabel(c), unread ? c.unread : 0, c.mentions, c.muted)}>
-      <span className={`chat-av${c.case ? ' case' : c.kind === 'dm' ? '' : ' chan'}`} aria-hidden="true">
-        {c.kind === 'dm' ? initials(c.name) : icon}
-        {c.kind === 'dm' ? <i className={`chat-dot${online ? ' on' : ''}`} /> : null}
-      </span>
+      {c.kind === 'dm' ? (
+        <Face name={c.name} avatar={dmAvatar(c)} className={c.case ? 'case' : ''}>
+          <i className={`chat-dot${online ? ' on' : ''}`} />
+        </Face>
+      ) : (
+        <span className={`chat-av${c.case ? ' case' : ' chan'}`} aria-hidden="true">
+          {icon}
+        </span>
+      )}
       <span className="chat-row-main">
         <b>
           <span className="chat-row-name">{channelLabel(c)}</span>
