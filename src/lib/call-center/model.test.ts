@@ -21,12 +21,14 @@ import {
   lockLabel,
   nextCallableLead,
   nextTryLine,
+  nextTryValue,
   phoneLabel,
   saveNote,
   seedLeads,
   sendIntakeLink,
   takeLead,
   textHeldUntilMorning,
+  triesCount,
   triesLine,
   visibleLeads,
   type CallLead,
@@ -201,6 +203,9 @@ describe('call center extras', () => {
     expect(lead.followUp).toBe('cadence')
     expect(triesLine(lead)).toBe('Tries 1 of 7')
     expect(nextTryLine(lead)).toBe('Next try Sep 29, 10:05 AM')
+    // Under their own "Tries" / "Next try" labels the label is not repeated.
+    expect(triesCount(lead)).toBe('1 of 7')
+    expect(nextTryValue(lead)).toBe('Sep 29, 10:05 AM')
     expect(lead.trail.some((event) => event.detail === autoTextDetail('en'))).toBe(true)
     expect(visibleLeads([lead], 'retry', 'all', '').map((row) => row.id)).toEqual([lead.id])
 
@@ -225,6 +230,7 @@ describe('call center extras', () => {
     expect(lead.nextAttemptAt).toBeNull()
     expect(lead.status).toBe('waiting')
     expect(nextTryLine(lead)).toBe('No further tries')
+    expect(nextTryValue(lead)).toBe('No further tries')
     expect(isExhausted(lead)).toBe(true)
     expect(lead.trail.filter((event) => event.detail === autoTextDetail('en'))).toHaveLength(3)
     expect(applyOutcome(lead, 'voicemail', '2026-11-01T17:00:00.000Z')).toBe(lead)
@@ -267,6 +273,7 @@ describe('call center extras', () => {
     expect(cb.contacted).toBe(true)
     expect(cb.trail.at(-1)).toMatchObject({ kind: 'outcome', label: 'Callback', detail: 'Call back Sat, Oct 10, 2:30 pm their time', followUp: 'callback' })
     expect(nextTryLine(cb)).toBe('Call back Oct 10, 2:30 PM')
+    expect(nextTryValue(cb)).toBe('Call back Oct 10, 2:30 PM')
     // Past or too far out: not saved.
     expect(applyOutcome(lead, 'callback', at, 'You', { callbackAt: '2026-10-09T16:00:00.000Z' })).toBe(lead)
     expect(applyOutcome(lead, 'callback', at, 'You', { callbackAt: '2027-01-01T17:00:00.000Z' })).toBe(lead)

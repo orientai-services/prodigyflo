@@ -58,13 +58,14 @@ import {
   languageLabel,
   lockLabel,
   nextCallableLead,
-  nextTryLine,
+  nextTryValue,
   phoneLabel,
   saveNote,
   seedLeads,
   sendIntakeLink,
   takeLead,
   textHeldUntilMorning,
+  triesCount,
   triesLine,
   visibleLeads,
   type CallLead,
@@ -844,8 +845,8 @@ export function CallCenter({
                       {/* Plain text, never a tel: link: every dial goes through the server check behind Call. */}
                       <div><dt>Phone</dt><dd>{dialPhone ?? phoneLabel(selected)}</dd></div>
                       {dialEmail ? <div><dt>Email</dt><dd>{dialEmail}</dd></div> : null}
-                      <div><dt>Tries</dt><dd>{triesLine(selected)}</dd></div>
-                      {nextTryLine(selected) ? <div><dt>Next try</dt><dd>{nextTryLine(selected)}</dd></div> : null}
+                      <div><dt>Tries</dt><dd>{triesCount(selected)}</dd></div>
+                      {nextTryValue(selected) ? <div><dt>Next try</dt><dd>{nextTryValue(selected)}</dd></div> : null}
                       {inboundFormMatch(selected, leads) ? <div><dt>Match</dt><dd>{inboundFormMatch(selected, leads)}</dd></div> : null}
                     </dl>
                     {isExhausted(selected) ? (
