@@ -1,0 +1,241 @@
+{
+  "version": 1,
+  "generated_from": [
+    "CYS_42_field_schema_map.csv",
+    "src/server/delivery/payload.ts"
+  ],
+  "dynamic": [
+    {
+      "packet_path": "data.stage1_answers.<questionnaire key>",
+      "source": "assertions profile_questionnaire.*",
+      "requirement": "soft",
+      "note": "Spread from tier-1 profile questionnaire assertions; keys vary per lead and are not enumerable from config."
+    }
+  ],
+  "keys": [
+    {
+      "key": "first_name",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.first_name",
+      "cys_field_id": 1,
+      "requirement": "required",
+      "required_for_ready": true
+    },
+    {
+      "key": "last_name",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.last_name",
+      "cys_field_id": 2,
+      "requirement": "required",
+      "required_for_ready": true
+    },
+    {
+      "key": "phone",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.phone",
+      "cys_field_id": 3,
+      "requirement": "required",
+      "required_for_ready": true
+    },
+    {
+      "key": "email",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.email",
+      "cys_field_id": 4,
+      "requirement": "required",
+      "required_for_ready": true
+    },
+    {
+      "key": "property_street",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.property_street",
+      "cys_field_id": 5,
+      "requirement": "required",
+      "required_for_ready": true
+    },
+    {
+      "key": "city",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.city",
+      "cys_field_id": 6,
+      "requirement": "required",
+      "required_for_ready": true
+    },
+    {
+      "key": "state",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.state",
+      "cys_field_id": 7,
+      "requirement": "required",
+      "required_for_ready": true
+    },
+    {
+      "key": "zip",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.zip",
+      "cys_field_id": 8,
+      "requirement": "required",
+      "required_for_ready": true
+    },
+    {
+      "key": "mailing_same_as_property",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.mailing_same_as_property",
+      "cys_field_id": 9,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "owner_of_record",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.owner_of_record",
+      "cys_field_id": 10,
+      "requirement": "required",
+      "required_for_ready": false
+    },
+    {
+      "key": "sale_or_refi",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.sale_or_refi",
+      "cys_field_id": 11,
+      "requirement": "required",
+      "required_for_ready": false
+    },
+    {
+      "key": "pain_type",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.pain_type",
+      "cys_field_id": 12,
+      "requirement": "required",
+      "required_for_ready": false
+    },
+    {
+      "key": "pain_narrative",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.pain_narrative",
+      "cys_field_id": 13,
+      "requirement": "required",
+      "required_for_ready": false
+    },
+    {
+      "key": "product_type_guess",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.product_type_guess",
+      "cys_field_id": 14,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "lender_guess",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.lender_guess",
+      "cys_field_id": 15,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "monthly_guess",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.monthly_guess",
+      "cys_field_id": 16,
+      "requirement": "soft",
+      "required_for_ready": true
+    },
+    {
+      "key": "installer_guess",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.installer_guess",
+      "cys_field_id": 17,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "how_signed",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.how_signed",
+      "cys_field_id": 18,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "credit_band",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.credit_band",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "active_bankruptcy",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.active_bankruptcy",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "monthly_utility_bill",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.monthly_utility_bill",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "payment_status",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.payment_status",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "tax_credit_use",
+      "stage": "stage1",
+      "packet_path": "data.stage1_answers.tax_credit_use",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "interest_rate",
+      "stage": "typed_field",
+      "packet_path": "data.typed_field_provenance.interest_rate",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "remaining_balance",
+      "stage": "typed_field",
+      "packet_path": "data.typed_field_provenance.remaining_balance",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "monthly_solar_payment",
+      "stage": "typed_field",
+      "packet_path": "data.typed_field_provenance.monthly_solar_payment",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    },
+    {
+      "key": "monthly_utility_bill",
+      "stage": "typed_field",
+      "packet_path": "data.typed_field_provenance.monthly_utility_bill",
+      "cys_field_id": null,
+      "requirement": "soft",
+      "required_for_ready": false
+    }
+  ],
+  "_copied_from": {
+    "repo": "orientai-services/scs-intake",
+    "pr": 121,
+    "branch": "feat/export-answer-keys",
+    "commit": "80c06dab8c5c7cfbcaf56f43d4bc6bee527567f4",
+    "path": "docs/contract/scs-answer-keys.json",
+    "note": "Verbatim copy plus this field. Re-sync when SCS changes it."
+  }
+}
