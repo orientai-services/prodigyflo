@@ -1,4 +1,5 @@
 import 'server-only'
+import { profileName } from '@/lib/people/profile-name'
 import { db } from '@/lib/db'
 import { readFacebookFormEvent } from '@/lib/call-center/meta-route'
 import { readSmsEvent } from '@/lib/call-center/messages-core'
@@ -109,7 +110,16 @@ export async function buildCaseFeed(since: string | null, now = new Date()): Pro
     const r = pfUserId ? byId.get(pfUserId) : undefined
     return r ? `u${r.sunoffUserId}` : null
   }
-  const users = resolved.map((r) => ({ id: r.user.id, name: r.user.name, organizationId: r.user.organizationId, role: { key: r.user.role } }))
+  // Shown names are profile names (nickname, else name), never an email address.
+  const nicknames = new Map(
+    (await db.user.findMany({ where: { id: { in: resolved.map((r) => r.user.id) } }, select: { id: true, nickname: true } })).map((u) => [u.id, u.nickname]),
+  )
+  const users = resolved.map((r) => ({
+    id: r.user.id,
+    name: profileName({ name: r.user.name, nickname: nicknames.get(r.user.id), email: r.user.email }),
+    organizationId: r.user.organizationId,
+    role: { key: r.user.role },
+  }))
   if (!users.length) return { ok: true, full: true, cases: [], msgs: [], cursor: String(cursor.getTime()) }
 
   const userById = new Map(users.map((u) => [u.id, u]))
