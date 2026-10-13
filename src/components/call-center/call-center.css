@@ -732,6 +732,7 @@
   /* The name opens the lead: a 44 px tap target that still sits in a 28 px line. */
   .final-desk.call-center .attack-name { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; margin: -8px 0; font-size: 16px; }
   .final-desk.call-center .team-stats dd { font-size: 14px; }
+  .final-desk.call-center .back-link { min-height: 44px; }
 }
 @media (max-width: 639.98px) {
   .final-desk.call-center .cc-word { display: none; }
