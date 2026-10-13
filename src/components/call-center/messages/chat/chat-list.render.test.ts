@@ -2,6 +2,7 @@ import { createElement, createRef } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { ChatList } from './chat-list'
+import { NO_FEATURES, chatFeatures } from './format'
 import { strings } from './strings'
 import type { Channel, Me } from './types'
 
@@ -26,7 +27,7 @@ const render = (o: Partial<Parameters<typeof ChatList>[0]> = {}) =>
   renderToStaticMarkup(
     createElement(ChatList, {
       t: strings('en'), lang: 'en', me, channels, online: {}, active: null, query: '', setQuery: noop, cat: '', setCat: noop, live: 'live', net: true,
-      rooms: { rooms: [], inside: 2, can_create: true, owners: [] }, searchRef: createRef<HTMLInputElement>(), syncing: false,
+      rooms: { rooms: [], inside: 2, can_create: true, owners: [] }, searchRef: createRef<HTMLInputElement>(), syncing: false, features: NO_FEATURES,
       onRetry: noop, onOpen: noop, onNew: noop, onSearch: noop, onRooms: noop, onFlagged: noop, onAnnounce: noop, onSync: noop, onSettings: noop, ...o,
     }),
   )
@@ -61,7 +62,7 @@ describe('team chat list', () => {
   })
 
   it('footer: me, live state, rooms with people inside, staff tools, settings; offline banner', () => {
-    const html = render({ live: 'poll', net: false })
+    const html = render({ live: 'poll', net: false, features: { rooms: true, announce: true, sync: true } })
     expect(html).toContain('<b>Ada Admin</b>')
     expect(html).toContain('Every 5 s')
     expect(html).toContain('2 inside')
@@ -70,5 +71,36 @@ describe('team chat list', () => {
     const rep = render({ me: { ...me, staff: false } })
     expect(rep).not.toContain('Flagged')
     expect(render({ me: null })).toContain('chat-skel')
+  })
+
+  it('ProdigyFlo scope: no Rooms, Announce or Sync now; Flagged stays for staff', () => {
+    const html = render({ features: chatFeatures({ scope: 'prodigyflo', features: { rooms: false, announce: false, sync: false } }) })
+    for (const l of ['Rooms', 'inside', 'Announce', 'Sync now']) expect(html).not.toContain(l)
+    expect(html).toContain('Flagged')
+    expect(html).toContain('Settings')
+    // An older Worker that says nothing about features: the SunOff tools stay off too.
+    expect(chatFeatures({})).toEqual({ rooms: false, announce: false, sync: false })
+    expect(chatFeatures({ me: { features: { rooms: true } } } as never)).toEqual({ rooms: true, announce: false, sync: false })
+  })
+
+  it('every category shows, an empty one with 0, and opens to its own empty state', () => {
+    const dmsOnly = [channels[0]]
+    const html = render({ channels: dmsOnly })
+    expect(html).toContain('aria-label="Clients, 0"')
+    expect(html).toContain('aria-label="Channels, 0"')
+    expect(render({ channels: dmsOnly, cat: 'clients' })).toContain('Client chats appear here when a lead is assigned to you in the Call Center.')
+    expect(render({ channels: dmsOnly, cat: 'chans' })).toContain('No team conversations yet. Start one with +')
+    const none = render({ channels: [] })
+    expect(none).toContain('aria-label="Direct messages, 0"')
+    expect(none).toContain('No team conversations yet. Start one with +')
+    expect(render({ channels: [], lang: 'es', t: strings('es'), cat: 'clients' })).toContain('cuando se le asigna un prospecto en el Call Center')
+  })
+
+  it('names nothing from SunOff on screen', () => {
+    for (const lang of ['en', 'es'] as const) {
+      const words = JSON.stringify(Object.values(strings(lang)).filter((v) => typeof v === 'string'))
+      expect(words).not.toMatch(/sunoff|dialer|marcador/i)
+    }
+    expect(strings('en').linkBtn).toBe('Turn on team chat')
   })
 })

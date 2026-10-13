@@ -6,7 +6,7 @@ import { ChatApi, ChatError, clientId } from './api'
 import { ChannelSheet } from './channel-sheet'
 import { ChatList, type Live } from './chat-list'
 import { Conversation } from './conversation'
-import { channelLabel, isCat, mostRecent, upsertMessage, type Cat } from './format'
+import { NO_FEATURES, channelLabel, chatFeatures, isCat, mostRecent, upsertMessage, type Cat } from './format'
 import { useHostBridge } from './host-bridge'
 import { RoomsSheet } from './rooms-sheet'
 import { SettingsSheet } from './settings-sheet'
@@ -254,6 +254,9 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
   })
   const [sheet, setSheet] = useState<SheetState>(null)
   const [rooms, setRooms] = useState<RoomsAnswer | null>(null)
+  // SunOff-side tools (rooms, Announce, Sync now): off until GET /api/me turns them on; never on for ProdigyFlo.
+  const [features, setFeatures] = useState(NO_FEATURES)
+  const featuresRef = useRef(NO_FEATURES)
   const [syncing, setSyncing] = useState(false)
   const [toastMsg, setToast] = useState<string | null>(null)
   const [said, setSaid] = useState('')
@@ -304,6 +307,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
 
   const loadRooms = useCallback(async () => {
     roomsAt.current = Date.now()
+    if (!featuresRef.current.rooms) return
     try {
       setRooms(await api.req<RoomsAnswer>('GET', '/api/rooms'))
     } catch {
@@ -383,6 +387,8 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         }
         // GET /api/me carries the prefs (language, quiet hours) the screen starts from; the session's copy is the fallback.
         const meAns = await api.req<MeAnswer>('GET', '/api/me').catch(() => null)
+        featuresRef.current = chatFeatures(meAns)
+        setFeatures(featuresRef.current)
         const me = (meAns?.me ?? out.me) as Me | undefined
         if (me) {
           dispatch({ type: 'me', me })
@@ -853,6 +859,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         live={liveState}
         net={net}
         rooms={rooms}
+        features={features}
         searchRef={searchRef}
         syncing={syncing}
         onRetry={() => {
@@ -919,7 +926,7 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
           onAddPeople={() => setSheet({ k: 'add' })}
         />
       ) : null}
-      {sheet?.k === 'rooms' && s.me ? <RoomsSheet api={api} t={t} lang={lang} me={s.me} data={rooms} reload={loadRooms} toast={toast} onClose={() => setSheet(null)} /> : null}
+      {sheet?.k === 'rooms' && features.rooms && s.me ? <RoomsSheet api={api} t={t} lang={lang} me={s.me} data={rooms} reload={loadRooms} toast={toast} onClose={() => setSheet(null)} /> : null}
       {sheet?.k === 'flagged' ? <FlaggedSheet api={api} t={t} lang={lang} onClose={() => setSheet(null)} onGoto={(g) => void goto(g)} /> : null}
       {sheet?.k === 'settings' && s.me ? (
         <SettingsSheet

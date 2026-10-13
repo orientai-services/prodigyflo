@@ -1,5 +1,5 @@
 import { dividerId, groupsWith } from './message-logic'
-import type { Channel, Lang, Message, Person, Room } from './types'
+import type { Channel, ChatFeatures, Lang, MeAnswer, Message, Person, Room } from './types'
 
 /** Pure helpers for the team chat screen (unit-tested in format.test.ts). */
 
@@ -272,3 +272,15 @@ export function upsertMessage(list: Message[], m: Message): Message[] {
   next.sort((a, b) => (a.pending === b.pending ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.pending ? 1 : -1))
   return next
 }
+
+// ── Front-door scope ─────────────────────────────────────────────────────
+
+/**
+ * Which SunOff-side tools the ProdigyFlo chat shows. Each is off unless the Worker turns it on explicitly in
+ * `GET /api/me` (top level or under `me`): video rooms, Announce (#anuncios) and Sync now all act on SunOff's org.
+ */
+export function chatFeatures(ans: Pick<MeAnswer, 'features' | 'scope'> & { me?: { features?: ChatFeatures } } | null | undefined): Required<ChatFeatures> {
+  const f = ans?.features ?? ans?.me?.features ?? {}
+  return { rooms: f.rooms === true, announce: f.announce === true, sync: f.sync === true }
+}
+export const NO_FEATURES: Required<ChatFeatures> = { rooms: false, announce: false, sync: false }

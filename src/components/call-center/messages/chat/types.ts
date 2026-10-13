@@ -28,7 +28,21 @@ export type Me = {
 }
 
 /** GET /api/me. */
-export type MeAnswer = { me: Me; unread_total: number; mentions: number; vapid_public: string | null; companies?: Record<string, string> }
+/**
+ * What this front door may show (owner rule 2026-10-12: the ProdigyFlo chat shows nothing from SunOff or the dialer).
+ * The Worker answers `scope:'prodigyflo'` and turns off the SunOff-only tools for PF bearer sessions.
+ */
+export type ChatFeatures = { rooms?: boolean; announce?: boolean; sync?: boolean }
+
+export type MeAnswer = {
+  me: Me & { scope?: string; features?: ChatFeatures }
+  unread_total: number
+  mentions: number
+  vapid_public: string | null
+  companies?: Record<string, string>
+  scope?: 'prodigyflo' | string
+  features?: ChatFeatures
+}
 
 export type MemberView = { uid: string; name: string; role: string; staff: boolean; online: boolean }
 

@@ -65,8 +65,9 @@ export async function provisionLink(user: SessionUser): Promise<ProvisionResult>
   cache.delete(user.id)
   const existing = await linkedSunoffId(user)
   if (existing) return { ok: true, sunoffUserId: existing, created: false }
-  if (!process.env.PF_SUNOFF_BRIDGE_KEY) return { ok: false, error: 'Linking from here isn’t switched on yet. Ask the owner to link your SunOff account.' }
+  if (!process.env.PF_SUNOFF_BRIDGE_KEY) return { ok: false, error: 'Team chat isn’t available for your account yet. Ask the owner to turn it on.' }
   const r = await provisionSunoffUserFor(user)
   cache.delete(user.id)
-  return r.ok ? { ok: true, sunoffUserId: r.sunoffUserId, created: r.created } : { ok: false, error: r.reason }
+  // The card shows this to the user: never the bridge's own wording (it names the other system).
+  return r.ok ? { ok: true, sunoffUserId: r.sunoffUserId, created: r.created } : { ok: false, error: 'Team chat couldn’t be turned on right now. Try again in a minute.' }
 }
