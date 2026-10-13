@@ -4,6 +4,8 @@ import { recordAudit } from '@/lib/audit'
 import { chatBase, chatKey } from '@/lib/chat-bridge/config'
 import { CHAT_TOKEN_TTL_SECONDS, mintChatToken } from '@/lib/chat-bridge/jwt'
 import { linkedSunoffId } from '@/lib/chat-bridge/link'
+import { db } from '@/lib/db'
+import { profileName } from '@/lib/people/profile-name'
 
 /**
  * GET /api/chat/token: the signed-in user's chat SSO token (docs/CYS_BRIDGE.md
@@ -25,7 +27,9 @@ export async function GET(request: Request) {
   if (!sunoffUserId) return Response.json({ ok: false, error: 'not_linked' }, { status: 200, headers: NO_STORE })
   const lang = new URL(request.url).searchParams.get('lang') === 'es' ? 'es' : 'en'
   const now = Date.now()
-  const token = mintChatToken(key, { sunoffUserId, pfUserId: user.id, name: user.name, lang }, now)
+  const nickname = (await db.user.findUnique({ where: { id: user.id }, select: { nickname: true } }))?.nickname
+  const name = profileName({ name: user.name, nickname, email: user.email }) ?? 'ProdigyFlo'
+  const token = mintChatToken(key, { sunoffUserId, pfUserId: user.id, name, lang }, now)
   await recordAudit(user, {
     action: 'chat.token_issued',
     entityType: 'User',
