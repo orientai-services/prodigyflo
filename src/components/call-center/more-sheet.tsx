@@ -6,6 +6,7 @@ import { Megaphone, Settings2, UsersRound, X } from 'lucide-react'
 import { ADS_BASE, sectionHref } from '@/lib/call-center/app-shell'
 import type { PhoneStatus } from '@/lib/telephony/ui/phone-status'
 import { DialerModeSwitch } from './dialer-mode-switch'
+import { InstallAppEntry } from '@/components/pwa/install-app'
 
 /**
  * More (docs/DIALER_APP.md §1): Campaigns, Team, a status block (live
@@ -109,6 +110,8 @@ export function MoreSheet({
               </span>
             </button>
           </li>
+          {/* Hidden when already running as the installed app. */}
+          <InstallAppEntry variant="more" onPick={onClose} />
         </ul>
         <dl className="more-status">
           <div>

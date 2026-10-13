@@ -1,0 +1,49 @@
+/* "Install app" how-to sheet (src/components/pwa/install-app.tsx). Self-contained colours: it opens over
+   the desk (paper), the app shell (light or dark tokens) and the sign-in page alike. */
+.pwa-install-root { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center; }
+.pwa-install-backdrop { position: absolute; inset: 0; background: rgba(18, 32, 44, .42); }
+.pwa-install-sheet {
+  position: relative; width: 100%; max-height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top) - 12px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background: #fffdf8; color: #15202b; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
+  font-size: 16px; line-height: 1.45;
+}
+@media (min-width: 768px) {
+  .pwa-install-root { align-items: center; }
+  .pwa-install-sheet { width: min(440px, calc(100vw - 32px)); border-radius: 18px; padding: 18px 22px 22px; box-shadow: 0 24px 64px rgba(18, 32, 44, .3); }
+  .pwa-install-grab { display: none; }
+}
+.pwa-install-grab { width: 40px; height: 4px; margin: 4px auto 10px; border-radius: 99px; background: #d6cebf; }
+.pwa-install-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.pwa-install-head img { flex: none; width: 48px; height: 48px; border-radius: 11px; }
+.pwa-install-head h2 { flex: 1; margin: 0; font-size: 19px; font-weight: 600; line-height: 1.25; }
+.pwa-install-close {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 12px;
+  background: transparent; color: #5b6570; cursor: pointer;
+}
+.pwa-install-close svg { width: 20px; height: 20px; }
+.pwa-install-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.pwa-install-steps li { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #e3dccf; border-radius: 14px; background: #faf7f0; }
+.pwa-install-num {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 99px;
+  background: #12202c; color: #fff; font-size: 14px; font-weight: 600;
+}
+.pwa-install-text { flex: 1; min-width: 0; }
+.pwa-install-glyph { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; background: #fff; color: #0a7aff; border: 1px solid #e3dccf; }
+.pwa-install-glyph svg { width: 22px; height: 22px; }
+.pwa-inline-icon { display: inline; width: 16px; height: 16px; vertical-align: -3px; }
+.pwa-install-note { margin: 12px 2px 0; font-size: 14px; color: #5b6570; }
+.pwa-install-done {
+  display: block; width: 100%; min-height: 48px; margin-top: 16px; border: 0; border-radius: 12px; background: #0e6b66; color: #fff;
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.pwa-install-close:focus-visible, .pwa-install-done:focus-visible { outline: 2px solid #12202c; outline-offset: 2px; }
+.pwa-install-link {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px; border: 0; background: none;
+  color: inherit; font-size: 14px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.pwa-install-link svg { width: 16px; height: 16px; }
+@media (prefers-reduced-motion: no-preference) {
+  .pwa-install-sheet { animation: pwa-install-up .22s ease-out; }
+  @keyframes pwa-install-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+}
