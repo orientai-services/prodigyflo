@@ -61,8 +61,9 @@ Constants every lane uses:
      own time shown when it differs.
    - The chosen time is stored in `nextAttemptAt`, and the Due queue orders by it.
 4. **Power mode** (toggle in the header, remembered per browser).
-   - When a call ends, the wrap-up panel asks for an outcome. With the toggle
-     on it is required before the next dial.
+   - When a call ends, the wrap-up panel asks for an outcome from one
+     dropdown (see Result dropdowns below). With the toggle on it is required
+     before the next dial; with it off a Later link sits next to it.
    - It then counts down 5 s to the next lead in the Today ranking and runs the
      same `checkDial` flow as the Call button.
    - The next lead is locked first; leads another rep holds, DNC leads and
@@ -71,7 +72,8 @@ Constants every lane uses:
      compliance block or an hours prompt; it stops and shows why.
 5. **Keyboard shortcuts** apply on the desk, never while typing:
    - J/K next/previous, C call, T take
-   - 1–9 outcomes in OUTCOMES order, N focus note, / search
+   - 1–9 outcomes in OUTCOMES order (the wrap-up dropdown shows each
+     option's key, e.g. "Talked (1)"), N focus note, / search
    - P toggle power mode, Space pause the countdown
    - ? shows the list
 6. **Live-ish refresh.** `router.refresh()` runs every 20 s while the tab is
@@ -119,7 +121,9 @@ Constants every lane uses:
    - Dispositions: called_back | no_answer | spam | wrong_number | handled.
    - Handling one clears every earlier pending missed call from the same
      `remoteHash` in the org.
-   - The Missed UI gets disposition buttons.
+   - The Missed UI closes a call from one "Close as" dropdown (Dealt with:
+     Called back, Handled · Not reached: No answer · Not a real call: Spam,
+     Wrong number). Add note stays a link; the note is saved with the pick.
    - An outbound call to the same remoteHash answered for 20 s or more clears
      them automatically (note 'called back'). Do this in the finalize path.
 2. **Press 1 for a callback.** After the ring stage fails, before voicemail:
@@ -147,3 +151,25 @@ Constants every lane uses:
    - VoiceCall: callbackRequested Boolean default false, transcript Text?,
      handledDisposition String?
    - CallCenterLead: speedAlertedAt DateTime?, speedEscalatedAt DateTime?
+
+## Result dropdowns (2026-10-12)
+
+Every place a rep records a result is one native `<select>`, not a row of
+buttons (owner request; modelled on the SunOff dialer's "Resultado" select).
+The shared component is `src/components/call-center/choice-select.tsx`.
+
+- A disabled placeholder ("Choose an outcome…"), then the choices in
+  `<optgroup>`s. Picking an option does exactly what its old button did and
+  the select returns to the placeholder.
+- Lead result (lead panel and wrap-up): `OUTCOME_GROUPS` in
+  `src/lib/call-center/model.ts`. Reached: Talked, Callback, Appointment ·
+  Didn't reach: Voicemail, No answer, Busy · Close out: Wrong number, Not
+  interested, Do not call. Same `LeadOutcome` values; Callback still opens the
+  scheduler first. OUTCOMES keeps its order because the 1–9 keys follow it.
+  After a short or unanswered call the wrap-up marks "No answer · suggested".
+- Keyboard: arrow keys and type-ahead on a closed select only move to an
+  option ("Press Enter to save …" shows); Enter saves it, Escape or leaving
+  the field drops it. Picking from the opened list saves at once.
+- Look: full width, 44 px tall and 16 px text on phones; 40 px on a desk.
+  Book visit and Later stay buttons beside it.
+

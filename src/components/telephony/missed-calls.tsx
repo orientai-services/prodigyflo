@@ -10,13 +10,14 @@ import { actionFailure, thrownMessage, whenLabel } from '@/lib/telephony/ui/resu
 import { CallButton } from '@/components/voice/call-button'
 import { RecordingPlayer } from '@/components/voice/recording-player'
 import { leadHref } from '@/lib/call-center/lead-link'
+import { ChoiceSelect, type ChoiceGroup } from '@/components/call-center/choice-select'
 
 /**
  * Missed calls and voicemails that still need someone (plan §2.12, §6.1;
  * docs/DIALER_POWER.md Lane C).
  *
  * Callers who pressed 1 for a callback come first (the server sorts them).
- * Each row closes with one disposition button. Closing one also closes the
+ * Each row closes with one pick from the "Close as" dropdown. Closing one also closes the
  * same caller's earlier missed calls, and a call back that is answered and
  * lasts 20 seconds or more closes them on its own; a call back that nobody
  * answers handles nothing.
@@ -30,12 +31,22 @@ const REASON_WORDS: Record<MissedCallVM['reason'], string> = {
   failed: 'Call failed',
 }
 
-const DISPOSITIONS: { value: MissedDisposition; label: string }[] = [
-  { value: 'called_back', label: 'Called back' },
-  { value: 'no_answer', label: 'No answer' },
-  { value: 'spam', label: 'Spam' },
-  { value: 'wrong_number', label: 'Wrong number' },
-  { value: 'handled', label: 'Handled' },
+export const DISPOSITION_GROUPS: ChoiceGroup<MissedDisposition>[] = [
+  {
+    label: 'Dealt with',
+    options: [
+      { value: 'called_back', label: 'Called back' },
+      { value: 'handled', label: 'Handled' },
+    ],
+  },
+  { label: 'Not reached', options: [{ value: 'no_answer', label: 'No answer' }] },
+  {
+    label: 'Not a real call',
+    options: [
+      { value: 'spam', label: 'Spam' },
+      { value: 'wrong_number', label: 'Wrong number' },
+    ],
+  },
 ]
 
 function recordHref(target: DialTarget | null): string | null {
@@ -156,26 +167,22 @@ export function MissedCalls({
                   <span className="text-muted-foreground text-xs" aria-hidden="true">
                     Close as
                   </span>
-                  <div className="flex flex-wrap gap-2">
-                    {DISPOSITIONS.map((d) => (
-                      <button
-                        key={d.value}
-                        type="button"
-                        className="missed-btn hover:bg-muted inline-flex h-11 grow basis-[calc(50%-0.25rem)] items-center justify-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-50 sm:h-8 sm:grow-0 sm:basis-auto sm:rounded-md sm:text-xs"
-                        disabled={pending}
-                        aria-label={`Close as ${d.label.toLowerCase()}`}
-                        onClick={() => close(call, d.value)}
-                      >
-                        {busy?.id === call.id && busy.disposition === d.value && <Loader2 className="size-3.5 animate-spin" />}
-                        {d.label}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ChoiceSelect
+                      className="missed-select basis-full sm:basis-56"
+                      groups={DISPOSITION_GROUPS}
+                      placeholder="Choose an outcome…"
+                      label={`Close the call from ${call.caller} as`}
+                      disabled={pending}
+                      onChoose={(disposition) => close(call, disposition)}
+                    />
+                    {busy?.id === call.id && <Loader2 className="size-3.5 animate-spin" aria-label="Saving" />}
                     {noteFor === call.id ? (
                       <input
                         className="missed-note border-input bg-background h-11 basis-full min-w-0 rounded-lg border px-3 text-base sm:h-8 sm:min-w-56 sm:rounded-md sm:px-2 sm:text-xs"
                         value={note}
                         maxLength={200}
-                        placeholder="Note (saved with the button you press)"
+                        placeholder="Note (saved with the outcome you pick)"
                         onChange={(e) => setNote(e.target.value)}
                         aria-label="Note"
                         autoFocus

@@ -136,6 +136,9 @@ Server: `src/lib/call-center/messages.ts`; UI
 
 - **Leads** (lane A): the existing desk list + lead panel + filters (All,
   Forms, Inbound, Not contacted, Retry, Do not call, Missed) with its search.
+  The lead panel's Result, the wrap-up, the Missed "Close as" and the Booked
+  visit Outcome are each one grouped dropdown, never a row of buttons
+  (docs/DIALER_POWER.md § Result dropdowns).
 - **Booked** (lane A): the calendar planner as built.
 
 ## 6. Interfaces between lanes

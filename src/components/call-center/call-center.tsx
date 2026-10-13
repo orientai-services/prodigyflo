@@ -81,6 +81,8 @@ import { MoreSheet } from './more-sheet'
 import { PhoneStatusPill, usePhoneStatus } from './phone-pill'
 import { BookVisit } from './calendar/scheduler'
 import { PowerBar, WrapUp } from './power-panel'
+import { ChoiceSelect } from './choice-select'
+import { OUTCOME_PLACEHOLDER, outcomeGroups } from './outcome-choices'
 import { TeamView } from './team-view'
 import { TodayView, type TodayServer } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
@@ -920,17 +922,13 @@ export function CallCenter({
                       scheduler(selected)
                     ) : (
                       <div className="actions outcomes">
-                        {OUTCOMES.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className="btn secondary"
-                            disabled={busy || !canRecordOutcome(selected, who) || !holding(selected)}
-                            onClick={() => { void recordOutcome(selected, item.id) }}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
+                        <ChoiceSelect
+                          groups={outcomeGroups()}
+                          placeholder={OUTCOME_PLACEHOLDER}
+                          label={`Result for ${selected.name}`}
+                          disabled={busy || !canRecordOutcome(selected, who) || !holding(selected)}
+                          onChoose={(outcome) => { void recordOutcome(selected, outcome) }}
+                        />
                         {calendarAllowed && selected.persisted ? (
                           <button
                             type="button"
