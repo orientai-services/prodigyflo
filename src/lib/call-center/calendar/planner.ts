@@ -14,6 +14,7 @@ import {
   STEP_MINUTES,
   type RepColor,
 } from './config'
+import type { LeadPhoneView } from '../phone-display'
 import type { SlotStatus } from './outcomes'
 import { slotProblem, type BusySlot, type RepHours } from './slots'
 import { minuteOfDay, zonedParts, zonedToUtc } from './time'
@@ -46,9 +47,11 @@ export type VisitVM = {
   status: SlotStatus
   /** The lead's last note (desk notes only, never the calendar's own lines). */
   note: string | null
+  /** Full number, only for a viewer allowed to see this lead's (lead-phones.ts). */
+  phone?: LeadPhoneView | null
 }
 
-export type RailLeadVM = { id: string; name: string; last4: string | null; language: 'EN' | 'ES'; at: string }
+export type RailLeadVM = { id: string; name: string; last4: string | null; language: 'EN' | 'ES'; at: string; phone?: LeadPhoneView | null }
 
 /** What the scheduler needs to grey out chips exactly as the server will refuse them. */
 export type SchedulerData = {

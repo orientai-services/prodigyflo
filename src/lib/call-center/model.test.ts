@@ -332,7 +332,7 @@ describe('call center extras', () => {
 
   it('dims do-not-call and keeps the phone at last-4', () => {
     const riley = byName(seedLeads(), 'Riley Cho')
-    expect(phoneLabel(riley)).toBe('···· 0091')
+    expect(phoneLabel(riley)).toBe('•••-•••-0091')
     expect(canCall(riley)).toBe(false)
     expect(canText(riley)).toBe(false)
     expect(canTake(riley)).toBe(false)
@@ -340,7 +340,7 @@ describe('call center extras', () => {
     const added = applyOutcome(byName(seedLeads(), 'Mara Ellison'), 'do_not_call', day)
     expect(added.dnc).toBe(true)
     expect(added.status).toBe('dnc')
-    expect(phoneLabel(added)).toBe('···· 4419')
+    expect(phoneLabel(added)).toBe('•••-•••-4419')
     expect(applyLeadAction(added, 'call', day)).toBe(added)
     expect(sendIntakeLink(added, day)).toBe(added)
   })

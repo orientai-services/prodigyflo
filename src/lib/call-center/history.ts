@@ -6,6 +6,7 @@ import { ACTIVE_STATUSES, TERMINAL_STATUSES, recordingPath, visibleCallsWhere } 
 import { calendarReps } from './calendar/config'
 import { calendarTrailText } from './calendar/trail-text'
 import { leadHref } from './lead-link'
+import { withLeadPhones } from './lead-phones'
 import { readFacebookFormEvent } from './meta-route'
 import {
   HISTORY_PAGE,
@@ -278,6 +279,7 @@ async function loadCalls(v: Viewer, filter: HistoryFilter, search: Search | null
       transcript: kind === 'voicemail' ? safe(vc.transcript) : null,
       text: null,
       href: visibleClient ? `/clients/${encodeURIComponent(visibleClient)}` : lead ? leadHref(vc.callCenterLeadId!) : null,
+      leadId: visibleClient ? null : vc.callCenterLeadId,
     }
   })
 }
@@ -396,6 +398,7 @@ async function loadLeadTexts(v: Viewer, search: Search | null, before: Date | nu
       transcript: null,
       text: safe(leadTextBody(e.body)) ?? '',
       href: leadHref(e.leadId),
+      leadId: e.leadId,
     }
   })
 }
@@ -420,7 +423,12 @@ export async function loadHistory(
     texts ? loadClientTexts(v, search, before, now) : Promise.resolve([]),
     texts ? loadLeadTexts(v, search, before, now) : Promise.resolve([]),
   ])
-  return pageOf(parts.flat(), cur)
+  const page = pageOf(parts.flat(), cur)
+  // Full numbers for the leads this viewer may see; a nameless lead then reads as its number.
+  const rows = (await withLeadPhones(user, page.rows, (r) => r.leadId)).map((r) =>
+    r.phone?.state === 'shown' && r.name === maskedNumber(r.name.slice(-4)) ? { ...r, name: r.phone.display } : r,
+  )
+  return { ...page, rows }
 }
 
 // ── Activity ────────────────────────────────────────────────────────────────

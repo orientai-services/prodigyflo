@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import type { MessageVM, ThreadSummaryVM, ThreadVM } from '@/lib/call-center/messages'
 import { markMessagesRead, sendMessagesText } from '@/lib/call-center/messages-actions'
 import { MAX_TEXT_LENGTH, clockLabel, messagesHref, threadMatches, withDaySeparators } from '@/lib/call-center/messages-core'
+import { phoneText } from '@/lib/call-center/phone-display'
+import { LeadPhone } from '../lead-phone'
 import './messages.css'
 
 type Props = {
@@ -189,7 +191,9 @@ function ThreadView({
           <b>{thread.name}</b>
           <span>
             {thread.kind === 'client' ? 'Client' : 'Lead'}
-            {thread.last4 && !thread.name.includes(thread.last4) ? ` · •••-•••-${thread.last4}` : ''}
+            {thread.phone ? (
+              phoneText(thread.phone, null) !== thread.name ? <> · <LeadPhone phone={thread.phone} last4={thread.last4} /></> : null
+            ) : thread.last4 && !thread.name.includes(thread.last4) ? ` · •••-•••-${thread.last4}` : ''}
           </span>
         </div>
         <Link className="msg-open" href={thread.openHref}>

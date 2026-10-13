@@ -5,6 +5,8 @@ import { getSmsProvider } from '@/lib/messaging'
 import { sendMessage } from '@/lib/messaging/send'
 import { decideOutbound } from '@/lib/telephony/compliance'
 import { last4Of, maskedLast4, phoneHashOrNull } from '@/lib/telephony/compliance-core'
+import { leadPhonesFor } from './lead-phones'
+import type { LeadPhoneView } from './phone-display'
 import { failureCodeText } from '@/lib/telephony/carrier-errors'
 import { toE164 } from '@/lib/telephony/provider'
 import { isUniqueViolation } from '@/lib/telephony/voice-calls'
@@ -48,6 +50,8 @@ export type ThreadSummaryVM = {
   kind: ThreadKind
   name: string
   last4: string | null
+  /** Full number of a lead thread, only for a viewer allowed to see it (lead-phones.ts). */
+  phone?: LeadPhoneView | null
   snippet: string
   lastDirection: 'in' | 'out'
   at: string
@@ -73,12 +77,20 @@ export type ThreadVM = {
   kind: ThreadKind
   name: string
   last4: string | null
+  /** Full number of a lead thread, only for a viewer allowed to see it (lead-phones.ts). */
+  phone?: LeadPhoneView | null
   messages: MessageVM[]
   canSend: boolean
   /** Why the composer is off, when it is. */
   sendNote: string | null
   /** Where the lead or client opens in the app. */
   openHref: string
+}
+
+/** A lead thread's name; a nameless lead reads as its full number when the viewer may see it. */
+function leadThreadName(name: string | null | undefined, last4: string | null, phone: LeadPhoneView | null): string {
+  if (!name?.trim() && phone?.state === 'shown') return phone.display
+  return displayName(name, last4)
 }
 
 export type SendTextResult = { ok: true; message: MessageVM } | { ok: false; error: string }
@@ -212,14 +224,17 @@ export async function listThreads(user: SessionUser, now = new Date()): Promise<
   const clientUnreadBy = new Map(clientUnread.map((g) => [g.clientId, g._count._all]))
   const threads: ThreadSummaryVM[] = []
 
+  const phones = await leadPhonesFor(user, leads.map((l) => l.id))
   for (const lead of leads) {
     const last = latestLead.get(lead.id)!
     const last4 = lead.phoneLast4 && /^\d{4}$/.test(lead.phoneLast4) ? lead.phoneLast4 : null
+    const phone = phones.get(lead.id) ?? null
     threads.push({
       key: threadKeyString({ kind: 'lead', id: lead.id }),
       kind: 'lead',
-      name: displayName(leadNameFrom(lead.events), last4),
+      name: leadThreadName(leadNameFrom(lead.events), last4, phone),
       last4,
+      phone,
       snippet: snippet(readSmsEvent(last.body)?.detail ?? ''),
       lastDirection: last.direction === SMS_IN ? 'in' : 'out',
       at: last.createdAt.toISOString(),
@@ -300,11 +315,13 @@ async function loadLeadThread(user: SessionUser, leadId: string): Promise<Thread
   const names = await userFirstNames(rows.flatMap((r) => (r.direction === SMS_OUT ? [readSmsEvent(r.body)?.userId ?? ''] : [])))
   const last4 = lead.phoneLast4 && /^\d{4}$/.test(lead.phoneLast4) ? lead.phoneLast4 : null
   const gate = leadSendGate(user, lead)
+  const phone = (await leadPhonesFor(user, [lead.id])).get(lead.id) ?? null
   return {
     key: threadKeyString({ kind: 'lead', id: lead.id }),
     kind: 'lead',
-    name: displayName(leadNameFrom(lead.events), last4),
+    name: leadThreadName(leadNameFrom(lead.events), last4, phone),
     last4,
+    phone,
     messages: rows.map((r) => leadMessage(r, names)),
     canSend: gate === null,
     sendNote: gate,

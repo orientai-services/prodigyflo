@@ -16,12 +16,14 @@ import {
   sendThreadText,
 } from './messages'
 import { A2P_PENDING } from './messages-core'
+import { formatLeadPhone } from './phone-display'
 
 /**
  * The dialer's Messages section against the test DB (docs/DIALER_APP.md §4):
  * inbound lead texts land on the lead's thread once per carrier id, unread
  * counts and marking read, the lead send path running the one outbound
- * decision, carrier failures kept honestly, and no full number anywhere.
+ * decision, carrier failures kept honestly, and a full number only for a
+ * viewer allowed to see it (Super Admin, or the rep holding the lead).
  */
 
 const run = `ccmsg-${Date.now().toString(36)}`
@@ -125,7 +127,7 @@ describe('call center messages', () => {
     expect(await db.callCenterEvent.count({ where: { lead: { organizationId: orgId }, type: 'SMS', direction: 'in' } })).toBe(1)
   })
 
-  it('lists one thread per lead and client, newest first, unread counted, last 4 only', async () => {
+  it('lists one thread per lead and client, newest first, unread counted; full lead number only for a Super Admin', async () => {
     const threads = await listThreads(admin.actor, OPEN)
     expect(threads.map((t) => t.key)).toEqual([`client:${clientId}`, `lead:${leadId}`])
     const t = threads.find((x) => x.kind === 'lead')!
@@ -134,12 +136,17 @@ describe('call center messages', () => {
     expect(t.snippet).toBe('Is this about my solar?')
     expect(t.unread).toBe(1)
     expect(t.lastDirection).toBe('in')
-    hidden(threads)
+    // A Super Admin sees the lead's full number (docs/DIALER_APP.md §Phone numbers); a client's never rides along.
+    expect(t.phone).toEqual({ state: 'shown', ...formatLeadPhone(lead) })
+    hidden(threads.filter((x) => x.kind === 'client'))
     hidden(threads, clientPhone)
     expect(await countUnreadMessages(admin.actor)).toBe(2)
     // A Closer sees the lead thread (the desk is org-wide) but not another owner's client.
     const closer = await listThreads(repA.actor, OPEN)
     expect(closer.map((x) => x.key)).toEqual([`lead:${leadId}`])
+    // …and, not holding the lead, only its last four.
+    expect(closer[0].phone).toBeNull()
+    hidden(closer)
     expect(await countUnreadMessages(repA.actor)).toBe(1)
   })
 
@@ -147,7 +154,8 @@ describe('call center messages', () => {
     const thread = await loadThread(admin.actor, { kind: 'lead', id: leadId })
     expect(thread?.messages.map((m) => [m.direction, m.text, m.status])).toEqual([['in', 'Is this about my solar?', 'received']])
     expect(thread?.canSend).toBe(true)
-    hidden(thread)
+    expect(thread?.phone).toEqual({ state: 'shown', ...formatLeadPhone(lead) })
+    hidden(await loadThread(repB.actor, { kind: 'lead', id: leadId }))
     expect(await markThreadRead(admin.actor, { kind: 'lead', id: leadId })).toBe(1)
     expect(await markThreadRead(admin.actor, { kind: 'lead', id: leadId })).toBe(0)
     expect(await markThreadRead(admin.actor, { kind: 'client', id: clientId })).toBe(1)

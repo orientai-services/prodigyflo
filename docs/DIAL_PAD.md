@@ -34,8 +34,9 @@ way a desk phone does:
 - A **Text** button is out of scope (texts stay on consent).
 - Under the keypad, one line in plain words: "Do-not-call and calling hours
   still apply. Known clients and leads are matched by number."
-- Last 5 hand-dialed numbers (this browser, localStorage, masked to
-  `(725) •••-1234` in the list, full number kept for redial).
+- Last 5 hand-dialed numbers (this browser, localStorage, shown in full as
+  `(725) 555-1234`; they are numbers this browser typed. Tapping one fills
+  the pad, the dial still goes through Call).
 
 ## 2. Server contract
 

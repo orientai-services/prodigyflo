@@ -91,7 +91,7 @@ describe('call center rows on the desk', () => {
   it('shows a stored last-4 as four masked digits', () => {
     const [lead] = callLeadsForDesk([row()])
     expect(lead.last4).toBe('0199')
-    expect(phoneLabel(lead)).toBe('···· 0199')
+    expect(phoneLabel(lead)).toBe('•••-•••-0199')
     expect(lead.channel).toBe('form')
     expect(lead.language).toBe('en')
   })

@@ -61,7 +61,7 @@ Extend the service where this document needs more; never weaken a rule.
   with a small ⚠ (a hold placed against the 90-minute gap rule cannot
   happen; the flag is for legacy data).
 - **Day view**: one wide column with the same grid, every block full width
-  with more text (lead name, phone last 4, language, rep, status, the
+  with more text (lead name, phone (full for a viewer allowed to see it, docs/DIALER_APP.md §Phone numbers, else last 4), language, rep, status, the
   lead's note snippet). Default on phones.
 - **Month view**: a 7×5/6 grid; each day shows up to 3 mini chips (time +
   name, rep color) and "+N more"; click a day → Day view of that day.

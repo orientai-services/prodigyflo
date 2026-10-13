@@ -58,7 +58,6 @@ import {
   lockLabel,
   nextCallableLead,
   nextTryValue,
-  phoneLabel,
   saveNote,
   seedLeads,
   sendIntakeLink,
@@ -92,6 +91,8 @@ import { useChatHost } from './use-chat-host'
 import { chatHref } from './messages/chat/host-bus'
 import '../final-desk/final-desk.css'
 import './call-center.css'
+import { LeadPhone } from './lead-phone'
+import { formatLeadPhone, type LeadPhoneView } from '@/lib/call-center/phone-display'
 
 /** Under Text when it is before 9 AM or after 8 PM where the lead lives (the trail still says HELD_UNTIL_MORNING). */
 const TEXT_HELD_NOTE = 'It is outside 9 AM–8 PM their time: a text now is held until morning.'
@@ -115,6 +116,8 @@ function keepLinks(before: CallLead, next: CallLead): CallLead {
     ...next,
     clientId: next.clientId !== undefined ? next.clientId : before.clientId,
     intakeTextBlock: next.intakeTextBlock !== undefined ? next.intakeTextBlock : before.intakeTextBlock,
+    // The full number is put on by the page load (lead-phones.ts), not by desk actions.
+    phone: next.phone !== undefined ? next.phone : before.phone,
   }
 }
 
@@ -125,7 +128,7 @@ function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (l
       {lead.subtitle ? <span>{lead.subtitle}</span> : null}
       <span>
         {languageLabel(lead.language)}
-        {lead.last4 ? ` · ${lead.last4}` : ''}
+        {lead.last4 || lead.phone ? <> · <LeadPhone phone={lead.phone} last4={lead.last4} copyable={false} /></> : null}
         {lead.tries ? ` · ${triesLine(lead)}` : ''}
       </span>
       {lead.dnc ? <span className="mini">Do not call</span> : null}
@@ -393,6 +396,8 @@ export function CallCenter({
   }
   const dialPhone = revealLeadId && dial?.leadId === revealLeadId ? dial.phone : null
   const dialEmail = revealLeadId && dial?.leadId === revealLeadId ? dial.email : null
+  const dialShown = formatLeadPhone(dialPhone)
+  const dialView: LeadPhoneView | null = dialShown ? { state: 'shown', ...dialShown } : null
   // Power mode: no new dial until the last call has its result.
   const resultOwed = power.on && wrapPending
 
@@ -858,7 +863,7 @@ export function CallCenter({
                       <div><dt>Page</dt><dd>{selected.page}</dd></div>
                       <div><dt>ZIP</dt><dd>{selected.zip ?? '—'}</dd></div>
                       {/* Plain text, never a tel: link: every dial goes through the server check behind Call. */}
-                      <div><dt>Phone</dt><dd>{dialPhone ?? phoneLabel(selected)}</dd></div>
+                      <div><dt>Phone</dt><dd><LeadPhone phone={dialView ?? selected.phone} last4={selected.last4} /></dd></div>
                       {dialEmail ? <div><dt>Email</dt><dd>{dialEmail}</dd></div> : null}
                       <div><dt>Tries</dt><dd>{triesCount(selected)}</dd></div>
                       {nextTryValue(selected) ? <div><dt>Next try</dt><dd>{nextTryValue(selected)}</dd></div> : null}

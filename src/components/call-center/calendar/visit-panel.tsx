@@ -7,6 +7,7 @@ import type { CalendarOutcome } from '@/lib/call-center/calendar/outcomes'
 import { isLive, reasonText, statusLook, visitWhen, type RepVM, type VisitVM } from '@/lib/call-center/calendar/planner'
 import { leadHref } from '@/lib/call-center/lead-link'
 import { ChoiceSelect, type ChoiceGroup } from '../choice-select'
+import { LeadPhone } from '../lead-phone'
 
 /** 'cancel' asks first; the others save at once. */
 type VisitChoice = 'sat' | 'no-show' | 'rescheduled' | 'cancel'
@@ -97,7 +98,9 @@ export function VisitPanel({
           <span className="cal-tag cal-tag-rep"><i className="cal-dot" aria-hidden="true" />{rep.label}</span>
           <span className={`cal-tag cal-st-${look.look}`}>{look.label}</span>
           <span className="cal-tag">{visit.language === 'ES' ? 'Spanish' : 'English'}</span>
-          {visit.last4 ? <span className="cal-tag">••{visit.last4}</span> : null}
+          {visit.phone ? (
+            <span className="cal-tag"><LeadPhone phone={visit.phone} last4={visit.last4} /></span>
+          ) : visit.last4 ? <span className="cal-tag">••{visit.last4}</span> : null}
         </div>
         <div className="cal-panel-note">
           <small>Last note</small>

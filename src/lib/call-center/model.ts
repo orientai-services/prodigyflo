@@ -6,6 +6,7 @@
  */
 
 import { TRY_LIMIT, cadenceExhausted, nextCadenceAt, validateCallbackAt, zonedLabel } from './cadence'
+import { phoneText, type LeadPhoneView } from './phone-display'
 
 export { TRY_LIMIT }
 
@@ -105,8 +106,13 @@ export type CallLead = {
   channel: LeadChannel
   contacted: boolean
   status: LeadStatus
-  /** Last four digits only. Never a full number. */
+  /** Last four digits, the masked form everyone may see. */
   last4: string | null
+  /**
+   * The full number, only for a viewer allowed to see it (phone-display.ts
+   * `maySeeLeadPhone`); set on the server after the rows load. Absent = masked.
+   */
+  phone?: LeadPhoneView | null
   zip: string | null
   page: string
   arrivedAt: string
@@ -505,8 +511,9 @@ export function languageName(language: LeadLanguage): string {
   return language === 'en' ? 'English' : 'Spanish'
 }
 
+/** The Phone fact: the full number when the server sent one, else the last four. */
 export function phoneLabel(lead: CallLead): string {
-  return lead.last4 ? `···· ${lead.last4}` : '—'
+  return phoneText(lead.phone, lead.last4)
 }
 
 /** "1 of 7": the value under a "Tries" label. */

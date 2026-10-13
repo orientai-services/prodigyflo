@@ -107,7 +107,7 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   if (route.section === 'history') slot = <HistorySection user={user} params={params} base={HISTORY_BASE} />
   else if (route.section === 'messages') slot = <MessagesSection user={user} params={params} base={MESSAGES_BASE} />
   else if (route.ads) slot = <MetaAdsContent user={user} params={params} base={ADS_BASE} embedded />
-  else if (route.section === 'booked' && calendarOn) slot = <CallCenterCalendarTab organizationId={user.organizationId} params={params} />
+  else if (route.section === 'booked' && calendarOn) slot = <CallCenterCalendarTab organizationId={user.organizationId} params={params} viewer={user} />
 
   return (
     <CallCenter

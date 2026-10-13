@@ -8,6 +8,7 @@ import {
   type CalendarVisit,
   type RailLead,
 } from '@/lib/call-center/calendar/service'
+import { leadPhonesFor, type LeadPhoneViewer } from '@/lib/call-center/lead-phones'
 import { CalendarPlanner } from './calendar-planner'
 
 const NEXT_HOURS_MS = 3 * 3_600_000
@@ -39,9 +40,12 @@ function railVM(lead: RailLead): RailLeadVM {
 export async function CallCenterCalendarTab({
   organizationId,
   params,
+  viewer,
 }: {
   organizationId: string
   params: Record<string, string | string[] | undefined>
+  /** Who is looking: full numbers only for the leads they may see (lead-phones.ts). */
+  viewer?: LeadPhoneViewer
 }) {
   const now = new Date()
   const reps = calendarReps()
@@ -56,15 +60,20 @@ export async function CallCenterCalendarTab({
     schedulerInputs(organizationId, now),
   ])
   const repVMs = reps.map((r) => ({ key: r.key, label: r.label, color: repColor(r.key, reps) }))
+  const phones = viewer
+    ? await leadPhonesFor(viewer, [...visits, ...upcoming].map((v) => v.leadId).concat([...toSchedule, ...followUps].map((l) => l.id)))
+    : new Map()
+  const visitRow = (v: CalendarVisit): VisitVM => ({ ...visitVM(v), phone: phones.get(v.leadId) ?? null })
+  const railRow = (lead: RailLead): RailLeadVM => ({ ...railVM(lead), phone: phones.get(lead.id) ?? null })
 
   const vm: CalendarVM = {
     ...state,
     now: now.toISOString(),
     reps: repVMs,
-    visits: visits.map(visitVM),
-    nextHours: upcoming.filter((v) => isLive(v.status)).map(visitVM),
-    toSchedule: toSchedule.map(railVM),
-    followUps: followUps.map(railVM),
+    visits: visits.map(visitRow),
+    nextHours: upcoming.filter((v) => isLive(v.status)).map(visitRow),
+    toSchedule: toSchedule.map(railRow),
+    followUps: followUps.map(railRow),
     scheduler: {
       now: now.toISOString(),
       reps: repVMs,
