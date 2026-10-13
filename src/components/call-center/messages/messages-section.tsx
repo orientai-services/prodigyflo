@@ -26,7 +26,11 @@ export async function MessagesSection(props: {
     return (
       <>
         <MessagesSwitch base={base} view="team" teamUnread={0} smsUnread={smsUnread} />
-        <TeamChatSection user={user} />
+        {/* The SunOff link lookup behind it is cached per server; on a miss it is a round trip to SunOff, which
+            now streams in here instead of holding up the whole Call Center. */}
+        <Suspense fallback={null}>
+          <TeamChatSection user={user} />
+        </Suspense>
       </>
     )
   }

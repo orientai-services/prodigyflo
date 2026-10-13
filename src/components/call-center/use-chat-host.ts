@@ -37,6 +37,11 @@ function readCases(v: unknown): Record<string, number> {
   return out
 }
 
+function sameCases(a: Record<string, number>, b: Record<string, number>): boolean {
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k])
+}
+
 export function useChatHost({
   sms,
   team,
@@ -82,11 +87,13 @@ export function useChatHost({
       (answer) => {
         if (!current) return
         heard.current = Date.now()
-        setCounts((c) => ({
-          ...c,
-          cases: readCases(answer?.cases),
-          team: chat.current.mounted && chat.current.live ? c.team : Math.max(0, Math.floor(Number(answer?.total)) || 0),
-        }))
+        const cases = readCases(answer?.cases)
+        const total = Math.max(0, Math.floor(Number(answer?.total)) || 0)
+        // Unchanged counts keep the same state object, so the usual answer (nothing new) re-renders nothing.
+        setCounts((c) => {
+          const team = chat.current.mounted && chat.current.live ? c.team : total
+          return team === c.team && sameCases(cases, c.cases) ? c : { ...c, team, cases }
+        })
       },
       () => {
         // The chat being unreachable leaves the badge as it was; the poll tries again.
