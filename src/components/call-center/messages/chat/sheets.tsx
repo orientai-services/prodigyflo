@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ChatApi } from './api'
 import { ChatError } from './api'
-import { channelLabel, groupPeople, initials, listTime } from './format'
+import { channelLabel, groupPeople, listTime } from './format'
+import { Face } from './face'
 import type { T } from './strings'
 import type { Channel, FlaggedAnswer, Lang, Message, Person, SearchHit } from './types'
 
@@ -245,7 +246,7 @@ export function NewChatSheet({ api, t, mode = 'new', channel, onClose, onCreated
               return (
                 <li key={p.uid} className={`chat-prow${on ? ' on' : ''}`}>
                   <button type="button" className="chat-prow-main" onClick={() => (mode === 'new' && !picked.length ? void go([p]) : toggle(p))} disabled={busy}>
-                    <span className="chat-av" aria-hidden="true">{initials(p.name)}<i className={`chat-dot${p.online ? ' on' : ''}`} /></span>
+                    <Face name={p.name} avatar={p.avatar}><i className={`chat-dot${p.online ? ' on' : ''}`} /></Face>
                     <span className="chat-row-main">
                       <b>{p.name}</b>
                       <span className="chat-snip">{[t.role[p.role] ?? p.role, p.team?.name ? `${p.team.badge?.emoji ? `${p.team.badge.emoji} ` : ''}${p.team.name}` : '', p.online ? t.online : ''].filter(Boolean).join(' · ')}</span>

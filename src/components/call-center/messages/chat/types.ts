@@ -44,7 +44,8 @@ export type MeAnswer = {
   features?: ChatFeatures
 }
 
-export type MemberView = { uid: string; name: string; role: string; staff: boolean; online: boolean }
+/** `avatar`: the person's picture URL when the Worker has one (ProdigyFlo sessions get it from the token's `picture`). */
+export type MemberView = { uid: string; name: string; role: string; staff: boolean; online: boolean; avatar?: string | null }
 
 export type CaseView = {
   lead_id: string
@@ -67,6 +68,8 @@ export type Channel = {
   read_only: boolean
   can_post: boolean
   dm_uid?: string
+  /** A DM: the other person's picture, when the Worker sends it on the row. */
+  avatar?: string | null
   unread: number
   mentions: number
   pins: number
@@ -108,6 +111,8 @@ export type Message = {
   channel: string
   uid: string
   name: string
+  /** The author's picture, when the Worker sends it. */
+  avatar?: string | null
   body: string
   kind: string
   parent_id: string | null
@@ -142,6 +147,7 @@ export type Person = {
   staff: boolean
   online: boolean
   relation: Relation | string
+  avatar?: string | null
   company_id?: number
   team?: { id: string; name: string; badge: { emoji?: string } | null } | null
 }

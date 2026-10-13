@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  badgeText, byActivity, catOf, channelLabel, filterChannels, groupPeople, insertMention, listTime, listable, mentionQuery, mostRecent, preview, relTime,
-  roomInText, rowPreview, rowsFor, sectionOf, seenCount, splitRooms, tickOf, unseen, upsertMessage, validHHMM,
+  avatarMap, badgeText, byActivity, dmAvatar, catOf, channelLabel, filterChannels, groupPeople, insertMention, listTime, listable, mentionQuery, mostRecent, preview, relTime,
+  roomInText, rowPreview, rowsFor, safeAvatar, sectionOf, seenCount, splitRooms, tickOf, unseen, upsertMessage, validHHMM,
 } from './format'
 import { strings } from './strings'
 import type { Channel, Message, Person, Room } from './types'
@@ -131,5 +131,31 @@ describe('team chat format', () => {
     expect(validHHMM('21:00')).toBe(true)
     expect(validHHMM('24:00')).toBe(false)
     expect(validHHMM('9:00')).toBe(false)
+  })
+})
+
+describe('chat pictures', () => {
+  it('draws only https pictures from the app or the chat Worker', () => {
+    expect(safeAvatar('https://www.prodigyflo.ai/api/profile/avatar/ckabc1234567.jpg?v=1')).toBe('https://www.prodigyflo.ai/api/profile/avatar/ckabc1234567.jpg?v=1')
+    expect(safeAvatar('https://chat.sunoff.app/api/avatar/u16')).toBe('https://chat.sunoff.app/api/avatar/u16')
+    for (const bad of [null, undefined, '', '/api/profile/avatar/x.jpg', 'http://www.prodigyflo.ai/x.jpg', 'https://www.prodigyflo.ai.evil.example/x.jpg', 'https://user:pw@www.prodigyflo.ai/x.jpg', 'https://evil.example/x.jpg', 'javascript:alert(1)', 'data:image/png;base64,AAAA']) {
+      expect(safeAvatar(bad)).toBeNull()
+    }
+  })
+
+  it('maps uids to pictures, first list wins, bad URLs dropped', () => {
+    const map = avatarMap(
+      [{ uid: 'u1', avatar: 'https://www.prodigyflo.ai/a.jpg' }],
+      [{ uid: 'u1', avatar: 'https://chat.sunoff.app/b.jpg' }, { uid: 'u2', avatar: 'https://evil.example/c.jpg' }, { uid: 'u3' }],
+      null,
+    )
+    expect([...map]).toEqual([['u1', 'https://www.prodigyflo.ai/a.jpg']])
+  })
+
+  it("takes a DM's picture from the row, else the other member", () => {
+    const base = { id: 'c', kind: 'dm' as const, name: 'Mara E.', dm_uid: 'u2', members: [{ uid: 'u2', name: 'Mara E.', role: 'rep', staff: false, online: true, avatar: 'https://www.prodigyflo.ai/m.jpg' }] }
+    expect(dmAvatar(base as unknown as Channel)).toBe('https://www.prodigyflo.ai/m.jpg')
+    expect(dmAvatar({ ...base, avatar: 'https://chat.sunoff.app/r.jpg' } as unknown as Channel)).toBe('https://chat.sunoff.app/r.jpg')
+    expect(dmAvatar({ ...base, kind: 'group' } as unknown as Channel)).toBeNull()
   })
 })

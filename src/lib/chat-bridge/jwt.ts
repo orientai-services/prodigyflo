@@ -5,7 +5,8 @@ import { createHmac } from 'node:crypto'
  * Worker verifies it with PF_CHAT_KEY, accepts it for host "prodigyflo" only,
  * and takes role, staff, name and company from SunOff's org sync, never from
  * here. So the token carries the least it can: who (sub = the linked SunOff
- * user), a display name, the language, and a lifetime of at most 12 hours.
+ * user), a display name, the profile photo's URL when there is one, the
+ * language, and a lifetime of at most 12 hours.
  */
 
 export const CHAT_TOKEN_TTL_SECONDS = 11 * 3600
@@ -18,6 +19,25 @@ export type ChatTokenInput = {
   pfUserId: string
   name: string
   lang: 'en' | 'es'
+  /** The user's profile photo as an absolute app URL (chatPictureUrl), or null for none. */
+  picture?: string | null
+}
+
+/** The only origin a `picture` claim may point at: the chat Worker shows it to teammates as-is. */
+export const CHAT_PICTURE_ORIGIN = 'https://www.prodigyflo.ai'
+
+/**
+ * User.avatarUrl → the absolute URL the chat shows. The app stores its own
+ * served path (`/api/profile/avatar/<id>.<ext>?v=N`) and renders it relative
+ * to the page, so the chat gets the same path on the production origin. An
+ * absolute URL passes only when it is already on that origin; anything else
+ * (another host, `//x`, `data:`) is left out rather than sent to the Worker.
+ */
+export function chatPictureUrl(avatarUrl: string | null | undefined): string | null {
+  const v = (avatarUrl ?? '').trim()
+  if (!v) return null
+  if (v.startsWith('/') && !v.startsWith('//') && !v.includes('\\')) return CHAT_PICTURE_ORIGIN + v
+  return v.startsWith(CHAT_PICTURE_ORIGIN + '/') ? v : null
 }
 
 /** "Gatsby Rep" → "Gatsby R." (the hosts never send an email as a name). */
@@ -40,6 +60,8 @@ export function mintChatToken(key: string, input: ChatTokenInput, now = Date.now
     lang: input.lang,
     host: 'prodigyflo',
     host_ref: input.pfUserId,
+    // Omitted (not null) without a photo: the Worker then keeps showing initials.
+    ...(input.picture ? { picture: input.picture } : {}),
     iat,
     exp: iat + CHAT_TOKEN_TTL_SECONDS,
   }

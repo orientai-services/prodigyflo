@@ -138,6 +138,11 @@
 .final-desk.call-center .chat-av.case { border-radius: 12px; background: #f2e8d5; color: #7a5a1e; }
 .final-desk.call-center .chat-av.client { background: #f2e8d5; color: #7a5a1e; }
 .final-desk.call-center .chat-av.sm { width: 28px; height: 28px; font-size: 11px; }
+.final-desk.call-center .chat-av-img,
+.chat-sheet .chat-av-img { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.final-desk.call-center .chat-av.pic { background: #e8e2d6; }
+.final-desk.call-center .chat-intro-big .chat-av.intro { width: 100%; height: 100%; font-size: inherit; }
+.final-desk.call-center .chat-intro-big.dm:has(.chat-av.pic) { overflow: hidden; }
 .final-desk.call-center .chat-dot {
   position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #c9c2b4; border: 2px solid #fff;
 }

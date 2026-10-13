@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { chatSignature, signedHeaders, verifyChatRequest } from './sign'
-import { chatDisplayName, CHAT_TOKEN_TTL_SECONDS, mintChatToken } from './jwt'
+import { chatDisplayName, chatPictureUrl, CHAT_TOKEN_TTL_SECONDS, mintChatToken } from './jwt'
 import { parseUnreadAnswer } from './remote'
 
 /**
@@ -48,6 +48,28 @@ describe('chat SSO token', () => {
     expect(Number(claims.exp) - Number(claims.iat)).toBe(CHAT_TOKEN_TTL_SECONDS)
     expect(CHAT_TOKEN_TTL_SECONDS).toBeLessThanOrEqual(12 * 3600)
     expect(() => mintChatToken(KEY, { sunoffUserId: 0, pfUserId: 'x', name: 'x', lang: 'en' })).toThrow()
+  })
+
+  it('carries the profile photo as an absolute www.prodigyflo.ai URL, and leaves the claim out without one', () => {
+    const path = '/api/profile/avatar/ckabc1234567.webp?v=1760292000000'
+    const picture = chatPictureUrl(path)
+    expect(picture).toBe(`https://www.prodigyflo.ai${path}`)
+    const claims = decode(mintChatToken(KEY, { sunoffUserId: 16, pfUserId: 'usr_1', name: 'Gatsby Rep', lang: 'en', picture }, NOW).split('.')[1])
+    expect(claims.picture).toBe(picture)
+    for (const none of [null, undefined, '']) {
+      const bare = decode(mintChatToken(KEY, { sunoffUserId: 16, pfUserId: 'usr_1', name: 'Gatsby Rep', lang: 'en', picture: chatPictureUrl(none) }, NOW).split('.')[1])
+      expect(bare).not.toHaveProperty('picture')
+    }
+  })
+
+  it('only builds picture URLs on the app origin', () => {
+    expect(chatPictureUrl('https://www.prodigyflo.ai/api/profile/avatar/x.png')).toBe('https://www.prodigyflo.ai/api/profile/avatar/x.png')
+    expect(chatPictureUrl('  /api/profile/avatar/x.png ')).toBe('https://www.prodigyflo.ai/api/profile/avatar/x.png')
+    expect(chatPictureUrl('//evil.example/x.png')).toBeNull()
+    expect(chatPictureUrl('/\\evil.example/x.png')).toBeNull()
+    expect(chatPictureUrl('https://evil.example/x.png')).toBeNull()
+    expect(chatPictureUrl('https://www.prodigyflo.ai.evil.example/x.png')).toBeNull()
+    expect(chatPictureUrl('data:image/png;base64,AAAA')).toBeNull()
   })
 
   it('never sends an email or a full surname as the display name', () => {

@@ -19,3 +19,12 @@ export function profileName(user: { name?: string | null; nickname?: string | nu
     .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
   return words.length ? words.join(' ') : null
 }
+
+/** Up to two letters for a round avatar: first and last word of the shown name, "?" when there is none. */
+export function profileInitials(name: string | null | undefined): string {
+  const parts = (name ?? '').replace(/[^\p{L}\p{N}\s]/gu, '').split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  const first = parts[0][0] ?? ''
+  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : ''
+  return (first + last).toUpperCase()
+}

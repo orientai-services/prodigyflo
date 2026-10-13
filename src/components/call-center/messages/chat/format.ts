@@ -11,6 +11,40 @@ export function initials(name: string): string {
   return ((parts[0][0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
 }
 
+/** Where a chat picture may come from: the app itself or the chat Worker. Anything else shows initials. */
+const AVATAR_ORIGINS = ['https://www.prodigyflo.ai/', 'https://chat.sunoff.app/']
+
+/** The picture URL to draw, or null (initials). */
+export function safeAvatar(url: string | null | undefined): string | null {
+  if (typeof url !== 'string') return null
+  const v = url.trim()
+  if (!AVATAR_ORIGINS.some((o) => v.startsWith(o))) return null
+  try {
+    const u = new URL(v)
+    return AVATAR_ORIGINS.includes(`${u.origin}/`) && !u.username && !u.password ? u.href : null
+  } catch {
+    return null
+  }
+}
+
+/** uid → picture for everyone this screen knows a picture for (me, the channel's members, the directory). */
+export function avatarMap(...lists: Array<ReadonlyArray<{ uid: string; avatar?: string | null }> | null | undefined>): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const list of lists) {
+    for (const p of list ?? []) {
+      const a = safeAvatar(p.avatar)
+      if (a && !out.has(p.uid)) out.set(p.uid, a)
+    }
+  }
+  return out
+}
+
+/** A DM row's picture: the row's own, else the other member's. */
+export function dmAvatar(c: Channel): string | null {
+  if (c.kind !== 'dm') return null
+  return safeAvatar(c.avatar) ?? safeAvatar(c.members.find((m) => m.uid === c.dm_uid)?.avatar)
+}
+
 export function clock(ms: number, lang: Lang): string {
   return new Intl.DateTimeFormat(lang === 'es' ? 'es-MX' : 'en-US', { hour: 'numeric', minute: '2-digit', timeZone: TZ }).format(new Date(ms))
 }

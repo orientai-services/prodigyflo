@@ -468,6 +468,22 @@
 .final-desk.call-center .cc-dialer:hover,
 .final-desk.call-center .cc-dialer.on { background: #0b5a56; }
 .final-desk.call-center .cc-dialer:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.final-desk.call-center .cc-me {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 40px; height: 40px; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 50%;
+  background: var(--navy); color: #fff; cursor: pointer; touch-action: manipulation;
+}
+/* 44 px to the finger on a phone, 40 px to the eye. */
+.final-desk.call-center .cc-me::after { content: ''; position: absolute; inset: -2px; border-radius: 50%; }
+.final-desk.call-center .cc-me:hover { box-shadow: 0 0 0 3px rgba(14, 107, 102, .18); }
+.final-desk.call-center .cc-me:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.cc-me-img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.cc-me-initials { font-size: 14px; font-weight: 600; letter-spacing: .02em; line-height: 1; }
+.cc-me-big {
+  display: flex; align-items: center; justify-content: center; width: 88px; height: 88px; overflow: hidden;
+  border-radius: 50%; background: #12202c; color: #fff;
+}
+.cc-me-big .cc-me-initials { font-size: 30px; font-weight: 500; }
 
 /* Sections: a strip under the header on a desk. */
 .final-desk.call-center .cc-tabs {

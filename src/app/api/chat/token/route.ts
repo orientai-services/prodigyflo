@@ -2,7 +2,7 @@ import { getSessionUser } from '@/lib/rbac'
 import { staffRouteAllowed } from '@/lib/staff-routes'
 import { recordAudit } from '@/lib/audit'
 import { chatBase, chatKey } from '@/lib/chat-bridge/config'
-import { CHAT_TOKEN_TTL_SECONDS, mintChatToken } from '@/lib/chat-bridge/jwt'
+import { CHAT_TOKEN_TTL_SECONDS, chatPictureUrl, mintChatToken } from '@/lib/chat-bridge/jwt'
 import { linkedSunoffId } from '@/lib/chat-bridge/link'
 import { db } from '@/lib/db'
 import { profileName } from '@/lib/people/profile-name'
@@ -27,9 +27,11 @@ export async function GET(request: Request) {
   if (!sunoffUserId) return Response.json({ ok: false, error: 'not_linked' }, { status: 200, headers: NO_STORE })
   const lang = new URL(request.url).searchParams.get('lang') === 'es' ? 'es' : 'en'
   const now = Date.now()
-  const nickname = (await db.user.findUnique({ where: { id: user.id }, select: { nickname: true } }))?.nickname
-  const name = profileName({ name: user.name, nickname, email: user.email }) ?? 'ProdigyFlo'
-  const token = mintChatToken(key, { sunoffUserId, pfUserId: user.id, name, lang }, now)
+  // Read fresh: a name or photo changed a moment ago must reach the chat on the next token.
+  const fresh = await db.user.findUnique({ where: { id: user.id }, select: { nickname: true, avatarUrl: true } })
+  const name = profileName({ name: user.name, nickname: fresh?.nickname, email: user.email }) ?? 'ProdigyFlo'
+  const picture = chatPictureUrl(fresh ? fresh.avatarUrl : user.avatarUrl)
+  const token = mintChatToken(key, { sunoffUserId, pfUserId: user.id, name, lang, picture }, now)
   await recordAudit(user, {
     action: 'chat.token_issued',
     entityType: 'User',

@@ -52,6 +52,33 @@ export async function saveIdentityAction(_prev: ProfileState, formData: FormData
   return { ok: 'Saved.' }
 }
 
+const nameSchema = identitySchema.pick({ name: true, nickname: true })
+
+export type NameState = ProfileState & { name?: string; nickname?: string | null }
+
+/**
+ * Name and nickname only, from the Call Center's Profile sheet (it has no
+ * title or phone fields, so saveIdentityAction would clear them). Same rules
+ * as the identity card: the same schema, the same audit row.
+ */
+export async function saveNameAction(input: { name: string; nickname?: string | null }): Promise<NameState> {
+  const user = await requireUser()
+  const parsed = nameSchema.safeParse({
+    name: typeof input?.name === 'string' ? input.name : '',
+    nickname: typeof input?.nickname === 'string' && input.nickname.trim() ? input.nickname : undefined,
+  })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  await db.user.update({
+    where: { id: user.id },
+    data: { name: parsed.data.name, nickname: parsed.data.nickname || null },
+  })
+  await recordAudit(user, { action: 'profile.updated', entityType: 'User', entityId: user.id, summary: 'Updated name' })
+  revalidatePath('/settings/profile')
+  revalidatePath('/call-center')
+  return { ok: 'Saved.', name: parsed.data.name, nickname: parsed.data.nickname || null }
+}
+
 const ALIAS_RE = /^[a-z0-9]([a-z0-9._-]{0,30}[a-z0-9])?$/
 
 const forwardingSchema = z.object({
