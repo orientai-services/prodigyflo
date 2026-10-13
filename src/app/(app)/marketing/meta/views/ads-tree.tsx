@@ -4,9 +4,12 @@ import type { AdsDashboard } from '@/lib/meta/ads/read'
 import { WindowTabs } from '../window-tabs'
 import { CampaignTable } from '../campaign-table'
 import { count } from './parts'
+import { WINDOW_WORDS } from './overview'
 
 export function AdsTreeView({ data, selectedId, base }: { data: AdsDashboard; selectedId?: string; base?: string }) {
   const campaigns = data.tree.filter((r) => r.kind === 'campaign').length
+  const name = data.account?.name ?? 'this ad account'
+  const period = `${WINDOW_WORDS[data.window]}${data.period ? ` (${data.period})` : ''}`
 
   return (
     <div className="space-y-4">
@@ -22,12 +25,14 @@ export function AdsTreeView({ data, selectedId, base }: { data: AdsDashboard; se
       ) : (
         <>
           <p className="text-muted-foreground text-xs">
-            {count(data.counts.campaigns)} campaigns · {count(data.counts.adSets)} ad sets · {count(data.counts.ads)} ads (
-            {count(data.counts.activeAds)} running). Open a campaign to see its ad sets and ads, and tap an ad to see what
-            people see.
+            <span className="text-foreground font-medium">{name}</span> only, {period}. {count(data.counts.campaigns)}{' '}
+            campaigns · {count(data.counts.adSets)} ad sets · {count(data.counts.ads)} ads ({count(data.counts.activeAds)}{' '}
+            running). Open a campaign to see its ad sets and ads, and tap an ad to see what people see.
           </p>
           <CampaignTable
             tree={data.tree}
+            totals={data.treeTotals}
+            totalLabel={`Total · ${name} · ${period}`}
             writesEnabled={data.writesEnabled}
             canManage={data.canManage}
             selectedId={selectedId}

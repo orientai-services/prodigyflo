@@ -47,7 +47,9 @@ function DoubtBadge() {
   )
 }
 
-export function FunnelViewSection({ data, base }: { data: FunnelData; base?: string }) {
+const RANGE_WORDS: Record<FunnelData['range'], string> = { '7d': 'last 7 days', '30d': 'last 30 days', all: 'all time' }
+
+export function FunnelViewSection({ data, base, accountName }: { data: FunnelData; base?: string; accountName: string }) {
   const rows = data.rows
   const totals = {
     spend: rows.reduce((a, r) => a + r.spend, 0),
@@ -89,7 +91,7 @@ export function FunnelViewSection({ data, base }: { data: FunnelData; base?: str
           <FunnelChart
             steps={steps(rows)}
             title="From lead to sale"
-            description={`Leads from SCS General 1 ads · spend ${money(totals.spend)} · revenue ${money(totals.revenue)}`}
+            description={`Leads from ${accountName} ads, ${RANGE_WORDS[data.range]} · spend on the ads listed below ${money(totals.spend)} · revenue ${money(totals.revenue)}`}
           />
 
           {/* Desktop: one wide table, scrolling inside its own frame. */}
@@ -176,7 +178,7 @@ export function FunnelViewSection({ data, base }: { data: FunnelData; base?: str
           <Term tip="Includes leads from before ProdigyFlo started saving which ad a lead came from.">Not matched to an ad</Term>:{' '}
           {count(data.unmatched)}
         </p>
-        <p>From ads outside SCS General 1 (hidden): {count(data.outside)}</p>
+        <p>From ads outside {accountName} (hidden, not counted anywhere): {count(data.outside)}</p>
         <p>Still being checked: {count(data.pending)}</p>
       </div>
     </div>

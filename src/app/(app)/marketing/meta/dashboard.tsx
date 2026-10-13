@@ -125,9 +125,17 @@ export function AdsStatusLine({ dashboard, canManage, embedded }: { dashboard: A
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       {embedded && (
-        <span className="text-sm font-semibold">{account ? account.name : 'Meta Ads'}</span>
+        <span className="text-sm">
+          {account ? (
+            <>
+              Ad account: <span className="font-semibold">{account.name}</span>{' '}
+              <span className="text-muted-foreground font-mono text-xs">({account.adAccountId})</span>
+            </>
+          ) : (
+            <span className="font-semibold">Meta Ads</span>
+          )}
+        </span>
       )}
-      {embedded && account && <span className="text-muted-foreground font-mono">{account.adAccountId}</span>}
       {sync && <ModeBadge mode={sync.mode} />}
       {sync?.lastFullSyncAt && (
         <span className="text-muted-foreground" title={dateTime(sync.lastFullSyncAt)}>
@@ -200,6 +208,7 @@ export async function MetaAdsContent({
   const { dashboard } = loaded
   const hasNumbers = dashboard.sync.lastFullSyncAt !== null
   const tz = dashboard.account?.timezoneName ?? null
+  const accountName = dashboard.account?.name ?? 'this ad account'
 
   let body: React.ReactNode
   switch (view) {
@@ -232,12 +241,12 @@ export async function MetaAdsContent({
     }
     case 'funnel': {
       const funnel = await getFunnelView(user, parseRange(one(params.range)))
-      body = <FunnelViewSection data={funnel} base={base} />
+      body = <FunnelViewSection data={funnel} base={base} accountName={accountName} />
       break
     }
     case 'cycle': {
       const cycle = await getCycleView(user)
-      body = <CycleViewSection data={cycle} canManage={canManage} timeZone={tz} />
+      body = <CycleViewSection data={cycle} canManage={canManage} timeZone={tz} accountName={accountName} />
       break
     }
     case 'billing': {
@@ -272,6 +281,16 @@ export async function MetaAdsContent({
       {embedded && <AdsStatusLine dashboard={dashboard} canManage={canManage} embedded />}
       <ViewTabs active={view} canManage={canManage} w={w} base={base} />
       <SyncAlerts data={dashboard} canManage={canManage} base={base} />
+      {dashboard.foreignRows > 0 && canManage && (
+        <Alert>
+          <AlertTriangle />
+          <AlertTitle>Data from another ad account is stored here</AlertTitle>
+          <AlertDescription>
+            {dashboard.foreignRows} saved rows belong to an ad account other than {accountName}. They are ignored: no number on
+            this tab includes them.
+          </AlertDescription>
+        </Alert>
+      )}
       {view === 'overview' && dashboard.window === 'max' && dashboard.sync.partialMax && hasNumbers && (
         <p className="text-muted-foreground text-xs">
           All-time numbers for single ads are partial: Meta limited how far back it would go. Account and campaign totals

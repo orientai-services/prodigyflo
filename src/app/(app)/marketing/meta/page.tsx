@@ -36,7 +36,7 @@ export default async function MetaAdsPage({
     <div>
       <PageHeader
         title="Meta Ads"
-        description={account ? `${account.name} · ${account.adAccountId}` : 'Facebook and Instagram ads'}
+        description={account ? `Ad account: ${account.name} (${account.adAccountId})` : 'Facebook and Instagram ads'}
         actions={
           finalDesk || (canManage && sync && sync.mode !== 'not_connected') ? (
             <>
