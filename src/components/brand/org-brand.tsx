@@ -29,9 +29,6 @@ export type OrgBrand = {
   shortName: string
   /** Long name, for the manifest and the document title. */
   name: string
-  /** PWA theme colour. Must be a literal: the manifest is JSON, not CSS. */
-  themeColor: string
-  backgroundColor: string
   /** `public/brand/<iconDir>/…` — see the four files each directory holds. */
   iconDir: string
   /** Row icon, at 16px. */
@@ -44,8 +41,6 @@ const BRANDS: Record<string, OrgBrand> = {
   scs: {
     shortName: 'SCS',
     name: 'Solar Contract Services',
-    themeColor: '#0D1B2A',
-    backgroundColor: '#F7F5EF',
     iconDir: 'scs',
     Mark: ScsMark,
     wordmark: 'SCS',
@@ -53,10 +48,6 @@ const BRANDS: Record<string, OrgBrand> = {
   prodigyflo: {
     shortName: 'ProdigyFlo',
     name: 'ProdigyFlo',
-    // The mark's own navy, not the derived --brand: this paints the PWA splash
-    // and the browser chrome, which are brand surfaces, not interface ones.
-    themeColor: '#0A1937',
-    backgroundColor: '#FFFFFF',
     iconDir: 'prodigyflo',
     Mark: BrandGlyph,
     wordmark: 'ProdigyFlo',

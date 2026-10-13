@@ -1,4 +1,5 @@
 import { brandFor, BRANDED_SLUGS } from '@/components/brand/org-brand'
+import { buildManifest } from '@/lib/pwa/manifest'
 
 /**
  * Per-account PWA manifest: `/manifest/<slug>`.
@@ -18,6 +19,9 @@ import { brandFor, BRANDED_SLUGS } from '@/components/brand/org-brand'
  * Note this does NOT cover iOS: Safari ignores manifest icons for Add to Home
  * Screen and uses `<link rel="apple-touch-icon">`, which (app)/layout.tsx sets
  * from the same registry. Both have to move together.
+ *
+ * The fields themselves (start_url `/app`, id, shortcuts, colours) live in
+ * src/lib/pwa/manifest.ts.
  */
 export function generateStaticParams() {
   return BRANDED_SLUGS.map((slug) => ({ slug }))
@@ -27,43 +31,7 @@ export async function GET(_req: Request, ctx: RouteContext<'/manifest/[slug]'>) 
   const { slug } = await ctx.params
   const brand = brandFor(slug)
 
-  return Response.json(
-    {
-      name: brand.name,
-      short_name: brand.shortName,
-      // The root page sends each role to its own home. `/dashboard` used to be
-      // here, and the final desk hides that page, so the installed app opened
-      // on "You don't have access to this".
-      start_url: '/',
-      scope: '/',
-      display: 'standalone',
-      theme_color: brand.themeColor,
-      background_color: brand.backgroundColor,
-      icons: [
-        {
-          src: `/brand/${brand.iconDir}/icon-192.png`,
-          sizes: '192x192',
-          type: 'image/png',
-          purpose: 'any',
-        },
-        {
-          src: `/brand/${brand.iconDir}/icon-512.png`,
-          sizes: '512x512',
-          type: 'image/png',
-          purpose: 'any',
-        },
-        // Android masks whatever it is given to the launcher's shape. A rounded
-        // tile fed into that gets its corners clipped twice and comes out
-        // visibly dented, so `maskable` is a separate full-bleed drawing whose
-        // mark sits inside the 80% safe area.
-        {
-          src: `/brand/${brand.iconDir}/icon-maskable-512.png`,
-          sizes: '512x512',
-          type: 'image/png',
-          purpose: 'maskable',
-        },
-      ],
-    },
-    { headers: { 'content-type': 'application/manifest+json' } },
-  )
+  return Response.json(buildManifest(brand), {
+    headers: { 'content-type': 'application/manifest+json' },
+  })
 }

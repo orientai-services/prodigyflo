@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from 'next'
+import type { Metadata } from 'next'
 import { CallCenter, type CallCenterPhone } from '@/components/call-center/call-center'
 import { HistorySection } from '@/components/call-center/history/history-section'
 import { MessagesSection, unreadMessageCount } from '@/components/call-center/messages/messages-section'
@@ -19,11 +19,9 @@ import { db } from '@/lib/db'
 import { profileName } from '@/lib/people/profile-name'
 
 export const metadata: Metadata = { title: 'Call Center' }
-// The dialer is an app-style page with a bottom tab bar: `cover` lets it run
-// under the iPhone home indicator so env(safe-area-inset-*) reports the real
-// insets (they read 0 without it), and the theme colour tints Safari's
-// toolbars to the desk paper.
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#faf7f0' }
+// `viewport-fit=cover` and the theme colour now come from the root layout for
+// every page (src/lib/pwa/app-chrome.ts), so the dialer's bars read the real
+// safe-area insets wherever the app is opened.
 export const dynamic = 'force-dynamic'
 
 /** `?missed=` is a VoiceCall cuid. */
@@ -129,6 +127,7 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       viewer={{ name: shownName, role: user.roleName }}
       profile={profile}
       threadOpen={route.section === 'messages' && Boolean(params.t)}
+      openPad={params.pad === '1'}
     />
   )
 }

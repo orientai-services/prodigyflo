@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import { db } from '@/lib/db'
 import { getSessionUser, requireUser } from '@/lib/rbac'
 import { brandFor } from '@/components/brand/org-brand'
+import { installedAppMetadata } from '@/lib/pwa/app-chrome'
 import { navigationFor, subroutesFor } from '@/lib/navigation'
 import { AppShell } from '@/components/layout/app-shell-lazy'
 import { getVoiceSetup } from '@/lib/telephony/actions'
@@ -36,11 +37,9 @@ export async function generateMetadata(): Promise<Metadata> {
     title: { default: brand.name, template: `%s · ${brand.shortName}` },
     applicationName: brand.name,
     manifest: `/manifest/${brand.iconDir}`,
-    appleWebApp: { capable: true, title: brand.shortName, statusBarStyle: 'default' },
-    icons: {
-      apple: [{ url: `/brand/${brand.iconDir}/apple-touch-icon.png`, sizes: '180x180' }],
-      icon: [{ url: `/brand/${brand.iconDir}/icon-192.png`, sizes: '192x192', type: 'image/png' }],
-    },
+    // Replaces the root's set wholesale (metadata merges shallowly), so the
+    // whole installed-app block is re-emitted for the active account.
+    ...installedAppMetadata(brand),
   }
 }
 
