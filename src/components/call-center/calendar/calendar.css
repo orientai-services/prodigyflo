@@ -255,7 +255,7 @@
   .final-desk.call-center .cal-panel-backdrop { display: block; position: fixed; inset: 0; z-index: 51; background: rgba(18, 32, 44, .38); }
   .final-desk.call-center .cal-panel {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 52; max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain;
-    padding: 6px 16px calc(16px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; border-width: 4px 0 0;
+    padding: 6px 16px calc(16px + var(--cc-sab, env(safe-area-inset-bottom))); border-radius: 18px 18px 0 0; border-width: 4px 0 0;
     box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
   }
   .final-desk.call-center .cal-panel .cal-grab { display: block; }
@@ -316,7 +316,7 @@
   .final-desk.call-center .cal-times button { min-height: 44px; font-size: 14px; }
   .final-desk.call-center .cal-sched-foot {
     position: sticky; bottom: 0; gap: 8px; margin: 0 -16px;
-    padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line);
+    padding: 10px 16px calc(12px + var(--cc-sab, env(safe-area-inset-bottom))); background: var(--card); border-top: 1px solid var(--line);
   }
   .final-desk.call-center .cal-sched-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .final-desk.call-center .cal-sched-acts .btn { width: 100%; min-height: 48px; }
