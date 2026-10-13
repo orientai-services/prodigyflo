@@ -35,14 +35,24 @@ const lookup = (user: SessionUser): Promise<number | null> =>
 const HIT_MS = 5 * 60_000
 const MISS_MS = 60_000
 const cache = new Map<string, { id: number | null; at: number }>()
+// One lookup in flight per user: the page's chat badge and the Team chat slot ask in the same render.
+const pending = new Map<string, Promise<number | null>>()
 
 export async function linkedSunoffId(user: SessionUser, now = Date.now()): Promise<number | null> {
   const hit = cache.get(user.id)
   if (hit && now - hit.at < (hit.id ? HIT_MS : MISS_MS)) return hit.id
-  const id = await lookup(user).catch(() => null)
-  if (cache.size > 2000) cache.clear()
-  cache.set(user.id, { id, at: now })
-  return id
+  const inFlight = pending.get(user.id)
+  if (inFlight) return inFlight
+  const ask = lookup(user)
+    .catch(() => null)
+    .then((id) => {
+      if (cache.size > 2000) cache.clear()
+      cache.set(user.id, { id, at: now })
+      return id
+    })
+    .finally(() => pending.delete(user.id))
+  pending.set(user.id, ask)
+  return ask
 }
 
 /** For callers that only hold a user id (the case feed, case-sms). Inactive or non-staff users have no link. */
@@ -56,6 +66,7 @@ export async function linkedSunoffIdById(pfUserId: string): Promise<{ user: Sess
 /** Tests only: forget cached links. */
 export function clearLinkCache(): void {
   cache.clear()
+  pending.clear()
 }
 
 export type ProvisionResult = { ok: true; sunoffUserId: number | null; created: boolean } | { ok: false; error: string }
