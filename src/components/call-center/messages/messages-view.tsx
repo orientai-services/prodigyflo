@@ -8,7 +8,14 @@ import { markMessagesRead, sendMessagesText } from '@/lib/call-center/messages-a
 import { MAX_TEXT_LENGTH, clockLabel, messagesHref, threadMatches, withDaySeparators } from '@/lib/call-center/messages-core'
 import { phoneText } from '@/lib/call-center/phone-display'
 import { LeadPhone } from '../lead-phone'
+import { useEdgeSwipeBack } from '../native/use-native-shell'
 import './messages.css'
+
+/** A phone's edge swipe presses the pane's own ‹ back (the innermost visible one: a thread's before its conversation's). */
+function pressBack(pane: HTMLElement | null, selector: string) {
+  const buttons = Array.from(pane?.querySelectorAll<HTMLElement>(selector) ?? []).filter((el) => el.offsetParent !== null)
+  buttons.at(-1)?.click()
+}
 
 type Props = {
   base: string
@@ -28,6 +35,9 @@ function initials(name: string): string {
 
 export function MessagesView({ base, threads, thread, missing, initialQuery, nowIso }: Props) {
   const [query, setQuery] = useState(initialQuery)
+  // A phone's open thread is a pushed screen: swipe from the left edge to go back.
+  const paneRef = useRef<HTMLDivElement>(null)
+  useEdgeSwipeBack(paneRef, Boolean(thread || missing), () => pressBack(paneRef.current, '.msg-back'))
   const shown = useMemo(() => threads.filter((t) => threadMatches(t, query)), [threads, query])
   const openKey = thread?.key ?? null
 
@@ -43,6 +53,10 @@ export function MessagesView({ base, threads, thread, missing, initialQuery, now
             placeholder="Search by name or last 4"
             aria-label="Search messages by name or last 4"
             autoComplete="off"
+            enterKeyHint="search"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
           />
         </label>
         {threads.length === 0 ? (
@@ -81,7 +95,7 @@ export function MessagesView({ base, threads, thread, missing, initialQuery, now
           </ul>
         )}
       </div>
-      <div className="msg-thread-pane">
+      <div ref={paneRef} className="msg-thread-pane">
         {thread ? (
           <ThreadView
             key={thread.key}
@@ -234,6 +248,7 @@ function ThreadView({
               }}
               rows={1}
               maxLength={MAX_TEXT_LENGTH}
+              autoCapitalize="sentences"
               placeholder="Write a text"
             />
           </label>

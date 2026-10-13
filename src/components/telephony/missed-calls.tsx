@@ -185,6 +185,8 @@ export function MissedCalls({
                         placeholder="Note (saved with the outcome you pick)"
                         onChange={(e) => setNote(e.target.value)}
                         aria-label="Note"
+                        autoCapitalize="sentences"
+                        enterKeyHint="done"
                         autoFocus
                       />
                     ) : (

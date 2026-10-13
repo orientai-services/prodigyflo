@@ -1,13 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { confirmCalendarSlot, saveCalendarOutcome, type CalendarResult } from '@/lib/call-center/calendar/actions'
 import type { CalendarOutcome } from '@/lib/call-center/calendar/outcomes'
 import { isLive, reasonText, statusLook, visitWhen, type RepVM, type VisitVM } from '@/lib/call-center/calendar/planner'
 import { leadHref } from '@/lib/call-center/lead-link'
 import { ChoiceSelect, type ChoiceGroup } from '../choice-select'
 import { LeadPhone } from '../lead-phone'
+import { useSheet } from '../native/use-sheet'
 
 /** 'cancel' asks first; the others save at once. */
 type VisitChoice = 'sat' | 'no-show' | 'rescheduled' | 'cancel'
@@ -52,6 +53,9 @@ export function VisitPanel({
   onChanged: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  const panelRef = useRef<HTMLElement>(null)
+  // Below a desk it is a bottom sheet: drag it down to close it.
+  useSheet(panelRef, onClose)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [askCancel, setAskCancel] = useState(false)
   const look = statusLook(visit.status)
@@ -78,6 +82,7 @@ export function VisitPanel({
     <>
       <div className="cal-panel-backdrop" aria-hidden="true" onClick={onClose} />
       <aside
+        ref={panelRef}
         className={`cal-panel cal-rep-${rep.color}`}
         aria-label={`Visit: ${visit.name}`}
         onKeyDown={(event) => {

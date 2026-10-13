@@ -248,7 +248,7 @@
   .final-desk.call-center.power-on .detail.open { padding-bottom: calc(var(--voice-dock-h, 0px) + 150px); }
   .final-desk.call-center .detail-bar {
     position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 6px;
-    margin: 0 -16px; padding: calc(env(safe-area-inset-top) + 4px) 8px 4px;
+    margin: 0 -16px; padding: calc(var(--cc-sat, env(safe-area-inset-top)) + 4px) 8px 4px;
     background: var(--paper); border-bottom: 1px solid var(--line);
   }
   .final-desk.call-center .detail-back {
@@ -304,14 +304,14 @@
   .final-desk.call-center .sched-slots .muted { grid-column: 1 / -1; }
   .final-desk.call-center .sched-acts {
     position: sticky; bottom: 0; display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin: 0 -16px;
-    padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line);
+    padding: 10px 16px calc(12px + var(--cc-sab, env(safe-area-inset-bottom))); background: var(--card); border-top: 1px solid var(--line);
   }
   .final-desk.call-center .sched-acts .btn { width: 100%; min-height: 48px; }
 
   /* Shortcuts list: a bottom sheet. */
   .final-desk.call-center .keys-sheet { align-items: flex-end; padding: 0; }
   .final-desk.call-center .keys-sheet .card {
-    width: 100%; max-height: 85dvh; border-radius: 18px 18px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    width: 100%; max-height: 85dvh; border-radius: 18px 18px 0 0; padding-bottom: calc(18px + var(--cc-sab, env(safe-area-inset-bottom)));
   }
   .final-desk.call-center .keys-sheet .actions .btn { width: 100%; min-height: 48px; }
 }
@@ -410,7 +410,7 @@
     --key-gap: 14px; --key-h: 60px; --key-w: min(96px, calc((100vw - 32px - 2 * var(--key-gap)) / 3));
     position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto;
     max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; gap: 12px;
-    padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
+    padding: 6px 16px calc(16px + var(--cc-sab, env(safe-area-inset-bottom)));
     border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
   }
   .final-desk.call-center .pad-grab { display: block; width: 40px; height: 4px; margin: 4px auto 0; border-radius: 99px; background: #d6cebf; }
@@ -443,7 +443,7 @@
 .final-desk.call-center .cc-hidden { display: none !important; }
 .final-desk.call-center .cc-head {
   position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 12px;
-  min-height: 60px; padding: calc(env(safe-area-inset-top) + 8px) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+  min-height: 60px; padding: calc(var(--cc-sat, env(safe-area-inset-top)) + 8px) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
   background: var(--paper); border-bottom: 1px solid var(--line);
 }
 .final-desk.call-center .cc-mark { display: inline-flex; align-items: center; flex: none; color: var(--navy); text-decoration: none; }
@@ -660,7 +660,7 @@
   /* --cc-tab-h is the bar without the home-indicator inset; the safe area
      needs viewport-fit=cover (the call-center page's viewport export). */
   .final-desk.call-center { --cc-tab-h: 56px; }
-  .final-desk.call-center.tabs-on { --cc-bar-h: calc(var(--cc-tab-h) + env(safe-area-inset-bottom)); }
+  .final-desk.call-center.tabs-on { --cc-bar-h: calc(var(--cc-tab-h) + var(--cc-sab, env(safe-area-inset-bottom))); }
   .final-desk.call-center .cc-main { padding: 16px max(16px, env(safe-area-inset-right)) calc(32px + var(--cc-bar-h, 0px)) max(16px, env(safe-area-inset-left)); }
   .final-desk.call-center.power-on .cc-main { padding-bottom: calc(150px + var(--cc-bar-h, 0px)); }
   .final-desk.call-center .cc-title { font-size: 24px; }
@@ -669,7 +669,7 @@
     position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 46;
     display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
     height: var(--cc-bar-h); min-height: var(--cc-tab-h);
-    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    padding: 0 env(safe-area-inset-right) var(--cc-sab, env(safe-area-inset-bottom)) env(safe-area-inset-left);
     border: 0; background: rgba(250, 247, 240, .97); box-shadow: inset 0 .5px 0 rgba(18, 32, 44, .2);
     -webkit-tap-highlight-color: transparent; transform: translateZ(0);
   }
@@ -679,7 +679,6 @@
       -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
     }
   }
-  .final-desk.call-center.thread-open .cc-tabs { display: none; }
   .final-desk.call-center .cc-tabs > a,
   .final-desk.call-center .cc-more-anchor > button {
     position: relative; flex-direction: column; justify-content: flex-start; gap: 3px;
@@ -707,7 +706,7 @@
   .final-desk.call-center .more-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
   .final-desk.call-center .more-sheet {
     position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto; max-height: 92dvh;
-    padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
+    padding: 6px 16px calc(16px + var(--cc-sab, env(safe-area-inset-bottom)));
     border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
   }
   .final-desk.call-center .more-sheet .pad-grab { display: block; width: 40px; height: 4px; margin: 4px auto 0; border-radius: 99px; background: #d6cebf; }
@@ -717,6 +716,9 @@
   /* A lead fills the screen with its own actions: the tab bar steps aside. */
   .final-desk.call-center.detail-open { --cc-bar-h: 0px; }
   .final-desk.call-center.detail-open .cc-tabs { display: none; }
+  /* An open Messages thread fills the phone screen: the tab bar steps aside (a tablet shows list and thread together). */
+  .final-desk.call-center.thread-open { --cc-bar-h: 0px; }
+  .final-desk.call-center.thread-open .cc-tabs { display: none; }
   .final-desk.call-center .cc-head { gap: 8px; }
   .final-desk.call-center .cc-head-right { gap: 8px; }
   .final-desk.call-center .cc-dialer { min-height: 44px; padding: 0 14px; font-size: 15px; }
@@ -765,18 +767,18 @@
   .final-desk.call-center .cc-more-anchor > button { gap: 1px; padding-top: 4px; font-size: 11px; }
   .final-desk.call-center .cc-tab-icon svg { width: 22px; height: 22px; }
   .final-desk.call-center .cc-badge { top: 1px; }
-  .final-desk.call-center .cc-head { min-height: 52px; padding-top: calc(env(safe-area-inset-top) + 4px); padding-bottom: 4px; }
+  .final-desk.call-center .cc-head { min-height: 52px; padding-top: calc(var(--cc-sat, env(safe-area-inset-top)) + 4px); padding-bottom: 4px; }
 }
 
 /* The call bar (VoiceDock) sits above the tab bar while the bar is up. */
 @media (max-width: 639.98px) {
-  html:has(.final-desk.call-center.tabs-on:not(.detail-open)) .voice-dock { bottom: calc(56px + env(safe-area-inset-bottom)); padding-bottom: 0; }
+  html:not(.kb-open):has(.final-desk.call-center.tabs-on:not(.detail-open):not(.thread-open)) .voice-dock { bottom: calc(56px + var(--cc-sab, env(safe-area-inset-bottom))); padding-bottom: 0; }
 }
 @media (min-width: 640px) and (max-width: 767.98px) {
-  html:has(.final-desk.call-center.tabs-on:not(.detail-open)) .voice-dock { bottom: calc(72px + env(safe-area-inset-bottom)); }
+  html:not(.kb-open):has(.final-desk.call-center.tabs-on:not(.detail-open):not(.thread-open)) .voice-dock { bottom: calc(72px + var(--cc-sab, env(safe-area-inset-bottom))); }
 }
 @media (min-width: 768px) and (max-width: 1023.98px) {
-  html:has(.final-desk.call-center.tabs-on) .voice-dock { bottom: calc(72px + env(safe-area-inset-bottom)); }
+  html:not(.kb-open):has(.final-desk.call-center.tabs-on) .voice-dock { bottom: calc(72px + var(--cc-sab, env(safe-area-inset-bottom))); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -875,7 +877,7 @@
 /* Team chat host (docs/TEAM_CHAT_PARITY.md A3, A4): the open conversation names the phone's top bar; the lead
    panel's Team chat link. */
 .final-desk.call-center .cc-title-chat { display: none; }
-@media (max-width: 1023.98px) {
+@media (max-width: 767.98px) {
   .final-desk.call-center.s-messages .cc-title-desk { display: none; }
   .final-desk.call-center.s-messages .cc-title-chat { display: inline; }
 }
@@ -888,28 +890,12 @@
    sliding under the clock, and the section strip follows it. 0 in a browser. */
 @media (min-width: 1024px) {
   .final-desk.call-center .cc-head {
-    height: calc(60px + env(safe-area-inset-top));
-    padding-top: env(safe-area-inset-top);
+    height: calc(60px + var(--cc-sat, env(safe-area-inset-top)));
+    padding-top: var(--cc-sat, env(safe-area-inset-top));
     padding-left: max(24px, calc((100% - 1232px) / 2), env(safe-area-inset-left));
     padding-right: max(24px, calc((100% - 1232px) / 2), env(safe-area-inset-right));
   }
-  .final-desk.call-center .cc-tabs { top: calc(60px + env(safe-area-inset-top)); }
+  .final-desk.call-center .cc-tabs { top: calc(60px + var(--cc-sat, env(safe-area-inset-top))); }
 }
+/* The on-screen keyboard: native/native.css (one place, on InstalledAppRuntime's --kb / --vvh / --vv-top). */
 
-/* The on-screen keyboard (InstalledAppRuntime publishes --vvh / --vv-top / --kb).
-   iOS keeps a full-screen panel at its full height under the keyboard and
-   scrolls the page instead, which pushes the header off and hides the
-   composer. Sized to the visible area, the panel keeps both in view. */
-@media (max-width: 1023.98px) {
-  html.kb-open .final-desk.call-center .msg-has-thread .msg-thread-pane,
-  html.kb-open .final-desk.call-center .chat-open .chat-main,
-  html.kb-open .final-desk.call-center .detail.open {
-    top: var(--vv-top, 0px); bottom: auto; height: var(--vvh, 100dvh);
-  }
-  /* The tab bar would ride on top of the keyboard on Android and sit uselessly behind it on iOS. */
-  html.kb-open .final-desk.call-center .cc-tabs { display: none; }
-  html.kb-open .final-desk.call-center :is(.sched, .more-sheet, .pad) {
-    bottom: var(--kb, 0px);
-    max-height: calc(var(--vvh, 100dvh) - 8px);
-  }
-}

@@ -12,6 +12,8 @@ import {
   readRecent,
 } from '@/lib/telephony/ui/dial-pad'
 import { CallButton } from '@/components/voice/call-button'
+import { haptic } from './native/haptics'
+import { useSheet } from './native/use-sheet'
 
 const KEYS: { key: string; sub: string }[] = [
   { key: '1', sub: '' },
@@ -76,6 +78,8 @@ export function DialPad({
   const e164 = dialableE164(typed)
 
   const press = (key: string) => setTyped((now) => cleanTyped(now + key))
+  // On a phone it is a bottom sheet: drag it down to close, the page stays put, Tab stays inside.
+  useSheet(rootRef, onClose, {}, ignore)
   const back = () => setTyped((now) => now.slice(0, -1))
   const pressCall = () => {
     const button = callRef.current?.querySelector('button')
@@ -202,7 +206,10 @@ export function DialPad({
               aria-label={item.key === '*' ? 'Star' : item.key === '#' ? 'Pound' : item.key}
               // Keep the caret in the field on a desk.
               onPointerDown={(event) => event.preventDefault()}
-              onClick={() => press(item.key)}
+              onClick={() => {
+                haptic('tap')
+                press(item.key)
+              }}
             >
               <b>{item.key}</b>
               <small>{item.sub || ' '}</small>

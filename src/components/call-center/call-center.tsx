@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { MessageSquare, Phone } from 'lucide-react'
 import {
@@ -89,10 +89,14 @@ import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
 import { usePowerMode } from './use-power-mode'
 import { useChatHost } from './use-chat-host'
 import { chatHref } from './messages/chat/host-bus'
+import { haptic } from './native/haptics'
+import { useEdgeSwipeBack, usePullToRefresh, useSectionScroll } from './native/use-native-shell'
+import { SectionSkeleton } from './native/skeleton'
 import '../final-desk/final-desk.css'
 import './call-center.css'
 import { LeadPhone } from './lead-phone'
 import { formatLeadPhone, type LeadPhoneView } from '@/lib/call-center/phone-display'
+import './native/native.css'
 
 /** Under Text when it is before 9 AM or after 8 PM where the lead lives (the trail still says HELD_UNTIL_MORNING). */
 const TEXT_HELD_NOTE = 'It is outside 9 AM–8 PM their time: a text now is held until morning.'
@@ -267,10 +271,14 @@ export function CallCenter({
   // A section change (any tab, a More link) closes More.
   const routeKey = `${section}:${route.ads}`
   const [routeSeen, setRouteSeen] = useState(routeKey)
+  /** The tab just tapped, drawn as a skeleton until its server render lands (no blank wait, no jump). */
+  const [pendingSection, setPendingSection] = useState<string | null>(null)
   if (routeKey !== routeSeen) {
     setRouteSeen(routeKey)
     setMoreOpen(false)
+    setPendingSection(null)
   }
+  const sectionScroll = useSectionScroll(routeKey)
   /** Holds the phone pill: More › Settings opens its sheet by pressing it. */
   const pillSlotRef = useRef<HTMLSpanElement>(null)
   /** The section bar: More's button lives in it. */
@@ -417,6 +425,13 @@ export function CallCenter({
   // On a phone the selected lead is a full-screen panel: start it at the top
   // and keep the page behind it from scrolling.
   const panelOpen = Boolean(selected)
+  // The lead went away by itself (a refresh, a section change): drop its history entry's ?lead.
+  useEffect(() => {
+    if (panelOpen || !pushedLead.current) return
+    pushedLead.current = false
+    window.history.replaceState(null, '', leadUrl(null))
+  }, [panelOpen])
+  useEdgeSwipeBack(detailRef, panelOpen, closeLead)
   useEffect(() => {
     if (!panelOpen || !onPhone()) return
     detailRef.current?.scrollTo({ top: 0 })
@@ -433,13 +448,49 @@ export function CallCenter({
     if (next === 'es') setTab('all')
   }
 
+  /** On a phone an open lead is a pushed screen with its own history entry, so Back (and Android's back) closes it. */
+  const pushedLead = useRef(false)
+  function leadUrl(id: string | null): string {
+    const url = new URL(window.location.href)
+    if (id) url.searchParams.set('lead', id)
+    else url.searchParams.delete('lead')
+    return `${url.pathname}${url.search}${url.hash}`
+  }
+
   function openLead(lead: CallLead) {
     if (lead.disabled) return
     setSelectedId(lead.id)
     setDetailTab('lead')
     setNote('')
     setNow(new Date().toISOString())
+    if (onPhone()) {
+      if (pushedLead.current) window.history.replaceState(null, '', leadUrl(lead.id))
+      else {
+        window.history.pushState(null, '', leadUrl(lead.id))
+        pushedLead.current = true
+      }
+    }
   }
+
+  /** The lead's ‹ back: one step back in history when opening it pushed one, else just close it. */
+  function closeLead() {
+    if (pushedLead.current) {
+      window.history.back()
+      return
+    }
+    setSelectedId(null)
+    if (new URL(window.location.href).searchParams.has('lead')) window.history.replaceState(null, '', leadUrl(null))
+  }
+
+  useEffect(() => {
+    const onPop = () => {
+      if (!pushedLead.current || new URL(window.location.href).searchParams.get('lead')) return
+      pushedLead.current = false
+      setSelectedId(null)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   function jump() {
     if (!selected) return
@@ -469,6 +520,7 @@ export function CallCenter({
         () => saveCallCenterOutcome(lead.id, outcome, callbackAt ?? null),
         () => replace(applyOutcome(lead, outcome, stamp(), CURRENT_REP, { callbackAt })),
       )
+      haptic(ok ? 'success' : 'warning')
       if (ok) {
         setScheduling(null)
         if (wrapPending && last && wrapLead?.id === lead.id) {
@@ -524,7 +576,7 @@ export function CallCenter({
       else if (help) setHelp(false)
       else if (booking) setBooking(null)
       else if (scheduling) setScheduling(null)
-      else if (selected && onPhone()) setSelectedId(null)
+      else if (selected && onPhone()) closeLead()
       else return false
       return true
     }
@@ -612,6 +664,43 @@ export function CallCenter({
   }
 
   const refresh = useCallback(() => router.refresh(), [router])
+
+  // Pull to refresh (Today, Leads, History): the same re-read as the 20 s tick, with a spinner until it lands.
+  const [refreshing, startRefresh] = useTransition()
+  const settle = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    if (refreshing || !settle.current) return
+    settle.current()
+    settle.current = null
+  }, [refreshing])
+  const pullable = (section === 'today' || leadsList || section === 'history') && !missedView
+  const ptr = usePullToRefresh(pullable && !(panelOpen && onPhone()), () => {
+    haptic('tap')
+    const minimum = new Promise<void>((resolve) => window.setTimeout(resolve, 450))
+    const landed = new Promise<void>((resolve) => {
+      settle.current = resolve
+      startRefresh(() => router.refresh())
+    })
+    return Promise.all([minimum, landed]).then(() => undefined)
+  })
+
+  // A call connecting or ending taps the phone (Android vibrates; iOS 18 ticks; elsewhere nothing).
+  const callStatus = voice?.status ?? 'idle'
+  const lastStatus = useRef(callStatus)
+  useEffect(() => {
+    const before = lastStatus.current
+    lastStatus.current = callStatus
+    if (callStatus === 'in-call' && before !== 'in-call') haptic('call')
+    else if (callStatus === 'idle' && before !== 'idle') haptic('tap')
+  }, [callStatus])
+
+  // A tab that never answered (offline) stops showing its skeleton.
+  useEffect(() => {
+    if (!pendingSection) return
+    const timer = window.setTimeout(() => setPendingSection(null), 10_000)
+    return () => window.clearTimeout(timer)
+  }, [pendingSection])
+  const switching = Boolean(pendingSection && pendingSection !== routeKey)
   useLiveRefresh(refresh, () => {
     if (busy || scheduling || booking || power.phase === 'dialing') return false
     return !voice || (voice.status === 'idle' && !voice.activeTarget && !voice.incoming)
@@ -625,7 +714,9 @@ export function CallCenter({
         `s-${section}`,
         power.on ? 'power-on' : '',
         selected ? 'detail-open' : '',
-        threadOpen ? 'thread-open' : 'tabs-on',
+        // A phone's open thread fills the screen and hides the tab bar; a tablet shows both side by side.
+        threadOpen ? 'thread-open' : '',
+        'tabs-on',
       ].filter(Boolean).join(' ')}
     >
       <header className="cc-head">
@@ -684,6 +775,12 @@ export function CallCenter({
         route={route}
         badges={{ today: todayBadge(counts), messages: chatHost.total }}
         moreOpen={moreOpen}
+        onNavigate={(id) => {
+          sectionScroll.remember()
+          setPadOpen(false)
+          setPendingSection(`${id}:false`)
+          haptic('tap')
+        }}
         onMore={() => {
           setPadOpen(false)
           setMoreOpen((open) => !open)
@@ -691,7 +788,19 @@ export function CallCenter({
         more={moreOpen ? moreSheet() : null}
         navRef={navRef}
       />
-      <main className="main cc-main">
+      <main className={`main cc-main${switching ? ' cc-switching' : ''}`} aria-busy={switching || refreshing || undefined}>
+        {pullable ? (
+          <div
+            className={`cc-ptr${ptr.busy ? ' busy' : ''}`}
+            style={{ '--ptr': `${ptr.pull}px`, '--ptr-o': String(ptr.busy ? 1 : Math.min(1, ptr.pull / 48)), '--ptr-r': `${ptr.pull * 4}deg` } as React.CSSProperties}
+            aria-hidden={!ptr.busy}
+            role="status"
+          >
+            <span className="cc-ptr-spin" />
+            <span className="sr">{ptr.busy ? 'Refreshing' : ''}</span>
+          </div>
+        ) : null}
+        {switching ? <SectionSkeleton /> : null}
         <PowerBar power={power} nameOf={(id) => leads.find((lead) => lead.id === id)?.name ?? null} />
         {wrapPending && wrapLead && last ? (
           <WrapUp
@@ -717,6 +826,12 @@ export function CallCenter({
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search leads"
                   aria-label="Search leads"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                 />
               </label>
             ) : null}
@@ -838,7 +953,7 @@ export function CallCenter({
                 {selected ? (
                   <>
                     <div className="detail-bar">
-                      <button type="button" className="detail-back" onClick={() => setSelectedId(null)}>
+                      <button type="button" className="detail-back" onClick={closeLead}>
                         <span aria-hidden="true">‹</span> {section === 'today' ? 'Today' : 'Leads'}
                       </button>
                       <span className="detail-bar-name">{selected.name}</span>
@@ -1002,6 +1117,8 @@ export function CallCenter({
                       value={note}
                       placeholder="Note on this attempt"
                       aria-label="Note on this attempt"
+                      autoCapitalize="sentences"
+                      enterKeyHint="enter"
                       disabled={!canSaveNote(selected, who) || !holding(selected)}
                       onChange={(event) => setNote(event.target.value)}
                     />

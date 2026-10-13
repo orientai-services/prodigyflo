@@ -53,7 +53,7 @@
   .phone-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(18, 32, 44, .38); }
   .phone-sheet {
     position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 55; width: auto;
-    max-height: 92dvh; padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
+    max-height: 92dvh; padding: 6px 16px calc(16px + var(--cc-sab, env(safe-area-inset-bottom)));
     border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(18, 32, 44, .22);
   }
   .phone-grab { display: block; width: 40px; height: 4px; margin: 4px auto 0; border-radius: 99px; background: #d6cebf; }

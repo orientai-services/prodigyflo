@@ -20,6 +20,7 @@ import {
   type SchedulerData,
 } from '@/lib/call-center/calendar/planner'
 import { useVoice } from '@/components/voice/voice-provider'
+import { useSheet } from '../native/use-sheet'
 import './calendar.css'
 
 export type SchedulerLead = { id: string; name: string }
@@ -36,6 +37,7 @@ function firstOfMonth(key: string): string {
 /** Sheet chrome shared by the scheduler and its loading state. Escape and the backdrop close it. */
 function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
+  useSheet(ref, onClose)
   useEffect(() => {
     ref.current?.focus()
   }, [])

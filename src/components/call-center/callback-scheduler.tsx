@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { callbackChips, daySlots, firstOpenDay, safeZone, slotDays, zonedLabel } from '@/lib/call-center/cadence'
+import { useSheet } from './native/use-sheet'
 
 function viewerZone(): string {
   try {
@@ -40,6 +41,8 @@ export function CallbackScheduler({
   onCancel: () => void
 }) {
   const leadZone = safeZone(zone)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  useSheet(sheetRef, onCancel)
   const [mine] = useState(viewerZone)
   const [picked, setPicked] = useState<string | null>(null)
   const at = new Date(now)
@@ -55,7 +58,7 @@ export function CallbackScheduler({
     <>
       {/* A bottom sheet on a phone: the backdrop closes it like Cancel. Hidden on a desk. */}
       <div className="sched-backdrop" aria-hidden="true" onClick={onCancel} />
-      <div className="sched" role="group" aria-label={`Call back ${name}`}>
+      <div ref={sheetRef} className="sched" role="group" aria-label={`Call back ${name}`}>
         <div className="sched-grab" aria-hidden="true" />
         <p className="muted">
           When should we call {name} back? Times are their time ({leadZone.replace(/_/g, ' ')}).

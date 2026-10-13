@@ -299,7 +299,7 @@
   margin: auto auto 0; width: 100%; max-width: 100%; max-height: 92dvh; padding: 0; border: 0; border-radius: 18px 18px 0 0; background: var(--card, #fffdf8); color: var(--ink, #15202b);
 }
 .chat-sheet::backdrop { background: rgba(18, 32, 44, .45); }
-.chat-sheet .chat-sheet-in { display: grid; gap: 12px; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); max-height: 92dvh; overflow-y: auto; }
+.chat-sheet .chat-sheet-in { display: grid; gap: 12px; padding: 14px 16px calc(16px + var(--cc-sab, env(safe-area-inset-bottom))); max-height: 92dvh; overflow-y: auto; }
 .chat-sheet header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chat-sheet h2 { font-family: var(--font-fraunces), serif; font-weight: 500; font-size: 20px; }
 .chat-sheet .chat-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line, #e3dccf); background: #fff; font-size: 20px; cursor: pointer; }
@@ -403,19 +403,19 @@
 }
 
 .final-desk.call-center .chat-toast {
-  position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); z-index: 60; transform: translateX(-50%); max-width: calc(100vw - 32px);
+  position: fixed; left: 50%; bottom: calc(80px + var(--cc-sab, env(safe-area-inset-bottom))); z-index: 60; transform: translateX(-50%); max-width: calc(100vw - 32px);
   padding: 10px 16px; border-radius: 12px; background: var(--navy); color: #fff; font-size: 14px; box-shadow: 0 10px 30px rgba(18, 32, 44, .25);
 }
 
-/* ── Phones and tablets: an open conversation covers the page; a thread covers that. ── */
-@media (max-width: 1023.98px) {
+/* ── Phones: an open conversation covers the page; a thread covers that. ── */
+@media (max-width: 767.98px) {
   /* Above the app's bottom tab bar (z 46): an open conversation is a full-screen sheet, like a lead thread. */
   .final-desk.call-center .chat-open .chat-main {
     position: fixed; inset: 0; z-index: 47; height: 100dvh; background: var(--cream);
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--voice-dock-h, 0px) env(safe-area-inset-left);
+    padding: var(--cc-sat, env(safe-area-inset-top)) env(safe-area-inset-right) var(--voice-dock-h, 0px) env(safe-area-inset-left);
   }
   .final-desk.call-center .chat-threadpane { position: absolute; inset: 0; z-index: 5; }
-  .final-desk.call-center .chat-compose { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .final-desk.call-center .chat-compose { padding-bottom: calc(10px + var(--cc-sab, env(safe-area-inset-bottom))); }
   .final-desk.call-center .desk-only { display: none; }
 }
 @media (max-width: 420px) {
@@ -423,8 +423,8 @@
   .final-desk.call-center .chat-pill { padding: 0 10px; font-size: 13px; }
 }
 
-/* ── Desktop: list | conversation (| thread), each scrolling on its own. ── */
-@media (min-width: 1024px) {
+/* ── Tablets and desks: list | conversation (| thread), each scrolling on its own. ── */
+@media (min-width: 768px) {
   .final-desk.call-center .chat {
     grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); align-items: stretch; height: min(calc(100dvh - 220px), 860px); min-height: 520px;
   }
@@ -590,6 +590,6 @@
 .chat-sheet.chat-lb, .final-desk.call-center .chat-sheet.chat-lb {
   margin: 0; width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; background: rgba(14, 27, 39, .94);
 }
-.chat-sheet.chat-lb[open] { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+.chat-sheet.chat-lb[open] { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: var(--cc-sat, env(safe-area-inset-top)) 16px var(--cc-sab, env(safe-area-inset-bottom)); }
 .chat-lb img { max-width: 94vw; max-height: calc(100dvh - 110px); border-radius: 10px; }
 .chat-lb-row { display: flex; gap: 8px; justify-content: center; }

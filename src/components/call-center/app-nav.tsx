@@ -5,7 +5,9 @@ import type { ReactNode, Ref } from 'react'
 import { CalendarDays, Ellipsis, History, MessageSquare, Sun, Users, type LucideIcon } from 'lucide-react'
 import { SECTION_TITLE, badgeText, sectionHref, type ShellRoute } from '@/lib/call-center/app-shell'
 
-const TABS: { id: 'today' | 'messages' | 'leads' | 'booked' | 'history'; icon: LucideIcon }[] = [
+type SectionId = 'today' | 'messages' | 'leads' | 'booked' | 'history'
+
+const TABS: { id: SectionId; icon: LucideIcon }[] = [
   { id: 'today', icon: Sun },
   { id: 'messages', icon: MessageSquare },
   { id: 'leads', icon: Users },
@@ -24,6 +26,7 @@ export function SectionNav({
   badges,
   moreOpen,
   onMore,
+  onNavigate,
   more,
   navRef,
 }: {
@@ -31,6 +34,8 @@ export function SectionNav({
   badges: { today: number; messages: number }
   moreOpen: boolean
   onMore: () => void
+  /** A tab to another section was tapped (before it navigates): remember the scroll, show its skeleton. */
+  onNavigate?: (id: SectionId) => void
   /** The More sheet, rendered beside its button. */
   more: ReactNode
   navRef?: Ref<HTMLElement>
@@ -42,7 +47,24 @@ export function SectionNav({
         const here = route.section === id && !route.ads
         const badge = badgeText(id === 'today' ? badges.today : id === 'messages' ? badges.messages : 0)
         return (
-          <Link key={id} href={sectionHref(id)} className={here ? 'on' : undefined} aria-current={here ? 'page' : undefined}>
+          <Link
+            key={id}
+            href={sectionHref(id)}
+            // Each section keeps its own scroll (use-native-shell.ts), so the link never jumps the page itself.
+            scroll={false}
+            className={here ? 'on' : undefined}
+            aria-current={here ? 'page' : undefined}
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
+              if (here) {
+                // Tapping the open tab goes back to its top, like a native tab bar.
+                event.preventDefault()
+                window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+                return
+              }
+              onNavigate?.(id)
+            }}
+          >
             <span className="cc-tab-icon">
               <Icon aria-hidden="true" />
             </span>

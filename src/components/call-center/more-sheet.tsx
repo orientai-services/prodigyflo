@@ -7,6 +7,7 @@ import { ADS_BASE, sectionHref } from '@/lib/call-center/app-shell'
 import type { PhoneStatus } from '@/lib/telephony/ui/phone-status'
 import { DialerModeSwitch } from './dialer-mode-switch'
 import { InstallAppEntry } from '@/components/pwa/install-app'
+import { useSheet } from './native/use-sheet'
 
 /**
  * More (docs/DIALER_APP.md §1): Campaigns, Team, a status block (live
@@ -37,6 +38,7 @@ export function MoreSheet({
   onSettings: () => void
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
+  useSheet(rootRef, onClose)
   const live = useRef({ onClose, toggle })
   useEffect(() => {
     live.current = { onClose, toggle }
