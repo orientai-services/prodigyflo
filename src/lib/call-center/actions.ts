@@ -9,6 +9,7 @@ import {
   revealCallCenterContactFor,
   scsIntakeLinkFor,
   scsIntakeTextStatusFor,
+  leadTrailFor,
   sendCallCenterIntakeFor,
   skipCallCenterLeadFor,
   takeCallCenterLeadFor,
@@ -16,6 +17,7 @@ import {
   type IntakeLinkResult,
 } from './desk'
 import type { CallCenterContact, DeskOutcome, DeskResult } from './desk-types'
+import type { TrailEvent } from './model'
 import { findPossibleMatch, linkLeadToClientFor, mayLink, type LinkLeadResult } from './possible-match'
 
 async function actor() {
@@ -92,6 +94,13 @@ export async function recordCallCenterAttempt(leadId: string): Promise<DeskResul
 export async function recordCallCenterText(leadId: string): Promise<DeskResult> {
   const user = await actor()
   return recordCallCenterTextFor(user.organizationId, user, leadId)
+}
+
+/** The whole Comms trail of one lead, for the lead panel (the desk list carries a trimmed one). */
+export async function loadLeadTrail(leadId: string): Promise<TrailEvent[] | null> {
+  const user = await actor()
+  if (typeof leadId !== 'string' || !leadId || leadId.length > 200) return null
+  return leadTrailFor(user.organizationId, user.id, leadId)
 }
 
 export async function revealCallCenterContact(leadId: string): Promise<CallCenterContact> {

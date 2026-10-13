@@ -91,7 +91,8 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   const teamChat = teamChatCountsOnce(user)
 
   const [desk, voice, missed, setup, status, sms, stats, team] = await Promise.all([
-    loadCallCenterDesk(),
+    // The lead open in the URL keeps its whole trail; the rest carry what the list reads.
+    loadCallCenterDesk({ fullFor: leadIdParam(params.lead), now }),
     getVoiceSetup().catch((): VoiceSetup => ({ ready: false, reason: "Phone calling isn't set up yet." })),
     listMissedCalls().catch(() => [] as MissedCallVM[]),
     owner ? loadPhoneSetup(user).catch(() => null) : Promise.resolve(null),

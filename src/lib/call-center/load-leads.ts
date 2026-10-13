@@ -4,14 +4,21 @@ import { loadCallCenterDeskFor, missingRelation } from './desk'
 import { callLeadsForDesk, withDeskLinks } from './from-rows'
 import { withLeadPhones } from './lead-phones'
 import type { CallLead } from './model'
+import { compactLeads } from './trail-summary'
 
 /** Real texting is on only with a non-mock SMS provider (lib/messaging picks the adapter the same way). */
 function smsLive(): boolean {
   return ((process.env.SMS_PROVIDER ?? 'mock').trim().toLowerCase() || 'mock') !== 'mock'
 }
 
-/** Desk rows for the signed-in workspace. Empty or unmigrated tables keep the seed. */
-export async function loadCallCenterDesk(): Promise<{ leads: CallLead[]; viewerId: string }> {
+/**
+ * Desk rows for the signed-in workspace. Empty or unmigrated tables keep the seed.
+ * Trails are trimmed to what the list reads (trail-summary.ts), except the lead
+ * open in the URL (`fullFor`); the lead panel reads a whole trail when it opens.
+ */
+export async function loadCallCenterDesk(
+  opts: { fullFor?: string | null; now?: Date } = {},
+): Promise<{ leads: CallLead[]; viewerId: string }> {
   const user = await getSessionUser()
   if (!user) return { leads: callLeadsForDesk([]), viewerId: '' }
   try {
@@ -20,7 +27,7 @@ export async function loadCallCenterDesk(): Promise<{ leads: CallLead[]; viewerI
     const { leads, links } = await loadCallCenterDeskFor(user.organizationId, user.id)
     // Full numbers only for the leads this viewer may see (Super Admin, or the rep holding it).
     const shown = await withLeadPhones(user, withDeskLinks(leads, links, smsLive()), (lead) => (lead.persisted ? lead.id : null))
-    return { leads: shown, viewerId: user.id }
+    return { leads: compactLeads(shown, (opts.now ?? new Date()).getTime(), opts.fullFor ?? null), viewerId: user.id }
   } catch (err) {
     if (missingRelation(err)) return { leads: callLeadsForDesk([]), viewerId: user.id }
     throw err

@@ -6,7 +6,7 @@
 
 import { dayKey } from './cadence'
 import { durationLabel } from './history-format'
-import { ZONE, followUpOf, visibleLeads, type CallLead, type LanguageFilter, type LeadTab } from './model'
+import { ZONE, followUpOf, visibleLeads, type CallLead, type LanguageFilter, type LeadTab, type TrailEvent } from './model'
 
 export type DialerSection = 'today' | 'messages' | 'leads' | 'booked' | 'history' | 'team'
 
@@ -226,15 +226,18 @@ export function latestRecording(lead: CallLead): LatestRecording | null {
 /** The newest note, short, with long digit runs hidden: the lead's main issue at a glance. */
 export function noteSnippet(lead: CallLead, max = 90): string | null {
   for (let i = lead.trail.length - 1; i >= 0; i -= 1) {
-    const event = lead.trail[i]
-    if (event.kind !== 'note') continue
-    // "Calendar hold placed …" / "Call back due …" are the calendar's own lines, not the lead's note.
-    if (/^(Calendar hold placed|Call back due)\b/.test(event.detail)) continue
-    const text = event.detail.replace(/\d{5,}/g, '····').replace(/\s+/g, ' ').trim()
-    if (!text) continue
-    return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
+    const text = noteText(lead.trail[i])
+    if (text) return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
   }
   return null
+}
+
+/** A trail line's note text as the row shows it, or null when it is not the lead's own note. */
+export function noteText(event: TrailEvent): string | null {
+  if (event.kind !== 'note') return null
+  // "Calendar hold placed …" / "Call back due …" are the calendar's own lines, not the lead's note.
+  if (/^(Calendar hold placed|Call back due)\b/.test(event.detail)) return null
+  return event.detail.replace(/\d{5,}/g, '····').replace(/\s+/g, ' ').trim() || null
 }
 
 /** "Thu 9:00 AM" in Pacific time, for a booked visit. */

@@ -119,6 +119,8 @@ export type CallLead = {
   disabled: boolean
   recording: DummyRecording | null
   trail: TrailEvent[]
+  /** The trail was trimmed for the list (trail-summary.ts); the lead panel reads the whole one when it opens. */
+  trailPartial?: boolean
   lockedBy: string | null
   /** Display name when another rep holds the lock. */
   lockName?: string | null

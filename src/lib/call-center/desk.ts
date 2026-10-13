@@ -135,9 +135,13 @@ async function deskCallExtras(organizationId: string, leadIds: string[]) {
  * Desk list for one org plus each row's link fields (clientId, intake, texting
  * gate) from the same read. Secrets stay on the server.
  */
-export async function loadCallCenterDeskFor(organizationId: string, viewerId: string): Promise<{ leads: CallLead[]; links: DeskLinkRow[] }> {
+export async function loadCallCenterDeskFor(
+  organizationId: string,
+  viewerId: string,
+  only?: string[],
+): Promise<{ leads: CallLead[]; links: DeskLinkRow[] }> {
   const rows = await db.callCenterLead.findMany({
-    where: { organizationId },
+    where: only ? { organizationId, id: { in: only } } : { organizationId },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -175,6 +179,16 @@ export async function loadCallCenterDeskFor(organizationId: string, viewerId: st
     return toStored(row)
   })
   return { leads: callLeadsForDesk(stored, viewerId, names, extras), links }
+}
+
+/**
+ * One lead's whole Comms trail, as the desk list builds it (the list itself
+ * carries a trimmed trail, trail-summary.ts). Null when the lead is not in
+ * this workspace.
+ */
+export async function leadTrailFor(organizationId: string, viewerId: string, leadId: string): Promise<TrailEvent[] | null> {
+  const { leads } = await loadCallCenterDeskFor(organizationId, viewerId, [leadId])
+  return leads.find((lead) => lead.id === leadId)?.trail ?? null
 }
 
 /** Desk list for one org. Secrets stay on the server. */

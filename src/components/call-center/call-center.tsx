@@ -88,6 +88,7 @@ import { TodayView, type TodayServer } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
 import { usePowerMode } from './use-power-mode'
 import { useChatHost, type TeamChatPromise } from './use-chat-host'
+import { useFullTrail } from './use-full-trail'
 import { chatHref } from './messages/chat/host-bus'
 import { haptic } from './native/haptics'
 import { useEdgeSwipeBack, usePullToRefresh, useSectionScroll } from './native/use-native-shell'
@@ -381,6 +382,8 @@ export function CallCenter({
   const selected = deskSection && !missedView
     ? (pool.find((lead) => lead.id === selectedId && !lead.disabled) ?? null)
     : null
+  // The list carries trimmed trails; the open lead's whole Comms trail is read once when it opens.
+  const selectedTrail = useFullTrail(selected)
   const who = selected ? repFor(selected) : CURRENT_REP
   const quietBlocked = Boolean(selected && now && callNeedsConfirm(selected, now) && callAnywayId !== selected.id)
   const revealLeadId = selected?.persisted && viewerId && selected.lockedBy === viewerId && !selected.dnc
@@ -1140,7 +1143,7 @@ export function CallCenter({
                       </button>
                     </div>
                     <h3>Comms</h3>
-                    <CommsTrail key={selected.id} trail={selected.trail} />
+                    <CommsTrail key={selected.id} trail={selectedTrail} />
                     </div>
                     <aside ref={profileRef} className="lead-profile-col" aria-label="Client profile">
                       <LeadProfile api={handoff} now={clock} sheetHost={sheetHost} />
