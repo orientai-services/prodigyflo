@@ -41,7 +41,7 @@ export function MonthGrid({
             const list = byDay.get(cell.key) ?? []
             const { shown, more } = monthChips(list)
             return (
-              <Link
+              <Link prefetch={false}
                 key={cell.key}
                 href={dayHref(cell.key)}
                 className={['cal-cell', cell.inMonth ? '' : 'out', cell.key === today ? 'today' : ''].filter(Boolean).join(' ')}

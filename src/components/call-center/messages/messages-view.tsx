@@ -67,7 +67,7 @@ export function MessagesView({ base, threads, thread, missing, initialQuery, now
           <ul className="msg-threads">
             {shown.map((t) => (
               <li key={t.key}>
-                <Link
+                <Link prefetch={false}
                   href={messagesHref(base, { t: t.key, q: query.trim() || null })}
                   className={`msg-row${t.key === openKey ? ' on' : ''}${t.unread > 0 && t.key !== openKey ? ' unread' : ''}`}
                   aria-current={t.key === openKey ? 'page' : undefined}
@@ -108,7 +108,7 @@ export function MessagesView({ base, threads, thread, missing, initialQuery, now
         ) : missing ? (
           <div className="msg-thread msg-gone">
             <div className="msg-head">
-              <Link className="msg-back" href={messagesHref(base, { t: null })} aria-label="Back to messages">‹</Link>
+              <Link prefetch={false} className="msg-back" href={messagesHref(base, { t: null })} aria-label="Back to messages">‹</Link>
               <div className="msg-who"><b>Conversation not found</b></div>
             </div>
             <p className="msg-empty">This conversation isn&apos;t in your list.</p>
@@ -198,7 +198,7 @@ function ThreadView({
   return (
     <div className="msg-thread">
       <div className="msg-head">
-        <Link className="msg-back" href={messagesHref(base, { t: null, q: query.trim() || null })} aria-label="Back to messages" scroll={false}>
+        <Link prefetch={false} className="msg-back" href={messagesHref(base, { t: null, q: query.trim() || null })} aria-label="Back to messages" scroll={false}>
           ‹
         </Link>
         <div className="msg-who">
@@ -210,7 +210,7 @@ function ThreadView({
             ) : thread.last4 && !thread.name.includes(thread.last4) ? ` · •••-•••-${thread.last4}` : ''}
           </span>
         </div>
-        <Link className="msg-open" href={thread.openHref}>
+        <Link prefetch={false} className="msg-open" href={thread.openHref}>
           Open {thread.kind === 'client' ? 'client' : 'lead'}
         </Link>
       </div>

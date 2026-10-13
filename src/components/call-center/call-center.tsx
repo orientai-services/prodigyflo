@@ -736,7 +736,7 @@ export function CallCenter({
       ].filter(Boolean).join(' ')}
     >
       <header className="cc-head">
-        <Link href={sectionHref('today')} className="cc-mark" aria-label="ProdigyFlo dialer, Today">
+        <Link prefetch={false} href={sectionHref('today')} className="cc-mark" aria-label="ProdigyFlo dialer, Today">
           <span className="cc-word">Prodigy<span className="flo">Flo</span></span>
           <span className="cc-glyph" aria-hidden="true">P</span>
         </Link>
@@ -895,7 +895,7 @@ export function CallCenter({
         ) : null}
         {route.ads ? (
           <>
-            <Link className="back-link" href={sectionHref('leads')}><span aria-hidden="true">‹</span> Leads</Link>
+            <Link prefetch={false} className="back-link" href={sectionHref('leads')}><span aria-hidden="true">‹</span> Leads</Link>
             <div className="ads-panel">{slot}</div>
           </>
         ) : section === 'booked' ? (
@@ -1005,7 +1005,7 @@ export function CallCenter({
                     ) : null}
                     {selected.missedCallId ? (
                       <div className="banner" role="status">
-                        <Link
+                        <Link prefetch={false}
                           className="linkish"
                           href={`/call-center?s=leads&missed=${encodeURIComponent(selected.missedCallId)}`}
                           onClick={() => setSelectedId(null)}
@@ -1114,7 +1114,7 @@ export function CallCenter({
                     {selected.persisted ? (
                       <div className="actions solo">
                         {/* The lead's case chat in Team chat (docs/TEAM_CHAT_PARITY.md A4); Messages finds it by lead id. */}
-                        <Link className="btn secondary cc-teamchat" href={chatHref({ lead: selected.id })} scroll={false}>
+                        <Link prefetch={false} className="btn secondary cc-teamchat" href={chatHref({ lead: selected.id })} scroll={false}>
                           <MessageSquare aria-hidden="true" />
                           Team chat
                           {chatHost.cases[selected.id] ? (

@@ -63,7 +63,7 @@ export function ActivityList({ initial, nextCursor }: { initial: ActivityRow[]; 
                     {row.subject ? (
                       <>
                         {' · '}
-                        {row.href ? <Link href={row.href}>{row.subject}</Link> : <span>{row.subject}</span>}
+                        {row.href ? <Link prefetch={false} href={row.href}>{row.subject}</Link> : <span>{row.subject}</span>}
                       </>
                     ) : null}
                   </b>

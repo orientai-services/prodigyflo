@@ -346,7 +346,7 @@ export function ProfileButton({ profile }: { profile: ViewerProfile }) {
           <p className="text-muted-foreground truncate text-xs">
             Signed in as {profile.email} · {profile.role}
           </p>
-          <Link
+          <Link prefetch={false}
             href="/settings/profile"
             className="hover:bg-muted flex min-h-11 items-center gap-2 rounded-md px-2 text-sm font-medium md:min-h-9"
             onClick={() => setOpen(false)}

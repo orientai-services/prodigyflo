@@ -112,7 +112,7 @@ export function TodayView({
       <p className="today-date">{now ? dateLine(new Date(now)) : null}</p>
       <nav className="tiles" aria-label="Today at a glance">
         {tiles.map((tile) => (
-          <Link key={tile.label} href={tile.href} className="tile">
+          <Link prefetch={false} key={tile.label} href={tile.href} className="tile">
             <span className="tile-label">{tile.label}</span>
             <b className="tile-value">{tile.value ?? '—'}</b>
             <span className="tile-hint">{tile.hint}</span>
