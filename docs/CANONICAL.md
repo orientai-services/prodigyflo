@@ -6,7 +6,7 @@ table, do not deploy it and do not treat it as production. Run
 
 The two apps stay separate. Do not merge the repositories or share databases.
 
-**Client process (every homeowner):** `docs/CLIENT-JOURNEY.md`. This file is only which GitHub / Vercel / domain is production.
+**Rules (read first):** `docs/SCS-FLO-CANON.md`. **Client process (every homeowner):** `docs/CLIENT-JOURNEY.md`. This file is only which GitHub / Vercel / domain is production.
 
 | | Solar Contract Services | ProdigyFlo |
 |---|---|---|
@@ -17,13 +17,15 @@ The two apps stay separate. Do not merge the repositories or share databases.
 | Vercel project | `scs-intake-42` | `prodigyflo-42` |
 | Vercel project ID | `prj_faemfrbbaFkP2ReLTyhFksFqyOnb` | `prj_SIPQJtji6NWlfyuK5l5tyvwC5GE8` |
 | Public site | `https://solarcontractservices.com` | `https://prodigyflo.ai` |
-| Active recovery worktree | `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/scs-e2e-01a0b8f2` | `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/implementation-01a0b8f2` |
+| Canonical checkouts (any machine; identity = origin remote + Vercel project, checked by `npm run check:canonical`) | MacBook Pro `~/Developer/SCS/scsintake` · devs-Mac-mini `~/Developer/scs-intake` | MacBook Pro `~/Developer/products/ProdigyFlo/prodigyflo-42` · devs-Mac-mini `~/Developer/prodigyflo` |
+| Records service | `orientai-services/prodigy-records-service` on devs-Mac-mini, public only as `https://pull.prodigyflo.ai` | (called by ProdigyFlo via `RECORDS_ANALYZER_URL`) |
 | Database | Supabase `vspmjtdwlcqfclkgksel` (us-east-1) | Supabase `acgmcenrbwabmpxzgwqb` (us-west-2) |
 
-`main` is the only branch that may deploy to production domains. Recovery branches may deploy protected previews with isolated databases and storage. Work on a
-short-lived branch, open a pull request into `main`, and let the GitHub
-connection deploy. Direct Vercel deploys are recovery-only and must be followed
-by a fast-forward of `main` so GitHub and live do not drift.
+`main` is the only branch that may deploy to production domains (R-GOV-001). Work on a
+short-lived branch, open a pull request into `main`, show preview proof, get Hector's
+typed go, and let the GitHub connection deploy. Never run `vercel --prod` and never
+deploy a second time after a merge. Emergency direct deploys need Hector's typed go
+in chat and must be followed by a fast-forward of `main` so GitHub and live do not drift.
 
 ## Forbidden sources
 
@@ -49,10 +51,18 @@ These still exist. They are not production.
 - `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/stage0/` — frozen evidence only. Not a checkout. Do not deploy from it.
 - `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/policy-retirement/` — **does not exist.** Former extra worktrees; treat as forbidden evidence, not a checkout.
 
-`/Users/dakotahanshew/Developer/SCS/prodigyflo` is an empty placeholder. Until
-it holds a checkout, ProdigyFlo work stays in
-`/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/implementation-01a0b8f2`.
+- `/Users/dakotahanshew/Documents/ChatGPT/prodigyflo/implementation-01a0b8f2`, `scs-e2e-01a0b8f2`, `assessment-*`, `recovery-private-*` — former recovery worktrees (Sept 2026). Evidence only now.
+- `/Users/dakotahanshew/Developer/SCS/prodigyflo` — empty placeholder.
 
-## Recovery checkpoint — 2026-09-20
+**Hosts**
 
-The active recovery branch is `codex/complete-intake-records-analyzer-01a0b8f2` in both worktrees above. The older Developer checkouts remain preserved but are stale and must not be used for this cutover. `stage0/`, assessment copies, and historical test artifacts are evidence only. The Records Worker source is captured in the SCS repository under `integrations/records/`; its production domain is `records.prodigyflo.ai`. Validate isolated acceptance before switching production readers.
+- `records.prodigyflo.ai` — retired analyzer host. Refused by ProdigyFlo code and by the records service. Do not point anything at it.
+- Any tunnel other than `https://pull.prodigyflo.ai` (trycloudflare, ngrok, preview tunnels) — not allowed in production.
+
+## Machine outputs
+
+MacBook Pro and devs-Mac-mini share iCloud `~/Desktop` and `~/Documents`. Generated outputs go outside both, with a `-macbook` / `-mini` suffix (R-GOV-014).
+
+## Records path — 2026-10-07
+
+Live ProdigyFlo pulls deed / UCC / permit through `https://pull.prodigyflo.ai` (Cloudflare tunnel to the records service on devs-Mac-mini), approved by Hector. This replaces the 2026-09-20 recovery checkpoint, which named `records.prodigyflo.ai` and the `codex/complete-intake-records-analyzer-01a0b8f2` branch; both are retired.

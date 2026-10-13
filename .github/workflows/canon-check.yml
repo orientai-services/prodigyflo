@@ -1,0 +1,30 @@
+# .github/workflows/canon-check.yml  (DRAFT — same file in all three repos)
+name: Canon check
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  canon:
+    name: canon-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # needed for diff vs base, commit trailers, authors
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Write client-name denylist (never committed)
+        env:
+          CANON_DENYLIST: ${{ secrets.CANON_DENYLIST }}
+        run: printf '%s\n' "$CANON_DENYLIST" > .canon-denylist
+      - name: Run canon-check
+        env:
+          CANON_BASE: ${{ github.event.pull_request.base.sha }}
+          CANON_AUTHORS: dakotahanshew
+        run: node scripts/canon-check.mjs
+      - run: rm -f .canon-denylist
+        if: always()

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Fail loudly if this checkout is not the OrientAI production app.
+# Works on any machine: checks origin remote + .vercel/project.json, not the folder path.
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
@@ -21,13 +22,13 @@ case "$APP" in
     WANT_REMOTE='orientai-services/scs-intake'
     WANT_PROJECT_ID='prj_faemfrbbaFkP2ReLTyhFksFqyOnb'
     WANT_PROJECT_NAME='scs-intake-42'
-    WANT_PATH='/Users/dakotahanshew/Developer/SCS/scsintake'
+    WANT_PATHS='MacBook Pro: ~/Developer/SCS/scsintake | devs-Mac-mini: ~/Developer/scs-intake'
     ;;
   pf|prodigyflo)
     WANT_REMOTE='orientai-services/prodigyflo'
     WANT_PROJECT_ID='prj_SIPQJtji6NWlfyuK5l5tyvwC5GE8'
     WANT_PROJECT_NAME='prodigyflo-42'
-    WANT_PATH='/Users/dakotahanshew/Developer/products/ProdigyFlo/prodigyflo-42'
+    WANT_PATHS='MacBook Pro: ~/Developer/products/ProdigyFlo/prodigyflo-42 | devs-Mac-mini: ~/Developer/prodigyflo'
     ;;
   *)
     echo "check-canonical: unknown app '$APP' (use scs or pf)" >&2
@@ -55,4 +56,11 @@ fi
 echo "canonical ok: $APP"
 echo "  remote  $REMOTE"
 echo "  vercel  $WANT_PROJECT_NAME"
-echo "  work in $WANT_PATH"
+echo "  here    $ROOT"
+echo "  usual   $WANT_PATHS"
+# Machine-agnostic: identity is the git remote + Vercel project, never the folder path.
+# Refuse known forbidden folders (docs/CANONICAL.md "Forbidden sources").
+case "$ROOT" in
+  */Developer/~SCS~*|*/Developer/products/scs-intake|*/Developer/products/ProdigyFlo/prodigyflo|*/Documents/ChatGPT/prodigyflo/*)
+    fail "this folder is a forbidden source ($ROOT); see docs/CANONICAL.md" ;;
+esac
