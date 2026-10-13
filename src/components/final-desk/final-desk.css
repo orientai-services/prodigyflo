@@ -322,3 +322,12 @@
   .final-desk:not(.call-center) .toast{left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom))}
 }
 @media (max-width:359.98px){.final-desk:not(.call-center) .math{grid-template-columns:1fr}}
+
+/* Installed app on an iPad in landscape (≥1024): the dark rail and the page
+   header clear the status bar instead of running under the clock. The insets
+   are 0 in a browser and on desktops, so nothing changes there. */
+@media (min-width: 1024px) {
+  .final-desk:not(.call-center) .rail { padding-top: calc(22px + env(safe-area-inset-top)); padding-left: max(14px, env(safe-area-inset-left)); padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .final-desk:not(.call-center) .top { height: calc(64px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); padding-right: max(28px, env(safe-area-inset-right)); }
+  .final-desk:not(.call-center) .main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+}
