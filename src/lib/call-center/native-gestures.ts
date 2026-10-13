@@ -1,8 +1,8 @@
 /**
  * Pure maths behind the Call Center's touch gestures (docs/NATIVE_FEEL.md):
  * drag a bottom sheet down to close it, swipe from the left edge to go back
- * from a lead, pull a list down to refresh it, and how much of the screen the
- * on-screen keyboard covers. No DOM here, so every threshold is tested.
+ * from a lead, and pull a list down to refresh it. No DOM here, so every
+ * threshold is tested. (The keyboard's height comes from InstalledAppRuntime.)
  */
 
 /** A drag shorter than this never closes a sheet, however fast it was. */
@@ -59,14 +59,4 @@ export function pullDistance(dy: number): number {
 
 export function pullTriggers(dy: number): boolean {
   return pullDistance(dy) >= PULL_TRIGGER
-}
-
-/**
- * How many px of the layout viewport the on-screen keyboard hides. iOS keeps
- * the layout viewport full height and shrinks (and may scroll) the visual one;
- * Android resizes both. Below 60 px is browser chrome, not a keyboard.
- */
-export function keyboardInset(layoutHeight: number, visualHeight: number, visualTop: number): number {
-  const hidden = Math.round(layoutHeight - visualHeight - visualTop)
-  return hidden >= 60 ? hidden : 0
 }

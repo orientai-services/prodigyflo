@@ -90,7 +90,7 @@ import { usePowerMode } from './use-power-mode'
 import { useChatHost } from './use-chat-host'
 import { chatHref } from './messages/chat/host-bus'
 import { haptic } from './native/haptics'
-import { useEdgeSwipeBack, useKeyboardInset, usePullToRefresh, useSectionScroll } from './native/use-native-shell'
+import { useEdgeSwipeBack, usePullToRefresh, useSectionScroll } from './native/use-native-shell'
 import { SectionSkeleton } from './native/skeleton'
 import '../final-desk/final-desk.css'
 import './call-center.css'
@@ -279,7 +279,6 @@ export function CallCenter({
     setPendingSection(null)
   }
   const sectionScroll = useSectionScroll(routeKey)
-  useKeyboardInset()
   /** Holds the phone pill: More › Settings opens its sheet by pressing it. */
   const pillSlotRef = useRef<HTMLSpanElement>(null)
   /** The section bar: More's button lives in it. */

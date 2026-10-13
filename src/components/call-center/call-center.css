@@ -772,13 +772,13 @@
 
 /* The call bar (VoiceDock) sits above the tab bar while the bar is up. */
 @media (max-width: 639.98px) {
-  html:not(.cc-kb-open):has(.final-desk.call-center.tabs-on:not(.detail-open):not(.thread-open)) .voice-dock { bottom: calc(56px + var(--cc-sab, env(safe-area-inset-bottom))); padding-bottom: 0; }
+  html:not(.kb-open):has(.final-desk.call-center.tabs-on:not(.detail-open):not(.thread-open)) .voice-dock { bottom: calc(56px + var(--cc-sab, env(safe-area-inset-bottom))); padding-bottom: 0; }
 }
 @media (min-width: 640px) and (max-width: 767.98px) {
-  html:not(.cc-kb-open):has(.final-desk.call-center.tabs-on:not(.detail-open):not(.thread-open)) .voice-dock { bottom: calc(72px + var(--cc-sab, env(safe-area-inset-bottom))); }
+  html:not(.kb-open):has(.final-desk.call-center.tabs-on:not(.detail-open):not(.thread-open)) .voice-dock { bottom: calc(72px + var(--cc-sab, env(safe-area-inset-bottom))); }
 }
 @media (min-width: 768px) and (max-width: 1023.98px) {
-  html:not(.cc-kb-open):has(.final-desk.call-center.tabs-on) .voice-dock { bottom: calc(72px + var(--cc-sab, env(safe-area-inset-bottom))); }
+  html:not(.kb-open):has(.final-desk.call-center.tabs-on) .voice-dock { bottom: calc(72px + var(--cc-sab, env(safe-area-inset-bottom))); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -890,28 +890,12 @@
    sliding under the clock, and the section strip follows it. 0 in a browser. */
 @media (min-width: 1024px) {
   .final-desk.call-center .cc-head {
-    height: calc(60px + env(safe-area-inset-top));
-    padding-top: env(safe-area-inset-top);
+    height: calc(60px + var(--cc-sat, env(safe-area-inset-top)));
+    padding-top: var(--cc-sat, env(safe-area-inset-top));
     padding-left: max(24px, calc((100% - 1232px) / 2), env(safe-area-inset-left));
     padding-right: max(24px, calc((100% - 1232px) / 2), env(safe-area-inset-right));
   }
-  .final-desk.call-center .cc-tabs { top: calc(60px + env(safe-area-inset-top)); }
+  .final-desk.call-center .cc-tabs { top: calc(60px + var(--cc-sat, env(safe-area-inset-top))); }
 }
+/* The on-screen keyboard: native/native.css (one place, on InstalledAppRuntime's --kb / --vvh / --vv-top). */
 
-/* The on-screen keyboard (InstalledAppRuntime publishes --vvh / --vv-top / --kb).
-   iOS keeps a full-screen panel at its full height under the keyboard and
-   scrolls the page instead, which pushes the header off and hides the
-   composer. Sized to the visible area, the panel keeps both in view. */
-@media (max-width: 1023.98px) {
-  html.kb-open .final-desk.call-center .msg-has-thread .msg-thread-pane,
-  html.kb-open .final-desk.call-center .chat-open .chat-main,
-  html.kb-open .final-desk.call-center .detail.open {
-    top: var(--vv-top, 0px); bottom: auto; height: var(--vvh, 100dvh);
-  }
-  /* The tab bar would ride on top of the keyboard on Android and sit uselessly behind it on iOS. */
-  html.kb-open .final-desk.call-center .cc-tabs { display: none; }
-  html.kb-open .final-desk.call-center :is(.sched, .more-sheet, .pad) {
-    bottom: var(--kb, 0px);
-    max-height: calc(var(--vvh, 100dvh) - 8px);
-  }
-}

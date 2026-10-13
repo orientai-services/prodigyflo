@@ -14,9 +14,11 @@ export function isBottomSheet(el: HTMLElement | null): boolean {
   return box.width >= window.innerWidth - 2 && box.bottom >= window.innerHeight - 2 - keyboardPx()
 }
 
+/** The keyboard's height while it is up (InstalledAppRuntime publishes it). */
 function keyboardPx(): number {
-  const raw = document.documentElement.style.getPropertyValue('--cc-kb')
-  return Number.parseFloat(raw) || 0
+  const root = document.documentElement
+  if (!root.classList.contains('kb-open')) return 0
+  return Number.parseFloat(root.style.getPropertyValue('--kb')) || 0
 }
 
 function reducedMotion(): boolean {

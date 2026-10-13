@@ -9,13 +9,11 @@
   --cc-sab: var(--cc-test-sab, env(safe-area-inset-bottom, 0px));
 }
 
-/* Touch: no grey flash, no double-tap zoom delay, no callout on controls. */
-.final-desk.call-center { -webkit-tap-highlight-color: transparent; }
-.final-desk.call-center :is(button, a, select, summary, [role="tab"]) { touch-action: manipulation; }
+/* Touch basics (tap highlight, touch-action, 16 px fields, no selection on
+   buttons) are global (globals.css "Installed app"). Here: link-buttons and
+   tiles keep their long-press callout and text selection off too. */
 @media (pointer: coarse) {
-  .final-desk.call-center :is(button, .btn, .tile, .cc-tabs a) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-  /* Nothing zooms on focus: iOS zooms any field under 16 px. */
-  .final-desk.call-center :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) { font-size: max(16px, 1em); }
+  .final-desk.call-center :is(a.btn, .tile, .attack-name) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 }
 
 /* Pressed states: a finger sees its tap land (touch screens only; a mouse keeps its hovers). */
@@ -61,9 +59,10 @@
 .final-desk.call-center .cc-ptr:not(.busy) { transition: opacity .15s ease; }
 @keyframes cc-spin { to { transform: rotate(360deg); } }
 
-/* The keyboard is up: the tab bar steps aside (like a native app's). */
-html.cc-kb-open .final-desk.call-center { --cc-bar-h: 0px; }
-html.cc-kb-open .final-desk.call-center .cc-tabs { display: none; }
+/* The keyboard is up (InstalledAppRuntime: html.kb-open, --kb, --vvh, --vv-top):
+   the tab bar steps aside, like a native app's, and nothing pads for it. */
+html.kb-open .final-desk.call-center { --cc-bar-h: 0px; }
+html.kb-open .final-desk.call-center .cc-tabs { display: none; }
 
 /* ── Phones ── */
 @media (max-width: 1023.98px) {
@@ -89,21 +88,21 @@ html.cc-kb-open .final-desk.call-center .cc-tabs { display: none; }
     .final-desk.call-center .detail-bar { background: rgba(250, 247, 240, .78); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
   }
   /* Keyboard up: the full-screen panes shrink to what is still visible, so the field being typed in stays on screen. */
-  html.cc-kb-open .final-desk.call-center .detail.open,
-  html.cc-kb-open .final-desk.call-center .msg-has-thread .msg-thread-pane,
-  html.cc-kb-open .final-desk.call-center .chat-open .chat-main {
-    top: var(--cc-vvtop, 0px); bottom: var(--cc-kb, 0px); height: auto;
+  html.kb-open .final-desk.call-center .detail.open,
+  html.kb-open .final-desk.call-center .msg-has-thread .msg-thread-pane,
+  html.kb-open .final-desk.call-center .chat-open .chat-main {
+    top: var(--vv-top, 0px); bottom: auto; height: var(--vvh, 100dvh);
   }
-  html.cc-kb-open .final-desk.call-center :is(.msg-compose, .chat-compose) { padding-bottom: 10px; }
+  html.kb-open .final-desk.call-center :is(.msg-compose, .chat-compose) { padding-bottom: 10px; }
   /* Bottom sheets ride on top of the keyboard and never grow past what is visible. */
-  .final-desk.call-center :is(.pad, .more-sheet, .sched, .cal-sched, .cal-panel),
-  .phone-sheet {
-    bottom: var(--cc-kb, 0px);
-    max-height: min(92dvh, calc(var(--cc-vvh, 100dvh) - var(--cc-sat) - 8px));
-    -webkit-overflow-scrolling: touch;
+  html.kb-open .final-desk.call-center :is(.pad, .more-sheet, .sched, .cal-sched, .cal-panel),
+  html.kb-open .phone-sheet,
+  html.kb-open .cc-profile {
+    bottom: var(--kb, 0px);
+    max-height: calc(var(--vvh, 100dvh) - var(--cc-sat) - 8px);
   }
-  html.cc-kb-open .final-desk.call-center :is(.pad, .sched, .cal-sched-foot, .sched-acts),
-  html.cc-kb-open .phone-sheet { padding-bottom: 12px; }
+  html.kb-open .final-desk.call-center :is(.pad, .sched, .cal-sched-foot, .sched-acts),
+  html.kb-open .phone-sheet { padding-bottom: 12px; }
 }
 @media (max-width: 767.98px) and (prefers-reduced-motion: no-preference) {
   .final-desk.call-center .detail.open { animation: cc-push-in .3s cubic-bezier(.2, .8, .2, 1); }
@@ -175,7 +174,7 @@ html.cc-kb-open .final-desk.call-center .cc-tabs { display: none; }
 
   /* The calendar's visit panel: a centred form sheet, not a full-width slab. */
   .final-desk.call-center .cal-panel {
-    left: 0; right: 0; bottom: calc(var(--cc-bar-h, 0px) + 12px + var(--cc-kb, 0px)); width: min(560px, calc(100% - 48px)); margin: 0 auto;
+    left: 0; right: 0; bottom: calc(var(--cc-bar-h, 0px) + 12px); width: min(560px, calc(100% - 48px)); margin: 0 auto;
     padding-bottom: 16px; border-radius: 18px; border-width: 4px 1px 1px;
   }
   .final-desk.call-center .cal-panel .cal-grab { display: none; }
@@ -213,7 +212,7 @@ html.cc-kb-open .final-desk.call-center .cc-tabs { display: none; }
   .final-desk.call-center .more-links :is(a, button) { min-height: 56px; }
   /* The open lead keeps its place while the list scrolls. */
   .final-desk.call-center .cc-main .split > .detail.open {
-    position: sticky; top: 132px; max-height: calc(100dvh - 148px); overflow-y: auto; overscroll-behavior: contain;
+    position: sticky; top: calc(132px + var(--cc-sat)); max-height: calc(100dvh - 148px - var(--cc-sat)); overflow-y: auto; overscroll-behavior: contain;
   }
 }
 
@@ -227,8 +226,4 @@ html.cc-kb-open .final-desk.call-center .cc-tabs { display: none; }
 .cc-grab { display: none; }
 @media (max-width: 767.98px) {
   .cc-grab { display: block; flex: none; width: 40px; height: 4px; margin: -8px auto 0; border-radius: 99px; background: #d6cebf; }
-}
-@media (max-width: 767.98px) {
-  /* The profile sheet (a UI-kit dialog) rides on the keyboard too. */
-  .cc-profile { bottom: var(--cc-kb, 0px); max-height: min(90dvh, calc(var(--cc-vvh, 100dvh) - var(--cc-sat) - 8px)); }
 }

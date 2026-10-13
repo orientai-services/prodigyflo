@@ -5,7 +5,6 @@ import {
   edgeSwipeGoesBack,
   edgeSwipeIsHorizontal,
   edgeSwipeStarts,
-  keyboardInset,
   pullDistance,
   pullTriggers,
   sheetOffset,
@@ -57,17 +56,5 @@ describe('pull to refresh', () => {
   it('refreshes past the trigger only', () => {
     expect(pullTriggers(100)).toBe(false)
     expect(pullTriggers(140)).toBe(true)
-  })
-})
-
-describe('keyboard inset', () => {
-  it('reads the iOS keyboard from the visual viewport', () => {
-    expect(keyboardInset(844, 508, 0)).toBe(336)
-    // iOS scrolled the visual viewport up to keep the caret on screen.
-    expect(keyboardInset(844, 508, 100)).toBe(236)
-  })
-  it('ignores toolbars and rounding', () => {
-    expect(keyboardInset(844, 800, 0)).toBe(0)
-    expect(keyboardInset(844, 844, 0)).toBe(0)
   })
 })

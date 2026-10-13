@@ -38,22 +38,25 @@ Layout never reads the user agent.
   Tab stays inside; focus returns to the opener; a focused field scrolls
   above the keyboard. Only while CSS lays the element out as a full-width
   bottom sheet, so desk popovers and tablet cards are untouched.
-- **Keyboard** (`useKeyboardInset`): `--cc-kb` (px hidden by the on-screen
-  keyboard, from `visualViewport`), `--cc-vvh`, `--cc-vvtop` and
-  `html.cc-kb-open`. Sheets sit on `bottom: var(--cc-kb)`, full-screen panes
-  shrink to the visible area, the tab bar and the call bar's tab offset step
-  aside. A pinch zoom never counts as a keyboard.
+- **Keyboard:** one tracker, the installed app's (`InstalledAppRuntime`,
+  docs/MOBILE.md "Installed app"): `--kb`, `--vvh`, `--vv-top` and
+  `html.kb-open`. The Call Center's keyboard CSS lives in one place
+  (`native/native.css`): on a phone, sheets sit on `bottom: var(--kb)` and
+  full-screen panes shrink to the visible area; at any width below a desk the
+  tab bar and the call bar's tab offset step aside.
 - **Haptics** (`native/haptics.ts`): call connected, call ended, result saved
   (or refused), dial-pad keys, pull to refresh. `navigator.vibrate` on
   Android; on iOS 18+ a hidden switch checkbox's system tick; nothing
   elsewhere or with reduced motion. Never throws.
 - **Touch polish:** pressed states on rows and buttons (touch screens only),
-  no tap highlight, `touch-action: manipulation`, inputs at 16 px or more on
-  touch screens (no zoom on focus), frosted top bars, toasts above the tab
-  bar, fitting `enterkeyhint` / `autocapitalize` / `autocomplete` on fields.
+  frosted top bars, toasts above the tab bar, fitting `enterkeyhint` /
+  `autocapitalize` / `autocomplete` on fields. Tap highlight, touch-action,
+  16 px fields and no-select on buttons are global (globals.css, installed app).
 - **Safe areas** go through `--cc-sat` / `--cc-sab`
   (`env(safe-area-inset-*)`); `--cc-test-sat` / `--cc-test-sab` override
-  them for emulators, which report zero insets.
+  them for emulators, which report zero insets. The installed app's navy
+  status band paints over the top inset; the top bar's content starts below
+  it (inset + 8 px), so the inset is counted once.
 - **Reduced motion:** every slide, spring and spinner is off.
 
 Not done, on purpose: swipe actions on lead rows (a swipe-to-call would skip

@@ -5,52 +5,12 @@ import {
   edgeSwipeGoesBack,
   edgeSwipeIsHorizontal,
   edgeSwipeStarts,
-  keyboardInset,
   pullDistance,
   pullTriggers,
 } from '@/lib/call-center/native-gestures'
 
 function reducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
-
-/**
- * The on-screen keyboard as CSS (docs/NATIVE_FEEL.md): `--cc-kb` on <html> is
- * how many px it covers, `html.cc-kb-open` while it is up. Sheets, the chat
- * composer and the dial pad sit on `bottom: var(--cc-kb)`; the tab bar steps
- * aside like a native app's. iOS reports the keyboard only through
- * visualViewport (the layout viewport keeps its height).
- */
-export function useKeyboardInset(): void {
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
-    const root = document.documentElement
-    let frame = 0
-    const update = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        // A pinch zoom also shrinks the visual viewport; only an unzoomed one means a keyboard.
-        const kb = vv.scale > 1.01 ? 0 : keyboardInset(window.innerHeight, vv.height, vv.offsetTop)
-        root.style.setProperty('--cc-kb', `${kb}px`)
-        root.style.setProperty('--cc-vvh', `${Math.round(vv.height)}px`)
-        root.style.setProperty('--cc-vvtop', `${Math.round(Math.max(0, vv.offsetTop))}px`)
-        root.classList.toggle('cc-kb-open', kb > 0)
-      })
-    }
-    update()
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
-    return () => {
-      cancelAnimationFrame(frame)
-      vv.removeEventListener('resize', update)
-      vv.removeEventListener('scroll', update)
-      root.style.removeProperty('--cc-kb')
-      root.style.removeProperty('--cc-vvh')
-      root.style.removeProperty('--cc-vvtop')
-      root.classList.remove('cc-kb-open')
-    }
-  }, [])
 }
 
 /**
