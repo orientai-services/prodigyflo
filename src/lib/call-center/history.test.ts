@@ -103,7 +103,7 @@ describe('call center history loaders', () => {
     if (orgId) await db.organization.delete({ where: { id: orgId } })
   })
 
-  it('shows a super admin every call and text, named, newest first, with no full numbers', async () => {
+  it('shows a super admin every call and text, named, newest first; full numbers only on a lead row phone', async () => {
     const page = await loadHistory(admin, {}, NOW)
     expect(page.nextCursor).toBeNull()
     expect(page.rows.map((r) => [r.kind, r.name])).toEqual([
@@ -123,8 +123,16 @@ describe('call center history loaders', () => {
     expect(missed).toMatchObject({ status: 'Missed', href: null, recording: null, seconds: null })
     expect(voicemail).toMatchObject({ seconds: 22, transcript: 'Call me back at •••-•••-0102' })
     expect(busy).toMatchObject({ status: 'Busy', rep: 'Blake' })
-    const json = JSON.stringify(page)
+    // A Super Admin sees each lead's full number (docs/DIALER_APP.md §Phone numbers), only on the row's `phone`.
+    expect(connected.phone).toEqual({ state: 'shown', display: '(702) 555-0101', copy: '+17025550101' })
+    expect(leadText.phone).toEqual(connected.phone)
+    expect(voicemail.phone).toEqual({ state: 'shown', display: '(702) 555-0102', copy: '+17025550102' })
+    expect(text.phone).toBeUndefined()
+    expect(missed.phone).toBeUndefined()
+    const json = JSON.stringify(page.rows.map((r) => ({ ...r, phone: undefined })))
     for (const digits of ['5550101', '5550102', '5550199', '5550188', '555-0199', REC]) expect(json).not.toContain(digits)
+    // Client numbers never ride along, not even for a Super Admin.
+    for (const digits of ['5550199', '5550188']) expect(JSON.stringify(page)).not.toContain(digits)
   })
 
   it('filters by chip', async () => {
@@ -148,8 +156,11 @@ describe('call center history loaders', () => {
   it('shows a closer only their own calls, clients and held leads', async () => {
     const mine = await loadHistory(avery, {}, NOW)
     expect(mine.rows.map((r) => `${r.kind}:${r.name}`)).toEqual(['sms-in:Cara Client', 'out:Nate Fuller', 'sms-out:Nate Fuller'])
+    // Avery holds Nate's lead, so Nate's rows carry the full number; the client row doesn't.
+    expect(mine.rows.map((r) => r.phone?.state === 'shown' ? r.phone.display : null)).toEqual([null, '(702) 555-0101', '(702) 555-0101'])
     const other = await loadHistory(blake, {}, NOW)
     expect(other.rows.map((r) => `${r.kind}:${r.name}`)).toEqual(['out:Bo Other'])
+    for (const digits of ['5550101', '5550102', '5550188']) expect(JSON.stringify(other)).not.toContain(digits)
   })
 
   it('pages 50 at a time with no gaps or repeats', async () => {

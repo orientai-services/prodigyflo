@@ -1,0 +1,9 @@
+/* LeadPhone (lead-phone.tsx): text-sized, so it never changes the layout around it. */
+.lead-phone { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lead-phone.unavailable { color: var(--muted, #6b7280); font-style: italic; }
+.lead-phone.copy {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; cursor: pointer; text-align: left;
+}
+.lead-phone.copy:focus-visible { outline: 2px solid var(--teal, #0f766e); outline-offset: 2px; border-radius: 4px; }
+.lead-phone-note { font-size: 11px; font-weight: 600; color: var(--teal, #0f766e); }

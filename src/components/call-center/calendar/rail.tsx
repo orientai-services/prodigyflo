@@ -4,10 +4,12 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { railWhen, timeLabel, type RailLeadVM, type RepVM, type VisitVM } from '@/lib/call-center/calendar/planner'
 import { leadHref } from '@/lib/call-center/lead-link'
+import { phoneText, type LeadPhoneView } from '@/lib/call-center/phone-display'
 import { repOf } from './visit-block'
 
-function who(lead: { last4: string | null; language: 'EN' | 'ES' }): string {
-  return [lead.last4 ? `••${lead.last4}` : null, lead.language === 'ES' ? 'Spanish' : 'English'].filter(Boolean).join(' · ')
+function who(lead: { last4: string | null; language: 'EN' | 'ES'; phone?: LeadPhoneView | null }): string {
+  const number = lead.phone ? phoneText(lead.phone, null) : lead.last4 ? `••${lead.last4}` : null
+  return [number, lead.language === 'ES' ? 'Spanish' : 'English'].filter(Boolean).join(' · ')
 }
 
 /**

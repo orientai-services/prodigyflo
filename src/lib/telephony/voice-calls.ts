@@ -5,6 +5,8 @@ import { encryptSecret } from '@/lib/crypto'
 import { can, clientScope, type SessionUser } from '@/lib/rbac'
 import { inquiryAttested, last4Of, phoneHashOrNull } from './compliance-core'
 import { toE164 } from './provider'
+import { readSecret } from '@/lib/call-center/contact'
+import { leadPhoneView, maySeeLeadPhone, phoneText } from '@/lib/call-center/phone-display'
 import { MISSED_DISPOSITIONS, type MissedCallVM, type MissedDisposition } from './voice-contract'
 
 /**
@@ -591,6 +593,26 @@ export function missedReason(vc: Pick<VoiceCall, 'outcome' | 'stage' | 'recordin
 }
 
 /**
+ * Which missed calls show the caller's full number (docs/DIALER_APP.md §Phone
+ * numbers): a Super Admin sees every one; anyone else only calls tied to a
+ * lead they hold that isn't on do-not-call (phone-display.ts `maySeeLeadPhone`).
+ */
+async function missedNumberGate(
+  user: SessionUser,
+  rows: { callCenterLeadId: string | null }[],
+): Promise<(vc: { callCenterLeadId: string | null }) => boolean> {
+  if (user.role === 'SUPER_ADMIN') return () => true
+  const leadIds = [...new Set(rows.map((r) => r.callCenterLeadId).filter((v): v is string => Boolean(v)))]
+  if (!leadIds.length) return () => false
+  const held = await db.callCenterLead.findMany({
+    where: { organizationId: user.organizationId, id: { in: leadIds } },
+    select: { id: true, lockedBy: true, doNotCallAt: true },
+  })
+  const ok = new Set(held.filter((l) => maySeeLeadPhone(user, l)).map((l) => l.id))
+  return (vc) => Boolean(vc.callCenterLeadId && ok.has(vc.callCenterLeadId))
+}
+
+/**
  * Unanswered inbound calls still waiting for someone, in the viewer's scope.
  * Callback requests (the caller pressed 1) come first, then newest first.
  */
@@ -619,6 +641,7 @@ export async function listMissed(user: SessionUser, limit = 100): Promise<Missed
       clientId: true,
       remoteLast4: true,
       remoteSecret: true,
+      callCenterLeadId: true,
       recordingSid: true,
       recordingKind: true,
       recordingDurationSeconds: true,
@@ -644,15 +667,18 @@ export async function listMissed(user: SessionUser, limit = 100): Promise<Missed
   ])
   const lineName = new Map(lines.map((l) => [l.id, l.friendlyName]))
   const clientName = new Map(clients.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]))
+  const fullNumber = await missedNumberGate(user, rows)
 
   return rows.map((vc) => {
     const visibleClient = vc.clientId && clientName.has(vc.clientId) ? vc.clientId : null
     const isVoicemail = Boolean(vc.recordingSid && vc.recordingKind === 'voicemail')
+    // The caller's own number (it may differ from the lead's), or "Number unavailable" when it won't decrypt.
+    const number = !visibleClient && fullNumber(vc) ? leadPhoneView(readSecret(vc.remoteSecret), Boolean(vc.remoteSecret || vc.remoteLast4)) : null
     return {
       id: vc.id,
       at: vc.startedAt.toISOString(),
       lineLabel: (vc.phoneNumberId && lineName.get(vc.phoneNumberId)) || 'Phone line',
-      caller: visibleClient ? clientName.get(visibleClient)! : vc.remoteLast4 ? `•••-•••-${vc.remoteLast4}` : 'Unknown caller',
+      caller: visibleClient ? clientName.get(visibleClient)! : number ? phoneText(number, null) : vc.remoteLast4 ? `•••-•••-${vc.remoteLast4}` : 'Unknown caller',
       target: visibleClient ? { kind: 'client', id: visibleClient } : vc.remoteSecret ? { kind: 'missed', id: vc.id } : null,
       reason: missedReason(vc),
       voicemail: isVoicemail ? { src: recordingPath(vc.id), seconds: vc.recordingDurationSeconds ?? 0 } : null,

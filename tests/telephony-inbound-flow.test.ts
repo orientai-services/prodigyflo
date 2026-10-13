@@ -243,7 +243,8 @@ describe('missed calls', () => {
     const list = await listMissed(owner.actor)
     const row = list.find((m) => m.id === vc.id)
     expect(row).toMatchObject({ reason: 'hung-up', lineLabel: 'Forward line', target: { kind: 'missed', id: vc.id } })
-    expect(row?.caller).toBe(`•••-•••-${from.slice(-4)}`)
+    // A Super Admin sees the caller's full number (docs/DIALER_APP.md §Phone numbers).
+    expect(row?.caller).toBe(`(${from.slice(2, 5)}) ${from.slice(5, 8)}-${from.slice(-4)}`)
     // A rep who neither answered nor holds the lead does not see it.
     expect((await listMissed(repB.actor)).some((m) => m.id === vc.id)).toBe(false)
   })

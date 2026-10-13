@@ -8,7 +8,6 @@ import {
   dialableE164,
   formatAsTyped,
   formatDialed,
-  maskDialed,
   pushRecent,
   readRecent,
 } from '@/lib/telephony/ui/dial-pad'
@@ -240,7 +239,7 @@ export function DialPad({
               {recent.map((number) => (
                 <li key={number}>
                   <button type="button" onClick={() => setTyped(number.slice(2))}>
-                    {maskDialed(number)}
+                    {formatDialed(number)}
                   </button>
                 </li>
               ))}

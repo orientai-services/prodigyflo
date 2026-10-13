@@ -4,6 +4,8 @@
  * and the screen agree on them, and so they test without a database.
  */
 
+import type { LeadPhoneView } from './phone-display'
+
 export const HISTORY_PAGE = 50
 export const HISTORY_TZ = 'America/Los_Angeles'
 
@@ -43,6 +45,10 @@ export type HistoryRow = {
   text: string | null
   /** The lead on the desk or the client page. */
   href: string | null
+  /** The call-center lead this row is about (not set when it shows a client). */
+  leadId?: string | null
+  /** Full number, only when the viewer may see this lead's (lead-phones.ts). */
+  phone?: LeadPhoneView | null
 }
 
 export type HistoryPage = { rows: HistoryRow[]; nextCursor: string | null }

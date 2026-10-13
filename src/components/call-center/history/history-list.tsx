@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { ChevronRight, MessageSquareText, PhoneIncoming, PhoneMissed, PhoneOutgoing, Play, Send, Voicemail, X } from 'lucide-react'
 import { loadMoreHistory } from '@/lib/call-center/history-actions'
 import { durationLabel, type HistoryFilter, type HistoryRow, type HistoryRowKind } from '@/lib/call-center/history-format'
+import { phoneText } from '@/lib/call-center/phone-display'
 import './history.css'
 
 const KIND: Record<HistoryRowKind, { label: string; Icon: typeof Play }> = {
@@ -61,7 +62,9 @@ function InlinePlayer({ src, rate, onRate, name }: { src: string; rate: number; 
 }
 
 function meta(row: HistoryRow): string {
-  return [KIND[row.kind].label, `${row.day}, ${row.time}`, row.rep, row.status].filter(Boolean).join(' · ')
+  // The full number (or "Number unavailable") only reaches rows the viewer may see; never a tel: link.
+  const phone = row.phone && phoneText(row.phone, null) !== row.name ? phoneText(row.phone, null) : null
+  return [KIND[row.kind].label, `${row.day}, ${row.time}`, phone, row.rep, row.status].filter(Boolean).join(' · ')
 }
 
 /**

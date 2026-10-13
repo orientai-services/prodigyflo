@@ -18,6 +18,7 @@ import {
 import type { TodayBoard } from '@/lib/call-center/priority'
 import type { FeedRow, TodayStats } from '@/lib/call-center/team'
 import { lockLabel, type CallLead } from '@/lib/call-center/model'
+import { LeadPhone } from './lead-phone'
 import { CallButton } from '@/components/voice/call-button'
 import { RecordingPlayer } from '@/components/voice/recording-player'
 
@@ -164,6 +165,8 @@ export function TodayView({
                     <span className="attack-meta">
                       <span className={`stage ${stage.tone}`}>{stage.label}</span>
                       {lock ? <span>{lock}</span> : null}
+                      {/* Only a viewer allowed to see the full number gets one here; nobody gets dots. */}
+                      {lead.phone ? <span><LeadPhone phone={lead.phone} last4={lead.last4} /></span> : null}
                       {visit ? <span>📅 {visitLabel(visit)}</span> : null}
                       {touched !== null ? <span>☎ {agoLabel(now - touched)}</span> : null}
                     </span>

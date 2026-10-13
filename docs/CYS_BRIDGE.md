@@ -246,7 +246,7 @@ Each mode writes an `INTAKE_LINK` event with body `{mode, tokenId}`, plus `intak
 | Linked, analysis pending | Profile skeleton + "Intake received <ago> · documents analysing" (driven by `IntakeSubmission` status) |
 | Linked | Full profile + **CYS Sign up** (B3) |
 
-- **Layout.** At ≥lg it is a second column next to the existing detail card. Below lg it is a "Profile" tab inside the lead sheet (follow `docs/MOBILE.md`: no overflow at 360/390, bottom-sheet dialogs). The phone stays last-4 everywhere in the dialer; the full number is only via `revealCallCenterContact`.
+- **Layout.** At ≥lg it is a second column next to the existing detail card. Below lg it is a "Profile" tab inside the lead sheet (follow `docs/MOBILE.md`: no overflow at 360/390, bottom-sheet dialogs). In the dialer the full number shows only to a Super Admin or the rep holding the lead (docs/DIALER_APP.md §Phone numbers); everyone else, and every chat and SunOff path, gets last-4.
 
 ### B3. CYS Sign up (ProdigyFlo → SunOff standby → prefilled CYS)
 

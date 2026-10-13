@@ -1,4 +1,5 @@
 import { blockPlacement, statusLook, timeRange, type Lane, type RepVM, type VisitVM } from '@/lib/call-center/calendar/planner'
+import { phoneText } from '@/lib/call-center/phone-display'
 
 /** The rep's color class and label, also for a legacy rep key no longer in the list. */
 export function repOf(reps: readonly RepVM[], key: string): RepVM {
@@ -48,7 +49,7 @@ export function VisitBlock({
       <span className="cal-block-line">{when} · {rep.label}</span>
       {detailed ? (
         <span className="cal-block-line">
-          {visit.last4 ? `••${visit.last4} · ` : ''}{visit.language === 'ES' ? 'Spanish' : 'English'}
+          {visit.phone ? `${phoneText(visit.phone, null)} · ` : visit.last4 ? `••${visit.last4} · ` : ''}{visit.language === 'ES' ? 'Spanish' : 'English'}
         </span>
       ) : null}
       <span className="cal-chip">{look.label}</span>
