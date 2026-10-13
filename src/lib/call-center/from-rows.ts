@@ -4,6 +4,7 @@
  */
 
 import { deriveFollowUp, isHandoffStatus, seedLeads, type CallLead, type IntakeMode, type LeadChannel, type LeadHandoff, type LeadIntake, type LeadLanguage, type LeadStatus, type TrailEvent, type TrailKind } from './model'
+import { calendarTrailText } from './calendar/trail-text'
 import { SCS_ENGLISH_PAGE_ID, readFacebookFormEvent } from './meta-route'
 
 export type StoredCallCenterEvent = {
@@ -150,6 +151,10 @@ function trailDetail(type: string, body: string, page: string, viewerId?: string
     if (typeof status === 'string') return `SunOff · ${status.toLowerCase()}`
   }
   if (copy?.detail) return safeText(copy.detail) || trailLabel(type)
+  if (type === 'NOTE' || type === 'OUTCOME') {
+    const calendar = calendarTrailText(body)
+    if (calendar) return safeText(calendar) || trailLabel(type)
+  }
   return safeText(body) || trailLabel(type)
 }
 
