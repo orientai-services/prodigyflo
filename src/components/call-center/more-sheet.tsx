@@ -79,7 +79,7 @@ export function MoreSheet({
         <ul className="more-links">
           {adsAllowed ? (
             <li>
-              <Link href={ADS_BASE} onClick={onClose}>
+              <Link prefetch={false} href={ADS_BASE} onClick={onClose}>
                 <Megaphone aria-hidden="true" />
                 <span>
                   <b>Campaigns</b>
@@ -89,7 +89,7 @@ export function MoreSheet({
             </li>
           ) : null}
           <li>
-            <Link href={sectionHref('team')} onClick={onClose}>
+            <Link prefetch={false} href={sectionHref('team')} onClick={onClose}>
               <UsersRound aria-hidden="true" />
               <span>
                 <b>Team</b>

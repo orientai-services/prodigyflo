@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import type { SessionUser } from '@/lib/rbac'
 import { chatBase, chatKey } from './config'
 import { linkedSunoffId } from './link'
@@ -74,6 +75,15 @@ export async function teamChatCounts(user: SessionUser): Promise<TeamChatCounts>
   if (!res?.ok) return { ...NONE, cases: {} }
   return parseUnreadAnswer(await res.json().catch(() => null))
 }
+
+/**
+ * The same answer, asked once per server render: the page streams it to the
+ * shell badge and the Messages switch reuses it (`cache` is keyed by the
+ * request's SessionUser). Never rejects.
+ */
+export const teamChatCountsOnce = cache(
+  (user: SessionUser): Promise<TeamChatCounts> => teamChatCounts(user).catch(() => ({ ...NONE, cases: {} })),
+)
 
 /** Unread team-chat messages for the shell badge. 0 when unlinked, never opened, or the chat is unreachable. */
 export async function teamChatUnread(user: SessionUser): Promise<number> {

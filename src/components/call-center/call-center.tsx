@@ -87,7 +87,9 @@ import { TeamView } from './team-view'
 import { TodayView, type TodayServer } from './today-view'
 import { useDeskClock, useDeskKeys, useLiveRefresh } from './use-desk-effects'
 import { usePowerMode } from './use-power-mode'
-import { useChatHost } from './use-chat-host'
+import { useChatHost, type TeamChatPromise } from './use-chat-host'
+import { useFullTrail } from './use-full-trail'
+import { useDeskVersion } from './use-desk-version'
 import { chatHref } from './messages/chat/host-bus'
 import { haptic } from './native/haptics'
 import { useEdgeSwipeBack, usePullToRefresh, useSectionScroll } from './native/use-native-shell'
@@ -201,7 +203,7 @@ export function CallCenter({
   /** Unread inbound texts (the Messages badge). */
   unread?: number
   /** The same badge split into lead texts and team chat, so the shell can keep each live (use-chat-host.ts); `cases` = case-chat unread per lead id. */
-  unreadSplit?: { sms: number; team: number; cases?: Record<string, number> } | null
+  unreadSplit?: { sms: number; team: number; cases?: Record<string, number>; teamChat?: TeamChatPromise | null } | null
   /** Today's server numbers and team feed (Today only). */
   today?: TodayServer | null
   /** The team list (Team only). */
@@ -216,7 +218,7 @@ export function CallCenter({
   const voice = useVoice()
   const section = route.section
   // The Messages badge, the "(n) " title prefix, the open conversation's name and chat notification taps.
-  const chatHost = useChatHost({ sms: unreadSplit?.sms ?? unread, team: unreadSplit?.team ?? 0, cases: unreadSplit?.cases, onMessages: section === 'messages' })
+  const chatHost = useChatHost({ sms: unreadSplit?.sms ?? unread, team: unreadSplit?.team ?? 0, cases: unreadSplit?.cases, teamChat: unreadSplit?.teamChat, onMessages: section === 'messages' })
   const leadsList = section === 'leads' && !route.ads
   /** Today and Leads hold the lead panel, the tools and the shortcuts. */
   const deskSection = section === 'today' || leadsList
@@ -293,6 +295,13 @@ export function CallCenter({
   const noteRef = useRef<HTMLTextAreaElement>(null)
   const callRef = useRef<HTMLSpanElement>(null)
   const clock = useDeskClock(renderedAt ? Date.parse(renderedAt) : 0)
+  // Today, Leads and Team re-read on the 20 s tick only when the desk changed (use-desk-version.ts); the other
+  // sections, and pull to refresh, re-read as before.
+  const deskVersion = useDeskVersion(
+    `${routeKey}:${route.filter ?? ''}`,
+    renderedAt,
+    section === 'today' || section === 'team' || (section === 'leads' && !route.ads),
+  )
   const leads = draft && draft.source === initialLeads ? draft.leads : (initialLeads ?? seedLeads())
 
   function replace(next: CallLead) {
@@ -381,6 +390,8 @@ export function CallCenter({
   const selected = deskSection && !missedView
     ? (pool.find((lead) => lead.id === selectedId && !lead.disabled) ?? null)
     : null
+  // The list carries trimmed trails; the open lead's whole Comms trail is read once when it opens.
+  const selectedTrail = useFullTrail(selected)
   const who = selected ? repFor(selected) : CURRENT_REP
   const quietBlocked = Boolean(selected && now && callNeedsConfirm(selected, now) && callAnywayId !== selected.id)
   const revealLeadId = selected?.persisted && viewerId && selected.lockedBy === viewerId && !selected.dnc
@@ -648,7 +659,7 @@ export function CallCenter({
         adsAllowed={adsAllowed}
         phone={phoneStatus}
         line={line ? (line.label && line.label !== line.display ? `${line.label} · ${line.display}` : line.display) : null}
-        updated={updatedLabel(renderedAt ? Date.parse(renderedAt) : clock, clock)}
+        updated={updatedLabel(Math.max(renderedAt ? Date.parse(renderedAt) : clock, deskVersion.checkedAt), clock)}
         viewer={viewer}
         toggle={navRef}
         onClose={() => setMoreOpen(false)}
@@ -701,10 +712,15 @@ export function CallCenter({
     return () => window.clearTimeout(timer)
   }, [pendingSection])
   const switching = Boolean(pendingSection && pendingSection !== routeKey)
-  useLiveRefresh(refresh, () => {
-    if (busy || scheduling || booking || power.phase === 'dialing') return false
-    return !voice || (voice.status === 'idle' && !voice.activeTarget && !voice.incoming)
-  })
+  useLiveRefresh(
+    refresh,
+    () => {
+      if (busy || scheduling || booking || power.phase === 'dialing') return false
+      return !voice || (voice.status === 'idle' && !voice.activeTarget && !voice.incoming)
+    },
+    undefined,
+    deskVersion.changed,
+  )
 
   return (
     <div
@@ -720,7 +736,7 @@ export function CallCenter({
       ].filter(Boolean).join(' ')}
     >
       <header className="cc-head">
-        <Link href={sectionHref('today')} className="cc-mark" aria-label="ProdigyFlo dialer, Today">
+        <Link prefetch={false} href={sectionHref('today')} className="cc-mark" aria-label="ProdigyFlo dialer, Today">
           <span className="cc-word">Prodigy<span className="flo">Flo</span></span>
           <span className="cc-glyph" aria-hidden="true">P</span>
         </Link>
@@ -879,7 +895,7 @@ export function CallCenter({
         ) : null}
         {route.ads ? (
           <>
-            <Link className="back-link" href={sectionHref('leads')}><span aria-hidden="true">‹</span> Leads</Link>
+            <Link prefetch={false} className="back-link" href={sectionHref('leads')}><span aria-hidden="true">‹</span> Leads</Link>
             <div className="ads-panel">{slot}</div>
           </>
         ) : section === 'booked' ? (
@@ -989,7 +1005,7 @@ export function CallCenter({
                     ) : null}
                     {selected.missedCallId ? (
                       <div className="banner" role="status">
-                        <Link
+                        <Link prefetch={false}
                           className="linkish"
                           href={`/call-center?s=leads&missed=${encodeURIComponent(selected.missedCallId)}`}
                           onClick={() => setSelectedId(null)}
@@ -1098,7 +1114,7 @@ export function CallCenter({
                     {selected.persisted ? (
                       <div className="actions solo">
                         {/* The lead's case chat in Team chat (docs/TEAM_CHAT_PARITY.md A4); Messages finds it by lead id. */}
-                        <Link className="btn secondary cc-teamchat" href={chatHref({ lead: selected.id })} scroll={false}>
+                        <Link prefetch={false} className="btn secondary cc-teamchat" href={chatHref({ lead: selected.id })} scroll={false}>
                           <MessageSquare aria-hidden="true" />
                           Team chat
                           {chatHost.cases[selected.id] ? (
@@ -1140,7 +1156,7 @@ export function CallCenter({
                       </button>
                     </div>
                     <h3>Comms</h3>
-                    <CommsTrail key={selected.id} trail={selected.trail} />
+                    <CommsTrail key={selected.id} trail={selectedTrail} />
                     </div>
                     <aside ref={profileRef} className="lead-profile-col" aria-label="Client profile">
                       <LeadProfile api={handoff} now={clock} sheetHost={sheetHost} />

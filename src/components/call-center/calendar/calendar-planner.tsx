@@ -71,22 +71,22 @@ export function CalendarPlanner({ vm }: { vm: CalendarVM }) {
       <div className="cal-bar">
         <nav className="cal-views" aria-label="Calendar view">
           {VIEWS.map((v) => (
-            <Link key={v.id} className={v.id === vm.view ? 'on' : ''} aria-current={v.id === vm.view ? 'page' : undefined} href={calendarHref(state, { view: v.id })}>
+            <Link prefetch={false} key={v.id} className={v.id === vm.view ? 'on' : ''} aria-current={v.id === vm.view ? 'page' : undefined} href={calendarHref(state, { view: v.id })}>
               {v.label}
             </Link>
           ))}
         </nav>
         <div className="cal-step">
-          <Link className="cal-arrow" aria-label={`Previous ${vm.view}`} href={calendarHref(state, { date: shiftDate(vm.view, vm.date, -1) })}>‹</Link>
+          <Link prefetch={false} className="cal-arrow" aria-label={`Previous ${vm.view}`} href={calendarHref(state, { date: shiftDate(vm.view, vm.date, -1) })}>‹</Link>
           <h3 className="cal-range" aria-live="polite">{rangeLabel(vm.view, vm.date)}</h3>
-          <Link className="cal-arrow" aria-label={`Next ${vm.view}`} href={calendarHref(state, { date: shiftDate(vm.view, vm.date, 1) })}>›</Link>
-          <Link className="cal-today" href={calendarHref(state, { date: dayKeyOf(now) })}>Today</Link>
+          <Link prefetch={false} className="cal-arrow" aria-label={`Next ${vm.view}`} href={calendarHref(state, { date: shiftDate(vm.view, vm.date, 1) })}>›</Link>
+          <Link prefetch={false} className="cal-today" href={calendarHref(state, { date: dayKeyOf(now) })}>Today</Link>
         </div>
       </div>
       <nav className="cal-filter" aria-label="Rep filter and colors">
-        <Link className={vm.rep ? '' : 'on'} aria-current={vm.rep ? undefined : 'true'} href={calendarHref(state, { rep: null })}>All reps</Link>
+        <Link prefetch={false} className={vm.rep ? '' : 'on'} aria-current={vm.rep ? undefined : 'true'} href={calendarHref(state, { rep: null })}>All reps</Link>
         {vm.reps.map((r) => (
-          <Link
+          <Link prefetch={false}
             key={r.key}
             className={`cal-rep-${r.color}${vm.rep === r.key ? ' on' : ''}`}
             aria-current={vm.rep === r.key ? 'true' : undefined}

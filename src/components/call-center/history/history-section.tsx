@@ -62,7 +62,7 @@ export async function HistorySection(props: {
     <section className="hist" aria-label="History">
       <nav className="hist-tabs" aria-label="History views">
         {tabs.map((t) => (
-          <Link
+          <Link prefetch={false}
             key={t.id}
             href={historyHref(base, { tab: t.id })}
             className={state.tab === t.id ? 'on' : undefined}
@@ -87,14 +87,14 @@ export async function HistorySection(props: {
             </label>
             <button type="submit" className="btn">Search</button>
             {state.q ? (
-              <Link className="hist-clear" href={historyHref(base, { filter: state.filter })}>
+              <Link prefetch={false} className="hist-clear" href={historyHref(base, { filter: state.filter })}>
                 Clear
               </Link>
             ) : null}
           </form>
           <nav className="hist-chips" aria-label="Filter calls and texts">
             {HISTORY_FILTERS.map((f) => (
-              <Link
+              <Link prefetch={false}
                 key={f.id}
                 href={historyHref(base, { filter: f.id, q: state.q })}
                 className={state.filter === f.id ? 'on' : undefined}

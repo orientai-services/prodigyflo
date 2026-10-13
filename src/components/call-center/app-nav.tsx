@@ -46,10 +46,13 @@ export function SectionNav({
       {TABS.map(({ id, icon: Icon }) => {
         const here = route.section === id && !route.ads
         const badge = badgeText(id === 'today' ? badges.today : id === 'messages' ? badges.messages : 0)
+        // No prefetch: every section is rendered per request (the desk is live), so Next skips the page anyway and
+        // the prefetch was an empty round trip per tab, repeated after every 20 s refresh.
         return (
           <Link
             key={id}
             href={sectionHref(id)}
+            prefetch={false}
             // Each section keeps its own scroll (use-native-shell.ts), so the link never jumps the page itself.
             scroll={false}
             className={here ? 'on' : undefined}

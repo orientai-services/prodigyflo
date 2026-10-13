@@ -164,7 +164,7 @@ export function HistoryList({
                   <span className="hist-play-none" aria-hidden="true" />
                 )}
                 {row.href ? (
-                  <Link className="hist-go" href={row.href} aria-label={`Open ${row.name}`}>
+                  <Link prefetch={false} className="hist-go" href={row.href} aria-label={`Open ${row.name}`}>
                     <ChevronRight size={20} />
                   </Link>
                 ) : (

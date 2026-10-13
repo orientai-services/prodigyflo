@@ -56,7 +56,7 @@ export function TimeGrid({
           )
           return (
             <span key={key} className={`cal-head${key === today ? ' today' : ''}`}>
-              {dayHref ? <Link href={dayHref(key)}>{label}</Link> : label}
+              {dayHref ? <Link prefetch={false} href={dayHref(key)}>{label}</Link> : label}
             </span>
           )
         })}

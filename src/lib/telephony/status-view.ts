@@ -95,8 +95,7 @@ async function recentErrors(where: { organizationIds?: string[]; accountSid?: st
 
 export async function twilioStatusFor(user: SessionUser, opts: { refresh?: boolean } = {}, now = new Date()): Promise<TwilioStatusVM> {
   const mode: TwilioStatusVM['mode'] = isMockTelephony() ? 'mock' : 'twilio'
-  const detailed = await telephonyCredentialsDetailed(user.organizationId)
-  const settings = await telephonySettingsFor(user.organizationId)
+  const [detailed, settings] = await Promise.all([telephonyCredentialsDetailed(user.organizationId), telephonySettingsFor(user.organizationId)])
   const a2p: CarrierState = settings.a2p
     ? { status: settings.a2p.status, source: settings.a2p.source, note: settings.messagingServiceSid ? 'This account’s Messaging Service.' : 'No Messaging Service set yet.' }
     : {
@@ -128,23 +127,22 @@ export async function twilioStatusFor(user: SessionUser, opts: { refresh?: boole
   const accountWide = guard.ok && (detailed.source === 'vault' || isPlatformOwner(user))
   const scope: TwilioStatusVM['scope'] = detailed.source === 'platform' && isPlatformOwner(user) ? 'platform' : 'org'
 
-  if (opts.refresh && accountWide) await refreshAccountState(creds, now, { force: true })
-  const state = await getAccountState(creds.accountSid)
-  const limit = voiceLimitFrom(state, now, mode === 'mock')
+  const refresh = Boolean(opts.refresh && accountWide)
+  if (refresh) await refreshAccountState(creds, now, { force: true })
 
-  let inTwilio: number | null = null
-  if (opts.refresh && accountWide) {
-    const listed = await getTelephonyProvider().listOwnedNumbers(creds)
-    inTwilio = listed.ok ? listed.numbers.length : null
-  }
   const numberWhere =
     scope === 'platform'
       ? { status: { not: 'RELEASED' as const }, OR: [{ providerAccountSid: creds.accountSid }, { providerAccountSid: null }] }
       : { organizationId: user.organizationId, status: { not: 'RELEASED' as const } }
-  const [here, drift] = await Promise.all([
+  // Independent reads, side by side (the stored state is read after a refresh has written it).
+  const [state, inTwilio, here, drift, errors] = await Promise.all([
+    getAccountState(creds.accountSid),
+    refresh ? getTelephonyProvider().listOwnedNumbers(creds).then((listed) => (listed.ok ? listed.numbers.length : null)) : Promise.resolve(null),
     db.phoneNumber.count({ where: numberWhere }),
     db.phoneNumber.count({ where: { ...numberWhere, webhookDrift: { not: Prisma.DbNull } } }).catch(() => 0),
+    scope === 'platform' ? recentErrors({ accountSid: creds.accountSid }, now) : recentErrors({ organizationIds: [user.organizationId] }, now),
   ])
+  const limit = voiceLimitFrom(state, now, mode === 'mock')
 
   return {
     mode,
@@ -162,10 +160,7 @@ export async function twilioStatusFor(user: SessionUser, opts: { refresh?: boole
       checkedAt: state?.mediaAuthCheckedAt?.toISOString() ?? null,
     },
     env: scope === 'platform' ? ENV_NAMES.map((name) => ({ name, set: Boolean(process.env[name]?.trim()) })) : [],
-    recentErrors:
-      scope === 'platform'
-        ? await recentErrors({ accountSid: creds.accountSid }, now)
-        : await recentErrors({ organizationIds: [user.organizationId] }, now),
+    recentErrors: errors,
     checkedAt: state?.lastCheckedAt?.toISOString() ?? null,
   }
 }

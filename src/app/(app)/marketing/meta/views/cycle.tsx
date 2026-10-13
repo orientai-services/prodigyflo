@@ -6,7 +6,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import type { CycleView } from '@/lib/meta/ads/read'
-import { CycleLengthForm, StartCycleButton } from '../meta-islands'
+import { CycleLengthForm, StartCycleButton } from './lazy-islands'
 import { Fact, GLOSSARY, Term, count, money, unitCost } from './parts'
 
 /** A calendar date in the ad account's own time zone, e.g. "Oct 8, 2026". */

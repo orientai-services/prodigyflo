@@ -112,7 +112,7 @@ export function VisitPanel({
           <p>{visit.note ?? 'No note on this lead yet.'}</p>
         </div>
         <div className="cal-panel-acts">
-          <Link className="btn secondary" href={leadHref(visit.leadId)}>Open lead</Link>
+          <Link prefetch={false} className="btn secondary" href={leadHref(visit.leadId)}>Open lead</Link>
           {visit.status === 'HOLD' ? (
             <button type="button" className="btn" disabled={busy} onClick={() => { void run('confirm', () => confirmCalendarSlot(visit.id)) }}>
               Confirm (on the call)

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { CallCenter, type CallCenterPhone } from '@/components/call-center/call-center'
 import { HistorySection } from '@/components/call-center/history/history-section'
 import { MessagesSection, unreadMessageCount } from '@/components/call-center/messages/messages-section'
-import { teamChatCounts } from '@/lib/chat-bridge/remote'
+import { teamChatCountsOnce } from '@/lib/chat-bridge/remote'
 import { ADS_BASE, HISTORY_BASE, MESSAGES_BASE, resolveRoute } from '@/lib/call-center/app-shell'
 import { missingRelation } from '@/lib/call-center/desk'
 import { leadIdParam } from '@/lib/call-center/lead-link'
@@ -15,7 +15,6 @@ import { loadPhoneSetup } from '@/lib/telephony/ui/phone-setup-data'
 import { MetaAdsContent } from '@/app/(app)/marketing/meta/dashboard'
 import { calendarEnabled } from '@/lib/call-center/calendar/config'
 import { CallCenterCalendarTab } from '@/components/call-center/calendar/calendar-tab'
-import { db } from '@/lib/db'
 import { profileName } from '@/lib/people/profile-name'
 
 export const metadata: Metadata = { title: 'Call Center' }
@@ -38,6 +37,16 @@ async function soft<T>(read: Promise<T>, what: string): Promise<T | null> {
     if (!missingRelation(err)) console.error(`[call-center] ${what} failed`, err)
     return null
   }
+}
+
+/**
+ * A slot rendered ahead of time. React reports its failure where it renders
+ * (the error boundary, as before); the no-op catch only keeps a failure that
+ * lands while the desk is still loading from counting as unhandled.
+ */
+function started<T>(render: Promise<T>): Promise<T> {
+  render.catch(() => {})
+  return render
 }
 
 /**
@@ -65,28 +74,43 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   const route = resolveRoute(params, { adsAllowed })
   const now = new Date()
 
-  const [desk, voice, missed, setup, status, unread, stats, team, me] = await Promise.all([
-    loadCallCenterDesk(),
+  // Only the open section's server slot renders. It is started here, before
+  // the desk is awaited, so its reads run beside the desk's rather than after
+  // them (an async server component called directly is a promise React can
+  // render as a node).
+  let slot: React.ReactNode = null
+  if (route.section === 'history') slot = started(HistorySection({ user, params, base: HISTORY_BASE }))
+  else if (route.section === 'messages') slot = started(MessagesSection({ user, params, base: MESSAGES_BASE }))
+  else if (route.ads) slot = started(MetaAdsContent({ user, params, base: ADS_BASE, embedded: true }))
+  else if (route.section === 'booked' && calendarOn) slot = started(CallCenterCalendarTab({ organizationId: user.organizationId, params, viewer: user }))
+
+  // The team chat lives on another server (the chat Worker), so its counts
+  // are never awaited here: the promise streams to the shell after the page
+  // (use-chat-host.ts), and a slow or unreachable chat no longer holds up the
+  // desk or the 20 s refresh.
+  const teamChat = teamChatCountsOnce(user)
+
+  const [desk, voice, missed, setup, status, sms, stats, team] = await Promise.all([
+    // The lead open in the URL keeps its whole trail; the rest carry what the list reads.
+    loadCallCenterDesk({ fullFor: leadIdParam(params.lead), now }),
     getVoiceSetup().catch((): VoiceSetup => ({ ready: false, reason: "Phone calling isn't set up yet." })),
     listMissedCalls().catch(() => [] as MissedCallVM[]),
     owner ? loadPhoneSetup(user).catch(() => null) : Promise.resolve(null),
     owner ? getTwilioStatus(false).catch(() => null) : Promise.resolve(null),
-    // Lead texts plus the team chat: one Messages badge (the shell keeps both live between renders, use-chat-host.ts).
-    // One chat call per page load also brings each lead's case-chat unread for the lead panel's Team chat button.
-    Promise.all([unreadMessageCount(user).catch(() => 0), teamChatCounts(user).catch(() => ({ total: 0, mentions: 0, cases: {} }))]).then(
-      ([sms, chat]) => ({ sms, team: chat.total, cases: chat.cases }),
-    ),
+    // Lead texts; with the streamed team chat they make one Messages badge (the shell keeps both live between
+    // renders, use-chat-host.ts). The chat answer also brings each lead's case-chat unread for the lead panel.
+    unreadMessageCount(user).catch(() => 0),
     route.section === 'today' ? soft(loadTodayStats(user, now), 'today stats') : Promise.resolve(null),
     route.section === 'today' || route.section === 'team' ? soft(loadTeamToday(user, now), 'team today') : Promise.resolve(null),
-    // The header's profile picture: the session row has no nickname, and a name saved a moment ago must show.
-    soft(db.user.findUnique({ where: { id: user.id }, select: { name: true, nickname: true, avatarUrl: true } }), 'profile'),
   ])
+  // The header's profile picture. The session row is read fresh on every request (name, nickname and photo), so a
+  // name saved a moment ago shows without a second read.
   const profile = {
-    name: me?.name ?? user.name,
-    nickname: me?.nickname ?? null,
+    name: user.name,
+    nickname: user.nickname ?? null,
     email: user.email,
     role: user.roleName,
-    avatarUrl: me ? me.avatarUrl : user.avatarUrl,
+    avatarUrl: user.avatarUrl,
   }
   const shownName = profileName(profile) ?? 'You'
 
@@ -102,13 +126,6 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       : null,
   }
 
-  // Only the open section's server slot renders.
-  let slot: React.ReactNode = null
-  if (route.section === 'history') slot = <HistorySection user={user} params={params} base={HISTORY_BASE} />
-  else if (route.section === 'messages') slot = <MessagesSection user={user} params={params} base={MESSAGES_BASE} />
-  else if (route.ads) slot = <MetaAdsContent user={user} params={params} base={ADS_BASE} embedded />
-  else if (route.section === 'booked' && calendarOn) slot = <CallCenterCalendarTab organizationId={user.organizationId} params={params} viewer={user} />
-
   return (
     <CallCenter
       initialLeads={desk.leads}
@@ -120,8 +137,8 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       adsAllowed={adsAllowed}
       calendarAllowed={calendarOn}
       slot={slot}
-      unread={unread.sms + unread.team}
-      unreadSplit={unread}
+      unread={sms}
+      unreadSplit={{ sms, team: 0, teamChat }}
       today={route.section === 'today' ? { stats, feed: team?.feed ?? null, count: team?.count ?? 0 } : null}
       team={route.section === 'team' ? (team?.members ?? []) : null}
       viewer={{ name: shownName, role: user.roleName }}

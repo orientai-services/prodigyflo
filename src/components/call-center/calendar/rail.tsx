@@ -52,7 +52,7 @@ export function Rail({
                     <b>{timeLabel(visit.startsAt)} {visit.name}</b>
                     <small>{repOf(reps, visit.repKey).label} · {visit.status === 'HOLD' ? 'Hold' : 'Confirmed'}</small>
                   </span>
-                  <Link className="cal-rail-btn" href={leadHref(visit.leadId)}>Call</Link>
+                  <Link prefetch={false} className="cal-rail-btn" href={leadHref(visit.leadId)}>Call</Link>
                 </li>
               ))}
             </ul>
@@ -88,7 +88,7 @@ export function Rail({
                     <b>{lead.name}</b>
                     <small>Next try {railWhen(lead.at, now)} · {who(lead)}</small>
                   </span>
-                  <Link className="cal-rail-btn" href={leadHref(lead.id)}>Open</Link>
+                  <Link prefetch={false} className="cal-rail-btn" href={leadHref(lead.id)}>Open</Link>
                 </li>
               ))}
             </ul>

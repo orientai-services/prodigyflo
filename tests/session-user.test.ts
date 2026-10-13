@@ -46,6 +46,7 @@ async function viaInclude(userId: string): Promise<SessionUser | null> {
     teamId: user.teamId,
     managerId: null,
     avatarUrl: user.avatarUrl,
+    nickname: user.nickname,
     title: user.title,
     permissions: effectivePermissions(user.role.key, user.role.permissions.map((rp) => rp.permission.key as PermissionKey)),
     portalClientId: null,
@@ -66,7 +67,7 @@ async function role(key: RoleKey, name: string, permissions: string[]) {
   return row.id
 }
 
-async function user(label: string, roleId: string, extra: { isActive?: boolean; deletedAt?: Date; avatarUrl?: string; title?: string } = {}) {
+async function user(label: string, roleId: string, extra: { isActive?: boolean; deletedAt?: Date; avatarUrl?: string; nickname?: string; title?: string } = {}) {
   const row = await db.user.create({
     data: { organizationId: orgId, roleId, name: `${label} ${run}`, email: `${label}.${run}@example.test`, passwordHash: 'x', ...extra },
   })
@@ -80,7 +81,7 @@ beforeAll(async () => {
   // ADMIN is not a staff role: it never gets a session.
   const bare = await role('ADMIN', 'Admin', [])
   const client = await role('CLIENT', 'Client', ['clients:read_assigned'])
-  await user('admin', admin, { avatarUrl: '/a.png', title: 'Owner' })
+  await user('admin', admin, { avatarUrl: '/a.png', nickname: 'Boss', title: 'Owner' })
   await user('closer', closer)
   await user('bare', bare)
   await user('client', client)
@@ -121,7 +122,8 @@ describe('getSessionUser', () => {
     expect(closer?.permissions.has('users:manage')).toBe(false)
     state.session = { user: { id: ids.admin } }
     const admin = await getSessionUser()
-    expect(admin).toMatchObject({ isOwner: true, avatarUrl: '/a.png', title: 'Owner', organizationSlug: `${run}-session` })
+    // The nickname rides on the same row, so the Call Center header needs no second read of the user.
+    expect(admin).toMatchObject({ isOwner: true, avatarUrl: '/a.png', nickname: 'Boss', title: 'Owner', organizationSlug: `${run}-session` })
     expect(admin?.permissions.has('telephony:manage')).toBe(true)
   })
 })
