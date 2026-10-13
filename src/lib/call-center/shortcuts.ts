@@ -20,7 +20,7 @@ export const SHORTCUTS: { keys: string; what: string }[] = [
   { keys: 'J / K', what: 'Next / previous lead' },
   { keys: 'C', what: 'Call the open lead' },
   { keys: 'T', what: 'Take the open lead' },
-  { keys: '1–9', what: 'Record a result, in the order of the Result buttons' },
+  { keys: '1–9', what: 'Record a result, in the order of the Result list' },
   { keys: 'N', what: 'Write a note' },
   { keys: '/', what: 'Search leads' },
   { keys: 'P', what: 'Power mode on or off' },
