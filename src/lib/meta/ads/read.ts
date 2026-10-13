@@ -1,7 +1,9 @@
 import 'server-only'
 import { db } from '@/lib/db'
 import { can, ForbiddenError, type SessionUser } from '@/lib/rbac'
-import { adsBinding, isBoundOrg } from './allowlist'
+import { Prisma } from '@prisma/client'
+import { adsBinding, allowedAccountsForOrg, isBoundOrg } from './allowlist'
+import { onlyAccount, rangeText, reportAccount, totalsOfRows } from './scope'
 import { resolveAdsConfig, type AdsConfig } from './config'
 import type { GraphErrorKind } from './graph-client'
 import {
@@ -65,7 +67,16 @@ export type SyncState = {
 export type AdsDashboard = {
   account: AccountCard | null
   window: AdsWindow
+  /** Calendar days the window's numbers cover, e.g. "Sep 13 – Oct 12" (Meta's own range). */
+  period: string | null
+  /** Account totals for the window (Meta's account-level insights). */
   totals: Metrics
+  /** Bottom row of the ads table: exactly the sum of the rows shown above it. */
+  treeTotals: Metrics
+  /** All-time spend from the insights (window "max"), unlike the billing counter on the account card. */
+  allTimeSpend: number | null
+  /** Rows stored in this workspace for any ad account other than the reported one. Never shown, never summed. */
+  foreignRows: number
   counts: { campaigns: number; adSets: number; ads: number; activeAds: number }
   tree: (CampaignNode | RemainderNode)[]
   daily: { date: string; spend: number; leads: number }[]
@@ -126,11 +137,38 @@ function requireManage(user: SessionUser) {
   if (!can(user, 'connectors:manage')) throw new ForbiddenError()
 }
 
-/** Mode + the one account this view shows. No ads-table query for an unbound workspace. */
+/**
+ * Mode + the one account this view shows. No ads-table query for an unbound
+ * workspace, and never an account that isn't on this workspace's allowlist.
+ */
 async function context(user: SessionUser): Promise<{ config: AdsConfig; account: string | null }> {
   const config = await resolveAdsConfig(user.organizationId)
   if (config.mode === 'not_connected') return { config, account: null }
-  return { config, account: config.adAccountId ?? null }
+  return { config, account: reportAccount(allowedAccountsForOrg(user.organizationId), config.adAccountId) }
+}
+
+/**
+ * How many rows this workspace holds for ad accounts other than `account`.
+ * They are never read into a view (every query filters on the account); this
+ * only lets the page say so if any ever appear. One round trip.
+ */
+async function countForeignRows(orgId: string, account: string): Promise<number> {
+  try {
+    const rows = await db.$queryRaw<{ n: bigint }[]>(Prisma.sql`
+      SELECT (
+        (SELECT count(*) FROM "MetaAdAccount" WHERE "organizationId" = ${orgId} AND "adAccountId" <> ${account}) +
+        (SELECT count(*) FROM "MetaInsightSummary" WHERE "organizationId" = ${orgId} AND "adAccountId" <> ${account}) +
+        (SELECT count(*) FROM "MetaInsightDaily" WHERE "organizationId" = ${orgId} AND "adAccountId" <> ${account}) +
+        (SELECT count(*) FROM "MetaAd" WHERE "organizationId" = ${orgId} AND "adAccountId" <> ${account}) +
+        (SELECT count(*) FROM "AdSet" WHERE "organizationId" = ${orgId} AND "adAccountId" IS NOT NULL AND "adAccountId" <> ${account}) +
+        (SELECT count(*) FROM "Campaign" WHERE "organizationId" = ${orgId} AND channel = 'meta' AND "adAccountId" IS NOT NULL AND "adAccountId" <> ${account}) +
+        (SELECT count(*) FROM "MetaSpendCycle" WHERE "organizationId" = ${orgId} AND "adAccountId" <> ${account}) +
+        (SELECT count(*) FROM "MetaBillingEvent" WHERE "organizationId" = ${orgId} AND "adAccountId" <> ${account})
+      ) AS n`)
+    return Number(rows[0]?.n ?? 0)
+  } catch {
+    return 0
+  }
 }
 
 type AccountRow = NonNullable<Awaited<ReturnType<typeof loadAccount>>>
@@ -192,7 +230,7 @@ function sumsOf(r: Pick<MetaInsightSummary, 'spend' | 'impressions' | 'reach' | 
 
 function emptyDashboard(window: AdsWindow, mode: SyncState['mode'], canManage: boolean): AdsDashboard {
   return {
-    account: null, window, totals: EMPTY_METRICS, counts: { campaigns: 0, adSets: 0, ads: 0, activeAds: 0 }, tree: [], daily: [],
+    account: null, window, period: null, totals: EMPTY_METRICS, treeTotals: EMPTY_METRICS, allTimeSpend: null, foreignRows: 0, counts: { campaigns: 0, adSets: 0, ads: 0, activeAds: 0 }, tree: [], daily: [],
     sync: syncStateFor(mode, null, false), writesEnabled: false, canManage,
   }
 }
@@ -213,17 +251,28 @@ export async function getAdsDashboard(user: SessionUser, window: AdsWindow): Pro
   const today = dayInZone(new Date(), tz)
   const scope = { organizationId: orgId, adAccountId: account }
 
-  const [accountSummary, maxSummary, adSummaries, ad7, campaigns, adSets, ads, campDaily, accDaily] = await Promise.all([
+  // Every query filters on the one reported account; onlyAccount() re-checks the rows that come back.
+  const [accountSummaryRow, maxSummaryRow, adSummaryRows, ad7Rows, campaignRows, adSetRows, adRows, campDailyRows, accDailyRows, foreignRows] = await Promise.all([
     db.metaInsightSummary.findFirst({ where: { ...scope, level: 'ACCOUNT', objectId: account, window: win } }),
-    db.metaInsightSummary.findFirst({ where: { ...scope, level: 'ACCOUNT', objectId: account, window: 'MAXIMUM' }, select: { partial: true } }),
+    db.metaInsightSummary.findFirst({ where: { ...scope, level: 'ACCOUNT', objectId: account, window: 'MAXIMUM' }, select: { adAccountId: true, partial: true, spend: true } }),
     db.metaInsightSummary.findMany({ where: { ...scope, level: 'AD', window: win } }),
     db.metaInsightSummary.findMany({ where: { ...scope, level: 'AD', window: 'LAST_7D' } }),
-    db.campaign.findMany({ where: { ...scope, channel: 'meta' }, select: { id: true, externalId: true, name: true, status: true, effectiveStatus: true, objective: true, budget: true, lifetimeBudget: true } }),
-    db.adSet.findMany({ where: scope, select: { id: true, externalId: true, campaignId: true, name: true, status: true, effectiveStatus: true, dailyBudget: true, lifetimeBudget: true } }),
+    db.campaign.findMany({ where: { ...scope, channel: 'meta' }, select: { id: true, adAccountId: true, externalId: true, name: true, status: true, effectiveStatus: true, objective: true, budget: true, lifetimeBudget: true } }),
+    db.adSet.findMany({ where: scope, select: { id: true, adAccountId: true, externalId: true, campaignId: true, name: true, status: true, effectiveStatus: true, dailyBudget: true, lifetimeBudget: true } }),
     db.metaAd.findMany({ where: scope }),
-    db.metaInsightDaily.findMany({ where: { ...scope, level: 'CAMPAIGN', date: { gte: new Date(`${addDays(today, -30)}T00:00:00Z`) } }, select: { objectId: true, date: true, spend: true, leads: true } }),
-    db.metaInsightDaily.findMany({ where: { ...scope, level: 'ACCOUNT', objectId: account, date: { gte: new Date(`${addDays(today, -29)}T00:00:00Z`) } }, select: { date: true, spend: true, leads: true }, orderBy: { date: 'asc' } }),
+    db.metaInsightDaily.findMany({ where: { ...scope, level: 'CAMPAIGN', date: { gte: new Date(`${addDays(today, -30)}T00:00:00Z`) } }, select: { adAccountId: true, objectId: true, date: true, spend: true, leads: true } }),
+    db.metaInsightDaily.findMany({ where: { ...scope, level: 'ACCOUNT', objectId: account, date: { gte: new Date(`${addDays(today, -29)}T00:00:00Z`) } }, select: { adAccountId: true, date: true, spend: true, leads: true }, orderBy: { date: 'asc' } }),
+    countForeignRows(orgId, account),
   ])
+  const accountSummary = accountSummaryRow?.adAccountId === account ? accountSummaryRow : null
+  const maxSummary = maxSummaryRow?.adAccountId === account ? maxSummaryRow : null
+  const adSummaries = onlyAccount(adSummaryRows, account)
+  const ad7 = onlyAccount(ad7Rows, account)
+  const campaigns = onlyAccount(campaignRows, account)
+  const adSets = onlyAccount(adSetRows, account)
+  const ads = onlyAccount(adRows, account)
+  const campDaily = onlyAccount(campDailyRows, account)
+  const accDaily = onlyAccount(accDailyRows, account)
 
   // Health badges: zero-lead streak from campaign daily rows, inherited by ads.
   const streakByCampaign = new Map<string, number>()
@@ -269,7 +318,11 @@ export async function getAdsDashboard(user: SessionUser, window: AdsWindow): Pro
   return {
     account: cardFor(a),
     window,
+    period: rangeText(accountSummary?.dateStart, accountSummary?.dateStop),
     totals: computeMetrics(accountSums),
+    treeTotals: totalsOfRows(tree),
+    allTimeSpend: maxSummary ? Number(maxSummary.spend) : null,
+    foreignRows,
     counts: {
       campaigns: campaigns.filter((c) => c.effectiveStatus !== 'DELETED').length,
       adSets: adSets.filter((s) => s.effectiveStatus !== 'DELETED').length,

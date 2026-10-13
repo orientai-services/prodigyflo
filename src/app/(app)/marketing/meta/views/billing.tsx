@@ -55,7 +55,7 @@ export function BillingViewSection({ data }: { data: BillingView }) {
         </CardContent>
       </Card>
 
-      <SpendBars title="Daily spend" description="Last 90 days" data={data.spend90} />
+      <SpendBars title={`Daily spend · ${data.account.name}`} description="Last 90 days, from Meta's ad results" data={data.spend90} />
 
       <section>
         <h2 className="mb-2 text-sm font-semibold">Payments and changes</h2>

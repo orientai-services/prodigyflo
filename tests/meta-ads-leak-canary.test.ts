@@ -120,6 +120,13 @@ describe('leak canary', () => {
     expect(conn.allowlist.accounts.map((a) => a.id)).toEqual([ALLOWED_ACCOUNT])
     const dash = await getAdsDashboard(u, '30d')
     expect(dash.totals.spend).toBe(600)
+    // The ads table's bottom row is the sum of its rows, and matches the account tile: no foreign spend in either.
+    expect(dash.treeTotals.spend).toBe(600)
+    expect(Math.round(dash.tree.reduce((a, r) => a + r.metrics.spend, 0) * 100) / 100).toBe(dash.treeTotals.spend)
+    // The planted foreign rows are counted (so the page can flag them) but never summed.
+    expect(dash.foreignRows).toBeGreaterThan(0)
+    expect(dash.account?.adAccountId).toBe(ALLOWED_ACCOUNT)
+    expect(dash.allTimeSpend).not.toBe(FOREIGN_SPEND)
   })
 
   it('legacy consumers', async () => {

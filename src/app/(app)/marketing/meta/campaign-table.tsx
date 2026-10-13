@@ -254,8 +254,8 @@ function isCampaign(row: TreeRow): row is CampaignNode {
 /* ---------------------------------------------------------------- desktop */
 
 function DesktopTable({
-  tree, writes, selectedId, onOpenAd,
-}: { tree: TreeRow[]; writes: boolean; selectedId?: string; onOpenAd: (ad: AdNode) => void }) {
+  tree, totals, totalLabel, writes, selectedId, onOpenAd,
+}: { tree: TreeRow[]; totals: Metrics; totalLabel: string; writes: boolean; selectedId?: string; onOpenAd: (ad: AdNode) => void }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => (selectedId ? { [selectedId]: true } : {}))
   const toggle = useStatusToggle()
   const flip = (id: string) => setExpanded((e) => ({ ...e, [id]: !e[id] }))
@@ -341,6 +341,13 @@ function DesktopTable({
             )
           })}
         </tbody>
+        <tfoot className="bg-surface-sunk/60 border-t font-semibold">
+          <tr>
+            <td />
+            <td colSpan={3} className="px-3 py-2.5">{totalLabel}</td>
+            <MetricCells m={totals} />
+          </tr>
+        </tfoot>
       </table>
     </div>
   )
@@ -429,7 +436,9 @@ function AdSetRows({
 
 /* ------------------------------------------------------------------ phone */
 
-function PhoneList({ tree, selectedId, onOpenAd }: { tree: TreeRow[]; selectedId?: string; onOpenAd: (ad: AdNode) => void }) {
+function PhoneList({
+  tree, totals, totalLabel, selectedId, onOpenAd,
+}: { tree: TreeRow[]; totals: Metrics; totalLabel: string; selectedId?: string; onOpenAd: (ad: AdNode) => void }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => (selectedId ? { [selectedId]: true } : {}))
   const flip = (id: string) => setExpanded((e) => ({ ...e, [id]: !e[id] }))
 
@@ -508,20 +517,34 @@ function PhoneList({ tree, selectedId, onOpenAd }: { tree: TreeRow[]; selectedId
           </li>
         )
       })}
+      <li>
+        <Card className="bg-surface-sunk/60 px-4 py-3">
+          <p className="text-sm font-semibold">{totalLabel}</p>
+          <MetricLine m={totals} />
+        </Card>
+      </li>
     </ul>
   )
 }
 
 export function CampaignTable({
-  tree, writesEnabled, canManage, selectedId,
-}: { tree: TreeRow[]; writesEnabled: boolean; canManage: boolean; selectedId?: string }) {
+  tree, totals, totalLabel, writesEnabled, canManage, selectedId,
+}: {
+  tree: TreeRow[]
+  /** The bottom row: the sum of the top-level rows shown above it (see totalsOfRows). */
+  totals: Metrics
+  totalLabel: string
+  writesEnabled: boolean
+  canManage: boolean
+  selectedId?: string
+}) {
   const [openAd, setOpenAd] = useState<AdNode | null>(null)
   const writes = writesEnabled && canManage
 
   return (
     <div className="space-y-2">
-      <DesktopTable tree={tree} writes={writes} selectedId={selectedId} onOpenAd={setOpenAd} />
-      <PhoneList tree={tree} selectedId={selectedId} onOpenAd={setOpenAd} />
+      <DesktopTable tree={tree} totals={totals} totalLabel={totalLabel} writes={writes} selectedId={selectedId} onOpenAd={setOpenAd} />
+      <PhoneList tree={tree} totals={totals} totalLabel={totalLabel} selectedId={selectedId} onOpenAd={setOpenAd} />
       {!writesEnabled && (
         <p className="text-muted-foreground text-xs">Changes are made in Meta Ads Manager.</p>
       )}

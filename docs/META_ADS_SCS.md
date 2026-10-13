@@ -897,3 +897,12 @@ The cron is the new `vercel.json` entry `/api/jobs/meta-sync` every 10 minutes (
 - New tests: `tests/meta-ads-manage.test.ts` (5) and `src/lib/meta/ads/where.test.ts` (3).
 - Checks: `npx prisma generate`, `npx next typegen`, `npm run typecheck` clean; `npm run lint` 0 errors (1 existing warning in `final-desk.tsx`); `npm test` 142 files / 1412 tests pass; `npm run build` passes (3 existing tracing warnings from the deploy console).
 - Views rendered from mock data to static HTML with the built CSS and checked in Chrome at 1440 px light/dark and in 390 px frames: no horizontal page scroll in any view or theme. The live, signed-in page was not opened (it needs a sign-in); do that in step 9 above.
+
+**2026-10-13, one account, labelled periods** (owner: "it's showing 341 but in the bottom it only shows 147"):
+
+- Cause: no mixing. Every stored ads row in prod belongs to SCS General 1. The $341.69 tile is spend for the last 30 days (Meta's ad results). The $147.25 at the bottom was Meta's `amount_spent`, labelled "Spent all time". With an account spending limit set ($500), `amount_spent` counts toward the limit and restarts at $0 when the limit is reset, so it isn't all-time spend.
+- The account card is now "Billing · SCS General 1": "Spent toward account limit $147.25 of $500.00" next to "Spent all time (ad results)", which comes from the `max` insights window (`allTimeSpend`).
+- The account name and id appear once at the top ("Ad account: SCS General 1 (act_…)"). Tiles, charts, the cycle card and the funnel say which account and which period they cover. The overview names the calendar days (`period`, from the summary's date range).
+- The ads table ends with a "Total · SCS General 1 · <period>" row, `treeTotals = totalsOfRows(tree)`, which is exactly the sum of the rows above it.
+- Query layer: `context()` only returns an account on the workspace's allowlist (`reportAccount`), every dashboard query result is re-filtered with `onlyAccount`, and `foreignRows` counts rows stored for any other account. Those rows are never summed; managers see a warning if the count is ever above 0.
+- Tests: `src/lib/meta/ads/scope.test.ts` (new) and the leak canary now checks `treeTotals`, the sum of the table rows and `foreignRows`.

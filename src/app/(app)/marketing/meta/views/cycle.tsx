@@ -30,8 +30,8 @@ function About() {
 }
 
 export function CycleViewSection({
-  data, canManage, timeZone,
-}: { data: CycleView; canManage: boolean; timeZone: string | null }) {
+  data, canManage, timeZone, accountName,
+}: { data: CycleView; canManage: boolean; timeZone: string | null; accountName: string }) {
   const c = data.current
   const now = new Date()
 
@@ -45,6 +45,7 @@ export function CycleViewSection({
                 <h2 className="text-base font-semibold">
                   Cycle {c.number} · day {Math.min(c.day, c.lengthDays)} of {c.lengthDays}
                 </h2>
+                <p className="text-muted-foreground text-xs">{accountName} only</p>
                 <p className="text-muted-foreground mt-0.5 text-xs">
                   {accountDate(c.startedAt, timeZone)} to {accountDate(c.endsAt, timeZone)}
                   {timeZone ? ` · ${timeZone.replace(/_/g, ' ')} time` : ''}
@@ -61,12 +62,12 @@ export function CycleViewSection({
             </div>
             <Progress value={Math.min(100, (c.day / Math.max(1, c.lengthDays)) * 100)} aria-label={`Day ${c.day} of ${c.lengthDays}`} />
             <dl className="grid grid-cols-3 gap-4">
-              <Fact label="Spend">
+              <Fact label={`Spend · this ${c.lengthDays}-day cycle`}>
                 {c.approximate && <About />}
                 {money(c.spend)}
               </Fact>
-              <Fact label={<Term tip={GLOSSARY.leads}>Leads</Term>}>{count(c.leads)}</Fact>
-              <Fact label={<Term tip={GLOSSARY.cpl}>Cost per lead</Term>}>{unitCost(c.cpl)}</Fact>
+              <Fact label={<Term tip="Leads in ProdigyFlo matched to an ad in this account since the cycle started.">Leads · this cycle</Term>}>{count(c.leads)}</Fact>
+              <Fact label={<Term tip={GLOSSARY.cpl}>Cost per lead · this cycle</Term>}>{unitCost(c.cpl)}</Fact>
             </dl>
           </CardContent>
         </Card>
@@ -94,7 +95,7 @@ export function CycleViewSection({
       )}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold">Past cycles</h2>
+        <h2 className="mb-2 text-sm font-semibold">Past cycles · {accountName}</h2>
         {data.history.length === 0 ? (
           <Card>
             <p className="text-muted-foreground px-4 text-sm">No finished cycles yet.</p>
