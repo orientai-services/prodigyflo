@@ -1,13 +1,35 @@
 'use client'
 
+import { useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Settings2 } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import type { TwilioStatusVM } from '@/lib/telephony/voice-contract'
 import type { PhoneSetupVM } from '@/lib/telephony/ui/phone-setup-data'
-import { CallingRulesCard } from './calling-rules-card'
-import { DncListCard } from './dnc-list-card'
-import { SyncNumbersDialog } from './sync-numbers-dialog'
-import { TwilioStatusCard } from './twilio-status-card'
+
+// The four cards only draw inside the open sheet, so they load on their own (about 85 KB of client code that
+// was on every Call Center first load for owners). They are fetched once the page is idle, so they are there
+// by the time the sheet opens.
+const loadStatus = () => import('./twilio-status-card')
+const loadSync = () => import('./sync-numbers-dialog')
+const loadRules = () => import('./calling-rules-card')
+const loadDnc = () => import('./dnc-list-card')
+const TwilioStatusCard = dynamic(() => loadStatus().then((m) => m.TwilioStatusCard))
+const SyncNumbersDialog = dynamic(() => loadSync().then((m) => m.SyncNumbersDialog))
+const CallingRulesCard = dynamic(() => loadRules().then((m) => m.CallingRulesCard))
+const DncListCard = dynamic(() => loadDnc().then((m) => m.DncListCard))
+
+function usePreloadCards(): void {
+  useEffect(() => {
+    const load = () => void Promise.all([loadStatus(), loadSync(), loadRules(), loadDnc()]).catch(() => {})
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(load, { timeout: 5000 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const timer = window.setTimeout(load, 2000)
+    return () => window.clearTimeout(timer)
+  }, [])
+}
 
 /**
  * The owner's phone tools inside Call Center. Settings → Phone numbers is
@@ -27,6 +49,7 @@ export function PhoneSetupSheet({
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
+  usePreloadCards()
   return (
     <Sheet open={open} onOpenChange={onOpenChange ? (next) => onOpenChange(next) : undefined}>
       <SheetTrigger

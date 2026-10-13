@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { dateTime, relativeTime } from '@/lib/format'
 import type { ConnectionView } from '@/lib/meta/ads/read'
-import { RecheckButton, RematchButton, TestLeadButton } from '../meta-islands'
+import { RecheckButton, RematchButton, TestLeadButton } from './lazy-islands'
 import { CheckRow, type CheckState } from './parts'
 
 function yesNo(v: boolean | null, good: boolean): CheckState {

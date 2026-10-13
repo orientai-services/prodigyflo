@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/empty-state'
 import type { AdsDashboard } from '@/lib/meta/ads/read'
 import { WindowTabs } from '../window-tabs'
-import { CampaignTable } from '../campaign-table'
+import { CampaignTable } from './lazy-islands'
 import { count } from './parts'
 import { WINDOW_WORDS } from './overview'
 
