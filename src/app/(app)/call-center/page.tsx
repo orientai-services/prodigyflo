@@ -41,6 +41,16 @@ async function soft<T>(read: Promise<T>, what: string): Promise<T | null> {
 }
 
 /**
+ * A slot rendered ahead of time. React reports its failure where it renders
+ * (the error boundary, as before); the no-op catch only keeps a failure that
+ * lands while the desk is still loading from counting as unhandled.
+ */
+function started<T>(render: Promise<T>): Promise<T> {
+  render.catch(() => {})
+  return render
+}
+
+/**
  * The dialer app (docs/DIALER_APP.md): one route, sections under `?s=`
  * (Today, Messages, Leads, Booked, History, Team). The desk's leads load on
  * every section (badges, power mode, the wrap-up); each section's own server
@@ -64,6 +74,16 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   const calendarOn = calendarEnabled()
   const route = resolveRoute(params, { adsAllowed })
   const now = new Date()
+
+  // Only the open section's server slot renders. It is started here, before
+  // the desk is awaited, so its reads run beside the desk's rather than after
+  // them (an async server component called directly is a promise React can
+  // render as a node).
+  let slot: React.ReactNode = null
+  if (route.section === 'history') slot = started(HistorySection({ user, params, base: HISTORY_BASE }))
+  else if (route.section === 'messages') slot = started(MessagesSection({ user, params, base: MESSAGES_BASE }))
+  else if (route.ads) slot = started(MetaAdsContent({ user, params, base: ADS_BASE, embedded: true }))
+  else if (route.section === 'booked' && calendarOn) slot = started(CallCenterCalendarTab({ organizationId: user.organizationId, params, viewer: user }))
 
   // The team chat lives on another server (the chat Worker), so its counts
   // are never awaited here: the promise streams to the shell after the page
@@ -105,13 +125,6 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
       ? { vm: setup, status: status && 'account' in status ? (status as TwilioStatusVM) : null }
       : null,
   }
-
-  // Only the open section's server slot renders.
-  let slot: React.ReactNode = null
-  if (route.section === 'history') slot = <HistorySection user={user} params={params} base={HISTORY_BASE} />
-  else if (route.section === 'messages') slot = <MessagesSection user={user} params={params} base={MESSAGES_BASE} />
-  else if (route.ads) slot = <MetaAdsContent user={user} params={params} base={ADS_BASE} embedded />
-  else if (route.section === 'booked' && calendarOn) slot = <CallCenterCalendarTab organizationId={user.organizationId} params={params} viewer={user} />
 
   return (
     <CallCenter
