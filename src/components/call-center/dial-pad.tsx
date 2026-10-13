@@ -79,7 +79,7 @@ export function DialPad({
 
   const press = (key: string) => setTyped((now) => cleanTyped(now + key))
   // On a phone it is a bottom sheet: drag it down to close, the page stays put, Tab stays inside.
-  useSheet(rootRef, onClose)
+  useSheet(rootRef, onClose, {}, ignore)
   const back = () => setTyped((now) => now.slice(0, -1))
   const pressCall = () => {
     const button = callRef.current?.querySelector('button')

@@ -61,7 +61,13 @@ function typing(target: EventTarget | null): boolean {
  * what opened it; a focused field scrolls above the keyboard. Only while CSS
  * lays the element out as a bottom sheet: a desk popover is left alone.
  */
-export function useSheet(ref: RefObject<HTMLElement | null>, onClose: () => void, options: { lock?: boolean } = {}): void {
+export function useSheet(
+  ref: RefObject<HTMLElement | null>,
+  onClose: () => void,
+  options: { lock?: boolean } = {},
+  /** The control that opened the sheet, for Safari, which never focuses a tapped button. */
+  openerRef?: RefObject<HTMLElement | null>,
+): void {
   const close = useRef(onClose)
   useEffect(() => {
     close.current = onClose
@@ -71,7 +77,8 @@ export function useSheet(ref: RefObject<HTMLElement | null>, onClose: () => void
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const opener = document.activeElement as HTMLElement | null
+    const focused = document.activeElement as HTMLElement | null
+    const opener = focused && focused !== document.body ? focused : (openerRef?.current ?? null)
     const bottom = isBottomSheet(el)
     if (bottom && lock) lockPage()
     const backdrop = el.previousElementSibling instanceof HTMLElement && /backdrop/.test(el.previousElementSibling.className)
@@ -193,5 +200,5 @@ export function useSheet(ref: RefObject<HTMLElement | null>, onClose: () => void
         opener.focus({ preventScroll: true })
       }
     }
-  }, [ref, lock])
+  }, [ref, lock, openerRef])
 }
