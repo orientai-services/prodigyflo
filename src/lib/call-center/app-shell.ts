@@ -228,6 +228,8 @@ export function noteSnippet(lead: CallLead, max = 90): string | null {
   for (let i = lead.trail.length - 1; i >= 0; i -= 1) {
     const event = lead.trail[i]
     if (event.kind !== 'note') continue
+    // "Calendar hold placed …" / "Call back due …" are the calendar's own lines, not the lead's note.
+    if (/^(Calendar hold placed|Call back due)\b/.test(event.detail)) continue
     const text = event.detail.replace(/\d{5,}/g, '····').replace(/\s+/g, ' ').trim()
     if (!text) continue
     return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text

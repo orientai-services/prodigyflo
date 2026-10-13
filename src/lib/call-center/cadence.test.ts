@@ -6,6 +6,7 @@ import {
   cadenceExhausted,
   cadenceStepLabel,
   callbackChips,
+  firstOpenDay,
   carrierVerdict,
   clampToDeskWindow,
   dayKey,
@@ -163,6 +164,13 @@ describe('callbacks', () => {
     // 19:30 PDT: "in 1 hour" would be 20:30, so it moves to 10:00 tomorrow.
     const late = callbackChips(new Date('2026-10-10T02:30:00.000Z'), LA)
     expect(late[0].at).toBe('2026-10-10T17:00:00.000Z')
+  })
+
+  it('opens the slot picker on the first day that still has a slot', () => {
+    expect(firstOpenDay(slotDays(now, LA), LA, now)).toBe(0)
+    // 19:45 PDT: nothing is left today, so the picker starts on tomorrow.
+    const late = new Date('2026-10-10T02:45:00.000Z')
+    expect(firstOpenDay(slotDays(late, LA), LA, late)).toBe(1)
   })
 
   it('lists 30-minute slots from 9:00 to 19:30 that are still ahead', () => {

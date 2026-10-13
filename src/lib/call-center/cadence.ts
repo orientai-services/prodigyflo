@@ -223,6 +223,12 @@ export function slotDays(now: Date, zone: string | null | undefined, count = 14)
   })
 }
 
+/** The first of `days` that still has a slot ahead (late in the evening that is tomorrow), else 0. */
+export function firstOpenDay(days: SlotDay[], zone: string | null | undefined, now: Date): number {
+  const index = days.findIndex((day) => daySlots(day, zone, now).length > 0)
+  return index < 0 ? 0 : index
+}
+
 /** 30-minute slots 9:00–19:30 lead-local on one day, only the ones still ahead. */
 export function daySlots(day: Pick<WallTime, 'year' | 'month' | 'day'>, zone: string | null | undefined, now: Date): string[] {
   const z = safeZone(zone)

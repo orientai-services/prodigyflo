@@ -39,7 +39,6 @@ import { MissedCalls } from '@/components/telephony/missed-calls'
 import { PhoneSetupSheet } from '@/components/telephony/phone-setup-sheet'
 import {
   CURRENT_REP,
-  HELD_UNTIL_MORNING,
   OUTCOMES,
   QUIET_BANNER,
   applyLeadAction,
@@ -58,13 +57,14 @@ import {
   languageLabel,
   lockLabel,
   nextCallableLead,
-  nextTryLine,
+  nextTryValue,
   phoneLabel,
   saveNote,
   seedLeads,
   sendIntakeLink,
   takeLead,
   textHeldUntilMorning,
+  triesCount,
   triesLine,
   visibleLeads,
   type CallLead,
@@ -92,6 +92,9 @@ import { useChatHost } from './use-chat-host'
 import { chatHref } from './messages/chat/host-bus'
 import '../final-desk/final-desk.css'
 import './call-center.css'
+
+/** Under Text when it is before 9 AM or after 8 PM where the lead lives (the trail still says HELD_UNTIL_MORNING). */
+const TEXT_HELD_NOTE = 'It is outside 9 AM–8 PM their time: a text now is held until morning.'
 
 /** Below this width the lead opens as a full-screen panel instead of the split view. */
 const PHONE_QUERY = '(max-width: 767.98px)'
@@ -326,7 +329,7 @@ export function CallCenter({
     last && wrapLead && wrapLead.persisted && !wrapLead.dnc && last.seq > wrappedSeq && !resulted && canRecordOutcome(wrapLead, repFor(wrapLead)),
   )
 
-  async function takeForPower(lead: CallLead): Promise<string | null> {
+  async function takeBeforeDial(lead: CallLead): Promise<string | null> {
     if (lead.lockedBy && lead.lockedBy === viewerId) return null
     const result = await takeCallCenterLead(lead.id)
     if (!result.ok) return result.error
@@ -345,7 +348,7 @@ export function CallCenter({
     ranked: board.ranked,
     lastLeadId: wrapLeadId,
     wrapPending,
-    take: takeForPower,
+    take: takeBeforeDial,
     release: releaseForPower,
     select: (lead) => openLead(lead),
   })
@@ -776,6 +779,7 @@ export function CallCenter({
                   resultOwed={resultOwed}
                   onOpen={openLead}
                   onTelDialed={(lead) => { void commit(lead, () => recordCallCenterAttempt(lead.id), () => {}) }}
+                  onPrepareCall={takeBeforeDial}
                 />
               ) : (
               <div className="card lead-table">
@@ -844,8 +848,8 @@ export function CallCenter({
                       {/* Plain text, never a tel: link: every dial goes through the server check behind Call. */}
                       <div><dt>Phone</dt><dd>{dialPhone ?? phoneLabel(selected)}</dd></div>
                       {dialEmail ? <div><dt>Email</dt><dd>{dialEmail}</dd></div> : null}
-                      <div><dt>Tries</dt><dd>{triesLine(selected)}</dd></div>
-                      {nextTryLine(selected) ? <div><dt>Next try</dt><dd>{nextTryLine(selected)}</dd></div> : null}
+                      <div><dt>Tries</dt><dd>{triesCount(selected)}</dd></div>
+                      {nextTryValue(selected) ? <div><dt>Next try</dt><dd>{nextTryValue(selected)}</dd></div> : null}
                       {inboundFormMatch(selected, leads) ? <div><dt>Match</dt><dd>{inboundFormMatch(selected, leads)}</dd></div> : null}
                     </dl>
                     {isExhausted(selected) ? (
@@ -921,7 +925,7 @@ export function CallCenter({
                     </div>
                     {resultOwed ? <p className="muted">Pick a result for the last call first.</p> : null}
                     {selected.persisted ? <p className="muted">Texting leads isn&rsquo;t live yet.</p> : null}
-                    {now && textHeldUntilMorning(selected, now) ? <p className="muted">{HELD_UNTIL_MORNING}</p> : null}
+                    {now && textHeldUntilMorning(selected, now) ? <p className="muted">{TEXT_HELD_NOTE}</p> : null}
                     <h3>Result</h3>
                     {scheduling === selected.id && !(wrapPending && wrapLead?.id === selected.id) ? (
                       scheduler(selected)

@@ -225,28 +225,32 @@ export function VisitScheduler({
           {chips.every((chip) => chip.problem) ? <p className="muted">No open times for {rep?.label} that day. Try another rep or day.</p> : null}
         </section>
       </div>
-      {picked && !done ? (
-        <p className="cal-pick">
-          {visitWhen(picked, new Date(Date.parse(picked) + VISIT_MINUTES * 60_000).toISOString())} with {rep?.label}
-        </p>
-      ) : null}
-      {msg ? <p className={`cal-msg ${msg.ok ? 'ok' : 'bad'}`} role="status">{msg.text}</p> : null}
-      <div className="cal-sched-acts">
-        {done ? (
-          <button type="button" className="btn" onClick={onClose}>Done</button>
-        ) : (
-          <>
-            <button type="button" className="btn" disabled={!picked || saving} onClick={() => { void save(false) }}>
-              {saving ? 'Saving…' : moving ? 'Move visit' : 'Place hold'}
-            </button>
-            {liveCall && !moving ? (
-              <button type="button" className="btn secondary" disabled={!picked || saving} onClick={() => { void save(true) }}>
-                Hold and confirm
+      {/* The pick, the result and the buttons stay together: on a phone this footer is sticky, so a
+          "Hold placed" or a refused time is never scrolled out of sight under the buttons. */}
+      <div className="cal-sched-foot">
+        {picked && !done ? (
+          <p className="cal-pick">
+            {visitWhen(picked, new Date(Date.parse(picked) + VISIT_MINUTES * 60_000).toISOString())} with {rep?.label}
+          </p>
+        ) : null}
+        {msg ? <p className={`cal-msg ${msg.ok ? 'ok' : 'bad'}`} role="status">{msg.text}</p> : null}
+        <div className="cal-sched-acts">
+          {done ? (
+            <button type="button" className="btn" onClick={onClose}>Done</button>
+          ) : (
+            <>
+              <button type="button" className="btn" disabled={!picked || saving} onClick={() => { void save(false) }}>
+                {saving ? 'Saving…' : moving ? 'Move visit' : 'Place hold'}
               </button>
-            ) : null}
-            <button type="button" className="btn secondary" onClick={onClose}>Cancel</button>
-          </>
-        )}
+              {liveCall && !moving ? (
+                <button type="button" className="btn secondary" disabled={!picked || saving} onClick={() => { void save(true) }}>
+                  Hold and confirm
+                </button>
+              ) : null}
+              <button type="button" className="btn secondary" onClick={onClose}>Cancel</button>
+            </>
+          )}
+        </div>
       </div>
     </Sheet>
   )

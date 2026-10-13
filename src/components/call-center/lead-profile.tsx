@@ -15,7 +15,7 @@ import {
   intakeSentLine,
   profileStateOf,
   textHeldUntilMorning,
-  triesLine,
+  triesCount,
   type CallLead,
   type IntakeMode,
   type LeadHandoff,
@@ -394,7 +394,7 @@ export function LeadProfile({ api, now, sheetHost }: { api: LeadHandoffApi; now:
       <div><dt>Name</dt><dd>{lead.name}</dd></div>
       <div><dt>ZIP</dt><dd>{lead.zip ?? '—'}</dd></div>
       <div><dt>Page</dt><dd>{lead.page}</dd></div>
-      <div><dt>Tries</dt><dd>{triesLine(lead)}</dd></div>
+      <div><dt>Tries</dt><dd>{triesCount(lead)}</dd></div>
       <div><dt>Came in</dt><dd>{formatWhen(lead.arrivedAt)}</dd></div>
     </dl>
   )

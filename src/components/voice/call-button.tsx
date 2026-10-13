@@ -33,6 +33,7 @@ export function CallButton({
   canOverrideHours = false,
   disabled = false,
   className,
+  prepare,
   onDialed,
 }: {
   target: DialTarget
@@ -47,6 +48,12 @@ export function CallButton({
   disabled?: boolean
   /** Extra classes on the wrapper (e.g. full width on a phone). */
   className?: string
+  /**
+   * Runs before the server check, e.g. the desk taking (locking) a lead so a
+   * Call pressed on Today doesn't come back "Take this lead first". Resolves to
+   * null, or the plain reason it could not.
+   */
+  prepare?: () => Promise<string | null>
   onDialed?: (via: 'browser' | 'tel') => void
 }) {
   const voice = useVoice()
@@ -81,6 +88,11 @@ export function CallButton({
     setPending(true)
     setNotice(null)
     try {
+      const refused = prepare ? await prepare() : null
+      if (refused) {
+        setBlocked({ ok: false, code: 'CHECK_FAILED', reason: refused, canOverride: null })
+        return
+      }
       const res = await checkDial(target, voice?.lineId ?? undefined, override)
       // A refused dial is a DialCheck ({ ok: false, code, reason, canOverride }),
       // not an action failure: read it as one so the plain reason and the

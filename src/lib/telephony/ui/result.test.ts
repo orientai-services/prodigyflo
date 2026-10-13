@@ -10,3 +10,13 @@ describe('isDialCheckAnswer', () => {
     expect(actionFailure({ ok: false, error: 'boom' })?.error).toBe('boom')
   })
 })
+
+describe('whenLabel', () => {
+  it('is Pacific whatever the machine zone, so a server render and the browser agree', async () => {
+    const { whenLabel } = await import('./result')
+    expect(whenLabel('2026-10-12T07:43:00.000Z')).toBe('Oct 12, 12:43 am')
+    expect(whenLabel('2026-10-08T15:04:00Z')).toBe('Oct 8, 8:04 am')
+    expect(whenLabel(null)).toBe('—')
+    expect(whenLabel('nope')).toBe('—')
+  })
+})

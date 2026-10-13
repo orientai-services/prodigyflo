@@ -509,14 +509,25 @@ export function phoneLabel(lead: CallLead): string {
   return lead.last4 ? `···· ${lead.last4}` : '—'
 }
 
+/** "1 of 7": the value under a "Tries" label. */
+export function triesCount(lead: CallLead): string {
+  return `${lead.tries} of ${TRY_LIMIT}`
+}
+
 export function triesLine(lead: CallLead): string {
-  return `Tries ${lead.tries} of ${TRY_LIMIT}`
+  return `Tries ${triesCount(lead)}`
 }
 
 export function nextTryLine(lead: CallLead): string | null {
   if (lead.nextAttemptAt) return `${followUpOf(lead) === 'callback' ? 'Call back' : 'Next try'} ${formatWhen(lead.nextAttemptAt)}`
   if (cadenceExhausted(lead.tries)) return 'No further tries'
   return null
+}
+
+/** The value under a "Next try" label: the label is not repeated ("Sep 29, 10:05 AM", "Call back Oct 10, 2:30 PM"). */
+export function nextTryValue(lead: CallLead): string | null {
+  if (lead.nextAttemptAt && followUpOf(lead) !== 'callback') return formatWhen(lead.nextAttemptAt)
+  return nextTryLine(lead)
 }
 
 /** Out of cadence tries with nothing booked: the desk suggests closing it. */
