@@ -172,6 +172,8 @@ export function CallButton({
                   placeholder={blocked.canOverride === 'hours' ? 'They asked us to call back at this time' : 'They asked us to call them today'}
                   onChange={(e) => setReason(e.target.value)}
                   aria-label="Reason for calling anyway"
+                  autoCapitalize="sentences"
+                  enterKeyHint="done"
                 />
               </label>
               <div className="flex gap-2">

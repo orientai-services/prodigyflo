@@ -83,7 +83,7 @@ export async function HistorySection(props: {
             <label className="hist-field">
               <Search size={16} aria-hidden="true" />
               <span className="sr">Search by name or last 4 digits</span>
-              <input type="search" name="hq" defaultValue={state.q} placeholder="Name or last 4" autoComplete="off" maxLength={60} />
+              <input type="search" name="hq" defaultValue={state.q} placeholder="Name or last 4" autoComplete="off" maxLength={60} enterKeyHint="search" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
             </label>
             <button type="submit" className="btn">Search</button>
             {state.q ? (
