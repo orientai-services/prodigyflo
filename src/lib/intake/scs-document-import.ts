@@ -13,6 +13,7 @@ import { scsRequirementId } from './scs-document-requirements'
 const MAX_IMPORT_MB = 25
 const MAX_ATTEMPTS = 8
 const MAX_EXTRACTION_ATTEMPTS = 3
+export const FAILED_RETRY_BACKOFF_MS = 2 * 60_000
 const PUBLIC_RECORD_SUMMARY = 'public_record_summary'
 // The leading category also prevents filename heuristics from presenting a
 // generated UCC/deed search guide as an actual record on the client profile.
@@ -337,7 +338,16 @@ export async function runPendingScsDocumentImports(limit = 5, exact?: { leadId: 
     data: { status: 'FAILED', lastError: 'Import worker interrupted; bounded retry pending.' },
   })
   const rows = await db.externalDocumentImport.findMany({
-    where: { ...scope, status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_ATTEMPTS } },
+    where: {
+      ...scope,
+      attempts: { lt: MAX_ATTEMPTS },
+      AND: [{ OR: [
+        { status: 'PENDING' },
+        // Backoff: a failed row waits at least FAILED_RETRY_BACKOFF_MS before its next try,
+        // so one failure cannot burn every attempt in seconds.
+        { status: 'FAILED', updatedAt: { lt: new Date(Date.now() - FAILED_RETRY_BACKOFF_MS) } },
+      ] }],
+    },
     // New customer uploads are time-sensitive. Prioritize fresh documents and
     // newest first-attempt work; failed rows remain retryable behind it.
     orderBy: [{ attempts: 'asc' }, { createdAt: 'desc' }],

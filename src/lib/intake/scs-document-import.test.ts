@@ -192,7 +192,10 @@ describe('runPendingScsDocumentImports', () => {
     await expect(runPendingScsDocumentImports()).resolves.toEqual({ attempted: 0, imported: 0, failed: 0, skipped: 0 })
 
     expect(mocks.importFindMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ status: { in: ['PENDING', 'FAILED'] } }),
+      where: expect.objectContaining({ AND: [{ OR: [
+        { status: 'PENDING' },
+        { status: 'FAILED', updatedAt: { lt: expect.any(Date) } },
+      ] }] }),
     }))
   })
 
