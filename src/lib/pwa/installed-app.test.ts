@@ -181,5 +181,11 @@ describe('auth redirects stay on the current host', () => {
     expect(sameSitePath('//evil.example/x', base)).toBe('/')
     expect(sameSitePath('/\\evil.example', base)).toBe('/')
     expect(sameSitePath('/', base)).toBe('/')
+    // Production's AUTH_URL is the apex while the app runs on www: both are this site.
+    expect(sameSitePath('https://www.prodigyflo.ai/call-center?s=messages', 'https://prodigyflo.ai')).toBe('/call-center?s=messages')
+    expect(sameSitePath('https://prodigyflo.ai/app', base)).toBe('/app')
+    expect(sameSitePath('https://evilprodigyflo.ai/x', 'https://prodigyflo.ai')).toBe('/')
+    expect(sameSitePath('https://www.prodigyflo.ai.evil.example/x', 'https://prodigyflo.ai')).toBe('/')
+    expect(sameSitePath('http://www.prodigyflo.ai/x', 'https://prodigyflo.ai')).toBe('/')
   })
 })

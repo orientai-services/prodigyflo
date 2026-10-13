@@ -102,7 +102,12 @@ export function sameSitePath(url: string, baseUrl: string): string {
   if (/^\/(?![/\\])/.test(url)) return url
   try {
     const target = new URL(url)
-    if (target.origin === new URL(baseUrl).origin) return target.pathname + target.search + target.hash
+    const base = new URL(baseUrl)
+    // AUTH_URL is the apex (prodigyflo.ai) while the app lives on www: both are this site.
+    const bare = (h: string) => h.replace(/^www\./, '')
+    if (target.protocol === base.protocol && target.port === base.port && bare(target.hostname) === bare(base.hostname)) {
+      return target.pathname + target.search + target.hash
+    }
   } catch {
     // Not a URL: fall through.
   }
