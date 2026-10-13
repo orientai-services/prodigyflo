@@ -329,7 +329,7 @@ export function CallCenter({
     last && wrapLead && wrapLead.persisted && !wrapLead.dnc && last.seq > wrappedSeq && !resulted && canRecordOutcome(wrapLead, repFor(wrapLead)),
   )
 
-  async function takeForPower(lead: CallLead): Promise<string | null> {
+  async function takeBeforeDial(lead: CallLead): Promise<string | null> {
     if (lead.lockedBy && lead.lockedBy === viewerId) return null
     const result = await takeCallCenterLead(lead.id)
     if (!result.ok) return result.error
@@ -348,7 +348,7 @@ export function CallCenter({
     ranked: board.ranked,
     lastLeadId: wrapLeadId,
     wrapPending,
-    take: takeForPower,
+    take: takeBeforeDial,
     release: releaseForPower,
     select: (lead) => openLead(lead),
   })
@@ -779,6 +779,7 @@ export function CallCenter({
                   resultOwed={resultOwed}
                   onOpen={openLead}
                   onTelDialed={(lead) => { void commit(lead, () => recordCallCenterAttempt(lead.id), () => {}) }}
+                  onPrepareCall={takeBeforeDial}
                 />
               ) : (
               <div className="card lead-table">

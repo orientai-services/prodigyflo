@@ -76,6 +76,7 @@ export function TodayView({
   resultOwed,
   onOpen,
   onTelDialed,
+  onPrepareCall,
 }: {
   board: TodayBoard
   counts: TodayCounts
@@ -90,6 +91,8 @@ export function TodayView({
   onOpen: (lead: CallLead) => void
   /** A `tel:` dial records its own attempt (a browser call is written by the carrier webhooks). */
   onTelDialed: (lead: CallLead) => void
+  /** Takes the lead for this rep before its Call is checked (the server only dials a lead the rep holds). */
+  onPrepareCall?: (lead: CallLead) => Promise<string | null>
 }) {
   const hidden = useSyncExternalStore(onExplainer, explainerHidden, () => false)
   const [listening, setListening] = useState<string | null>(null)
@@ -180,6 +183,7 @@ export function TodayView({
                         who={lead.name}
                         canOverrideHours={canOverrideHours}
                         disabled={!row.available || resultOwed}
+                        prepare={onPrepareCall ? () => onPrepareCall(lead) : undefined}
                         onDialed={(via) => {
                           if (via === 'tel') onTelDialed(lead)
                         }}
