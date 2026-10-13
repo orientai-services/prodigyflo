@@ -33,6 +33,8 @@ export type SessionUser = {
   teamId: string | null
   managerId: string | null
   avatarUrl: string | null
+  /** The display nickname (Profile sheet). Read with the session row, so a name saved a moment ago shows. */
+  nickname?: string | null
   title: string | null
   permissions: Set<PermissionKey>
   /** Retained type compatibility; always null for active staff. */
@@ -57,6 +59,7 @@ export type SessionRow = {
   roleId: string
   teamId: string | null
   avatarUrl: string | null
+  nickname: string | null
   title: string | null
   organizationName: string
   /** `slug` is the per-account branding key — see components/brand/org-brand. */
@@ -74,7 +77,7 @@ export type SessionRow = {
  */
 export async function loadSessionRow(userId: string): Promise<SessionRow | null> {
   const rows = await db.$queryRaw<SessionRow[]>`
-    SELECT u."id", u."name", u."email", u."organizationId", u."roleId", u."teamId", u."avatarUrl", u."title",
+    SELECT u."id", u."name", u."email", u."organizationId", u."roleId", u."teamId", u."avatarUrl", u."nickname", u."title",
            o."name" AS "organizationName", o."slug" AS "organizationSlug",
            r."key"::text AS "roleKey", r."name" AS "roleName",
            COALESCE(array_agg(p."key") FILTER (WHERE p."key" IS NOT NULL), ARRAY[]::text[]) AS "permissionKeys"
@@ -109,6 +112,7 @@ export function sessionUserFrom(user: SessionRow): SessionUser | null {
     teamId: user.teamId,
     managerId: null,
     avatarUrl: user.avatarUrl,
+    nickname: user.nickname ?? null,
     title: user.title,
     permissions: effectivePermissions(user.roleKey, user.permissionKeys as PermissionKey[]),
     portalClientId: null,

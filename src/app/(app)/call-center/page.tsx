@@ -15,7 +15,6 @@ import { loadPhoneSetup } from '@/lib/telephony/ui/phone-setup-data'
 import { MetaAdsContent } from '@/app/(app)/marketing/meta/dashboard'
 import { calendarEnabled } from '@/lib/call-center/calendar/config'
 import { CallCenterCalendarTab } from '@/components/call-center/calendar/calendar-tab'
-import { db } from '@/lib/db'
 import { profileName } from '@/lib/people/profile-name'
 
 export const metadata: Metadata = { title: 'Call Center' }
@@ -91,7 +90,7 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
   // desk or the 20 s refresh.
   const teamChat = teamChatCountsOnce(user)
 
-  const [desk, voice, missed, setup, status, sms, stats, team, me] = await Promise.all([
+  const [desk, voice, missed, setup, status, sms, stats, team] = await Promise.all([
     loadCallCenterDesk(),
     getVoiceSetup().catch((): VoiceSetup => ({ ready: false, reason: "Phone calling isn't set up yet." })),
     listMissedCalls().catch(() => [] as MissedCallVM[]),
@@ -102,15 +101,15 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
     unreadMessageCount(user).catch(() => 0),
     route.section === 'today' ? soft(loadTodayStats(user, now), 'today stats') : Promise.resolve(null),
     route.section === 'today' || route.section === 'team' ? soft(loadTeamToday(user, now), 'team today') : Promise.resolve(null),
-    // The header's profile picture: the session row has no nickname, and a name saved a moment ago must show.
-    soft(db.user.findUnique({ where: { id: user.id }, select: { name: true, nickname: true, avatarUrl: true } }), 'profile'),
   ])
+  // The header's profile picture. The session row is read fresh on every request (name, nickname and photo), so a
+  // name saved a moment ago shows without a second read.
   const profile = {
-    name: me?.name ?? user.name,
-    nickname: me?.nickname ?? null,
+    name: user.name,
+    nickname: user.nickname ?? null,
     email: user.email,
     role: user.roleName,
-    avatarUrl: me ? me.avatarUrl : user.avatarUrl,
+    avatarUrl: user.avatarUrl,
   }
   const shownName = profileName(profile) ?? 'You'
 
