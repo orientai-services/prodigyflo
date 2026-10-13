@@ -139,6 +139,10 @@ Server: `src/lib/call-center/messages.ts`; UI
   The lead panel's Result, the wrap-up, the Missed "Close as" and the Booked
   visit Outcome are each one grouped dropdown, never a row of buttons
   (docs/DIALER_POWER.md § Result dropdowns).
+  The lead panel's Comms trail shows only the newest 3 call recordings (and
+  every event after the oldest of them); "Show more (N)" above the list
+  reveals 10 more at a time and "Show less" collapses back to 3
+  (`src/lib/call-center/trail-window.ts`, `comms-trail.tsx`).
 - **Booked** (lane A): the calendar planner as built.
 
 ## 6. Interfaces between lanes
