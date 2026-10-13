@@ -163,6 +163,8 @@ describe('call center messages', () => {
   })
 
   it('sends a text to a lead through the outbound decision and keeps it on the thread', async () => {
+    // The inbound text was filed on the real clock; put it before OPEN so "last message" doesn't depend on the time of day.
+    await db.callCenterEvent.updateMany({ where: { leadId, type: 'SMS', direction: 'in' }, data: { createdAt: new Date(OPEN.getTime() - 3_600_000) } })
     const res = await sendLeadText(repA.actor, leadId, 'Hi Pat, this is Gatsby. Good time to talk?', OPEN)
     expect(res.ok).toBe(true)
     if (!res.ok) return
