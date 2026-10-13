@@ -729,7 +729,8 @@
   .final-desk.call-center .attack-acts .btn { min-height: 44px; }
   .final-desk.call-center .attack-acts .listen,
   .final-desk.call-center .attack-acts .chip-bad { min-height: 44px; }
-  .final-desk.call-center .attack-name { min-height: 28px; font-size: 16px; }
+  /* The name opens the lead: a 44 px tap target that still sits in a 28 px line. */
+  .final-desk.call-center .attack-name { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; margin: -8px 0; font-size: 16px; }
   .final-desk.call-center .team-stats dd { font-size: 14px; }
 }
 @media (max-width: 639.98px) {
@@ -787,7 +788,7 @@
 .final-desk.call-center .handoff { display: grid; gap: 8px; justify-items: start; }
 .final-desk.call-center .split-btn { position: relative; display: inline-flex; }
 .final-desk.call-center .split-btn > .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.final-desk.call-center .split-btn > .split-caret { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(255, 255, 255, .35); padding: 0 12px; }
+.final-desk.call-center .split-btn > .split-caret { min-width: 44px; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(255, 255, 255, .35); padding: 0 12px; }
 .final-desk.call-center .split-menu {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; display: grid; gap: 2px;
   width: max-content; max-width: min(320px, calc(100vw - 32px)); padding: 6px;
