@@ -1407,3 +1407,61 @@
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
+
+/* ─── Installed app (docs/MOBILE.md "Installed app") ─────────────────────────
+   Platform-level native feel for every page. Runs in the browser too; the
+   rules that would change browser behaviour are scoped to `html.pf-standalone`
+   (set before first paint by the root layout's head script). */
+
+/* The status-bar strip of an edge-to-edge iPhone/iPad app. black-translucent
+   draws a WHITE clock straight on the page, so the strip is painted in the
+   desk navy (the phone top bar's colour) above everything. Height is 0 in a
+   browser tab and on Android, where the inset is 0. */
+.pf-status-band {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 2147483000;
+  height: env(safe-area-inset-top, 0px);
+  background: #12202c;
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  .pf-status-band { background: #0b151d; }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* No 300 ms double-tap-zoom wait on anything you tap; pinch zoom still works. */
+a, button, input, select, textarea, label, summary, [role="button"], [role="tab"], [role="switch"] {
+  touch-action: manipulation;
+}
+/* Long-pressing a control selects its label or pops a link preview: not in an app. */
+button, [role="button"], [role="tab"], .cc-tabs, .cc-tabs a, .rail-toggle, .final-desk .rail .nav > * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cc-tabs a, .final-desk .rail .nav > a {
+  -webkit-touch-callout: none;
+}
+/* Inside the installed app the page never rubber-bands to show the canvas
+   behind it, and a stray horizontal swipe never pans the whole app. Inner
+   scrollers keep their own momentum. */
+html.pf-standalone,
+html.pf-standalone body {
+  overscroll-behavior: none;
+}
+html.pf-standalone body {
+  min-height: 100dvh;
+}
+/* iOS zooms the page when a field under 16 px takes focus, and stays zoomed.
+   Every touch device (phones AND iPads) gets 16 px fields. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
+}

@@ -74,6 +74,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    /**
+     * Every post-sign-in / sign-out redirect stays on the host the user is
+     * on, as a path. Auth.js's default builds an ABSOLUTE url on AUTH_URL's
+     * host; if that ever differs from the one the app was installed from
+     * (apex vs www, a preview), the home-screen app would navigate out of its
+     * own scope and iOS would show Safari's toolbars around it
+     * (docs/MOBILE.md "Installed app"). Off-site targets fall back to '/'.
+     */
+    redirect({ url, baseUrl }) {
+      return sameSitePath(url, baseUrl)
+    },
     jwt({ token, user }) {
       if (user?.id) token.uid = user.id
       return token
@@ -84,3 +95,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 })
+
+/** A redirect target as a same-origin path ('/' for anything off-site). Exported for tests. */
+export function sameSitePath(url: string, baseUrl: string): string {
+  // '//host' and '/\host' are protocol-relative to a browser: off-site.
+  if (/^\/(?![/\\])/.test(url)) return url
+  try {
+    const target = new URL(url)
+    const base = new URL(baseUrl)
+    // AUTH_URL is the apex (prodigyflo.ai) while the app lives on www: both are this site.
+    const bare = (h: string) => h.replace(/^www\./, '')
+    if (target.protocol === base.protocol && target.port === base.port && bare(target.hostname) === bare(base.hostname)) {
+      return target.pathname + target.search + target.hash
+    }
+  } catch {
+    // Not a URL: fall through.
+  }
+  return '/'
+}

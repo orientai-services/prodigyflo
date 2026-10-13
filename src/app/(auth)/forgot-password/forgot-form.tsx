@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { requestPasswordResetAction, type AuthRequestState } from '../actions'
+import { useInstallState } from '@/components/pwa/install-store'
 
 function SubmitButton() {
   const { pending } = useFormStatus()
@@ -20,6 +21,7 @@ function SubmitButton() {
 
 export function ForgotPasswordForm() {
   const [state, action] = useActionState<AuthRequestState, FormData>(requestPasswordResetAction, {})
+  const { standalone } = useInstallState()
 
   if (state.ok) {
     return (
@@ -35,6 +37,12 @@ export function ForgotPasswordForm() {
               If that email has an account, a reset link is on its way. It works once and expires
               in 30 minutes.
             </p>
+            {standalone && (
+              // The link opens in Safari, which has its own sign-in apart from this installed app.
+              <p className="text-muted-foreground mt-2">
+                The link opens in Safari. Set the new password there, then come back to this app and sign in with it.
+              </p>
+            )}
             {state.devLink && (
               <a
                 href={state.devLink}

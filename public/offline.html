@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12202c">
+<meta name="robots" content="noindex">
+<title>Offline · ProdigyFlo</title>
+<style>
+  :root { color-scheme: light; --paper: #faf7f0; --ink: #15202b; --muted: #5b6570; --teal: #0e6b66; --navy: #12202c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  body { font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: grid; place-items: center; min-height: 100dvh;
+         padding: calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px) calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px); }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top); background: var(--navy); }
+  main { max-width: 360px; text-align: center; }
+  img { width: 72px; height: 72px; border-radius: 16px; }
+  h1 { font-size: 22px; margin: 20px 0 6px; font-weight: 600; letter-spacing: -0.01em; }
+  p { margin: 0 0 24px; color: var(--muted); }
+  button { appearance: none; border: 0; border-radius: 12px; background: var(--teal); color: #fff; font: inherit; font-weight: 600; min-height: 48px; padding: 0 28px; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  button:focus-visible { outline: 2px solid var(--navy); outline-offset: 3px; }
+  small { display: block; margin-top: 16px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/brand/prodigyflo/icon-192.png" alt="">
+  <h1>You're offline</h1>
+  <p>ProdigyFlo needs a connection to load your leads and calls. Nothing you saved is lost.</p>
+  <button type="button" id="retry">Try again</button>
+  <small id="hint" hidden>Back online. Opening the app…</small>
+</main>
+<script>
+  // Retry the page the user was trying to open (the worker answered it with this file).
+  var retry = function () { window.location.reload(); };
+  document.getElementById('retry').addEventListener('click', retry);
+  window.addEventListener('online', function () { document.getElementById('hint').hidden = false; setTimeout(retry, 600); });
+</script>
+</body>
+</html>

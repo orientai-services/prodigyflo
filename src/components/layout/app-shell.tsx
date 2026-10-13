@@ -295,7 +295,7 @@ export function AppShell({
           reflows off this width automatically. */}
       <aside
         id="pf-desktop-nav"
-        className="bg-sidebar hidden w-16 shrink-0 flex-col border-r motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out lg:flex [.pf-nav-open_&]:w-60"
+        className="bg-sidebar hidden w-16 shrink-0 flex-col border-r pt-[env(safe-area-inset-top)] motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out lg:flex [.pf-nav-open_&]:w-60"
       >
         <TooltipProvider delay={300}>
           <div className="flex h-14 shrink-0 items-center justify-center [.pf-nav-open_&]:justify-start [.pf-nav-open_&]:px-4">
@@ -377,7 +377,8 @@ export function AppShell({
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="desk-top sticky top-0 z-40 flex h-14 items-center gap-2 border-b px-3 max-sm:gap-1 max-sm:px-1.5 sm:px-5">
+        {/* Edge to edge in the installed app: the bar grows by the status-bar inset (0 in a browser). */}
+        <header className="desk-top sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-2 border-b pt-[env(safe-area-inset-top)] pr-[max(0.75rem,env(safe-area-inset-right))] pl-[max(0.75rem,env(safe-area-inset-left))] max-sm:gap-1 max-sm:pr-[max(0.375rem,env(safe-area-inset-right))] max-sm:pl-[max(0.375rem,env(safe-area-inset-left))] sm:pr-[max(1.25rem,env(safe-area-inset-right))] sm:pl-[max(1.25rem,env(safe-area-inset-left))]">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -425,7 +426,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="min-w-0 flex-1">
+        <main className="min-w-0 flex-1 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
           {/* Page-body entrance, wired once for every page. Keyed by pathname
               so client-side navigations replay it; search-param changes do
               not. Inert under prefers-reduced-motion. */}

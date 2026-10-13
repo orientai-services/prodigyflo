@@ -881,3 +881,35 @@
 }
 .final-desk.call-center .btn.cc-teamchat { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; text-decoration: none; }
 .final-desk.call-center .btn.cc-teamchat svg { width: 16px; height: 16px; color: var(--teal); flex: none; }
+
+/* ── Installed app (docs/MOBILE.md "Installed app") ──
+   An iPad in landscape is a "desk" (≥1024) but, installed, it runs under the
+   status bar like a phone: the header grows by the top inset instead of
+   sliding under the clock, and the section strip follows it. 0 in a browser. */
+@media (min-width: 1024px) {
+  .final-desk.call-center .cc-head {
+    height: calc(60px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+    padding-left: max(24px, calc((100% - 1232px) / 2), env(safe-area-inset-left));
+    padding-right: max(24px, calc((100% - 1232px) / 2), env(safe-area-inset-right));
+  }
+  .final-desk.call-center .cc-tabs { top: calc(60px + env(safe-area-inset-top)); }
+}
+
+/* The on-screen keyboard (InstalledAppRuntime publishes --vvh / --vv-top / --kb).
+   iOS keeps a full-screen panel at its full height under the keyboard and
+   scrolls the page instead, which pushes the header off and hides the
+   composer. Sized to the visible area, the panel keeps both in view. */
+@media (max-width: 1023.98px) {
+  html.kb-open .final-desk.call-center .msg-has-thread .msg-thread-pane,
+  html.kb-open .final-desk.call-center .chat-open .chat-main,
+  html.kb-open .final-desk.call-center .detail.open {
+    top: var(--vv-top, 0px); bottom: auto; height: var(--vvh, 100dvh);
+  }
+  /* The tab bar would ride on top of the keyboard on Android and sit uselessly behind it on iOS. */
+  html.kb-open .final-desk.call-center .cc-tabs { display: none; }
+  html.kb-open .final-desk.call-center :is(.sched, .more-sheet, .pad) {
+    bottom: var(--kb, 0px);
+    max-height: calc(var(--vvh, 100dvh) - 8px);
+  }
+}

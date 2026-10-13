@@ -1,9 +1,11 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Fraunces, Geist, Geist_Mono, IBM_Plex_Sans } from 'next/font/google'
 import { DEFAULT_BRAND } from '@/components/brand/org-brand'
 import { GoogleTagManagerNoScript, GoogleTagManagerScript } from '@/components/analytics/google-tag-manager'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { InstalledAppRuntime } from '@/components/pwa/installed-app-runtime'
+import { APP_VIEWPORT, installedAppMetadata } from '@/lib/pwa/app-chrome'
 import './globals.css'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
@@ -28,12 +30,12 @@ export const metadata: Metadata = {
   description: 'Sales Client Overview — survey to submission, in one system.',
   applicationName: DEFAULT_BRAND.name,
   manifest: `/manifest/${DEFAULT_BRAND.iconDir}`,
-  appleWebApp: { capable: true, title: DEFAULT_BRAND.shortName, statusBarStyle: 'default' },
-  icons: {
-    apple: [{ url: `/brand/${DEFAULT_BRAND.iconDir}/apple-touch-icon.png`, sizes: '180x180' }],
-    icon: [{ url: `/brand/${DEFAULT_BRAND.iconDir}/icon-192.png`, sizes: '192x192', type: 'image/png' }],
-  },
+  // Standalone launch, black-translucent status bar, startup images and
+  // icons, on every page (sign-in included): see src/lib/pwa/app-chrome.ts.
+  ...installedAppMetadata(DEFAULT_BRAND),
 }
+
+export const viewport: Viewport = APP_VIEWPORT
 
 // Applies the stored theme and desktop-sidebar state before first paint so
 // neither ever flashes (see src/components/layout/sidebar-state.ts).
@@ -44,6 +46,12 @@ try {
   if (t === 'dark' || (!t && d)) document.documentElement.classList.add('dark');
   if (localStorage.getItem('pf-sidebar') === 'expanded') document.documentElement.classList.add('pf-nav-open');
 } catch (e) {}
+try {
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) document.documentElement.classList.add('pf-standalone');
+} catch (e) {}
+// Chrome fires its one install prompt whenever it likes, often before React
+// hydrates; park it for the "Install app" button (src/components/pwa/install-store.ts).
+window.addEventListener('beforeinstallprompt', function (e) { window.__pfInstall = e; });
 `
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
@@ -59,8 +67,18 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       </head>
       <body className="bg-background text-foreground min-h-full">
         <GoogleTagManagerNoScript />
+        {/* Paints the status-bar strip of an installed iPhone/iPad app (black-translucent text is always white). */}
+        <div className="pf-status-band" aria-hidden="true" />
         <TooltipProvider delay={200}>{children}</TooltipProvider>
-        <Toaster richColors closeButton position="top-right" />
+        {/* Below the status bar / notch of an edge-to-edge installed app. */}
+        <Toaster
+          richColors
+          closeButton
+          position="top-right"
+          offset={{ top: 'calc(env(safe-area-inset-top) + 16px)', right: 'calc(env(safe-area-inset-right) + 16px)' }}
+          mobileOffset={{ top: 'calc(env(safe-area-inset-top) + 12px)', left: 'calc(env(safe-area-inset-left) + 12px)', right: 'calc(env(safe-area-inset-right) + 12px)' }}
+        />
+        <InstalledAppRuntime />
       </body>
     </html>
   )

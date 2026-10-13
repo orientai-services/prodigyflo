@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { AlertCircle, ExternalLink, Loader2, MailCheck } from 'lucide-react'
+import { AlertCircle, ExternalLink, Info, Loader2, MailCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { requestMagicLinkAction, type AuthRequestState } from '../(auth)/actions'
 import { loginAction, type LoginState } from './actions'
+import { useInstallState } from '@/components/pwa/install-store'
 
 type Mode = 'password' | 'magic'
 
@@ -95,8 +96,30 @@ function PasswordForm({ next }: { next?: string }) {
   )
 }
 
-function MagicLinkForm() {
+/**
+ * An installed iPhone/iPad app keeps its own sign-in, apart from Safari's, and
+ * links in Mail always open in Safari. So an emailed link signs in SAFARI, not
+ * the app the rep is holding. Said plainly where it matters, with the way that
+ * works inside the app.
+ */
+function InstalledAppNote({ onPassword }: { onPassword: () => void }) {
+  return (
+    <div role="note" className="bg-muted/60 flex items-start gap-2 rounded-md border p-3 text-sm">
+      <Info className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+      <p>
+        Email links open in Safari, not in this app, so they sign in Safari instead.{' '}
+        <button type="button" onClick={onPassword} className="text-brand font-medium underline underline-offset-2">
+          Sign in with your password here
+        </button>{' '}
+        to stay in the app. Forgot it? Reset it from the link, then come back and use the new password.
+      </p>
+    </div>
+  )
+}
+
+function MagicLinkForm({ onPassword }: { onPassword: () => void }) {
   const [state, action] = useActionState<AuthRequestState, FormData>(requestMagicLinkAction, {})
+  const { standalone } = useInstallState()
 
   if (state.ok) {
     return (
@@ -129,6 +152,7 @@ function MagicLinkForm() {
 
   return (
     <form action={action} className="space-y-4">
+      {standalone && <InstalledAppNote onPassword={onPassword} />}
       {state.error && <ErrorNote message={state.error} />}
 
       <div className="space-y-2">
@@ -182,7 +206,7 @@ export function LoginForm({ next, signupEnabled = false }: { next?: string; sign
         key={mode}
         className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
       >
-        {mode === 'password' ? <PasswordForm next={next} /> : <MagicLinkForm />}
+        {mode === 'password' ? <PasswordForm next={next} /> : <MagicLinkForm onPassword={() => setMode('password')} />}
       </div>
 
       {signupEnabled && (

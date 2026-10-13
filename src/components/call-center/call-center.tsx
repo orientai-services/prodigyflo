@@ -174,6 +174,7 @@ export function CallCenter({
   viewer = null,
   profile = null,
   threadOpen = false,
+  openPad = false,
 }: {
   initialLeads?: CallLead[]
   viewerId?: string
@@ -182,6 +183,8 @@ export function CallCenter({
   renderedAt?: string
   /** The open section, from `?s=` (and the old `?tab=` / `?lead=` / `?missed=` links). */
   route?: ShellRoute
+  /** `?pad=1` (the installed app's Dialer shortcut): open on the keypad. */
+  openPad?: boolean
   /** Holds connectors:read, so More shows Campaigns. */
   adsAllowed?: boolean
   /** CALL_CENTER_CALENDAR is on, so Booked shows the planner and leads offer Book visit. */
@@ -244,8 +247,17 @@ export function CallCenter({
   const [booking, setBooking] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [help, setHelp] = useState(false)
-  const [padOpen, setPadOpen] = useState(false)
+  const [padOpen, setPadOpen] = useState(openPad)
   const padButtonRef = useRef<HTMLButtonElement>(null)
+  // `?pad=1`: the installed app's "Dialer" shortcut (src/lib/pwa/manifest.ts)
+  // opens straight on the keypad. The flag leaves the address afterwards so a
+  // reload does not pop the pad again.
+  useEffect(() => {
+    if (!openPad) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete('pad')
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+  }, [openPad])
   /** The owner's Phone setup sheet (opened from the phone pill's sheet). */
   const [setupOpen, setSetupOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)

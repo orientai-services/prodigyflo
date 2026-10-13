@@ -2,7 +2,8 @@
 
 import { useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
-import { LogOut, Monitor, Moon, Sun, UserRound } from 'lucide-react'
+import { Download, LogOut, Monitor, Moon, Sun, UserRound } from 'lucide-react'
+import { startInstall, useInstallState } from '@/components/pwa/install-store'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -61,6 +62,7 @@ export function UserMenu({
   user: { name: string; email: string; roleName: string; avatarUrl: string | null }
 }) {
   const router = useRouter()
+  const install = useInstallState()
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get, () => 'system' as Theme)
 
   const applyTheme = (next: Theme) => {
@@ -112,6 +114,12 @@ export function UserMenu({
         <DropdownMenuItem onClick={() => router.push('/settings/profile')}>
           <UserRound className="size-4" /> My profile
         </DropdownMenuItem>
+
+        {install.standalone ? null : (
+          <DropdownMenuItem onClick={() => void startInstall()}>
+            <Download className="size-4" /> Install app
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem
           onClick={() => {

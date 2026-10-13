@@ -53,6 +53,12 @@ const PUBLIC_PREFIXES = [
   // Team chat's push-only service worker (public/chat-sw.js; no client data). A worker's update check must never be
   // redirected to /login, or the browser drops it.
   '/chat-sw.js',
+  // The installed app's shell (docs/MOBILE.md "Installed app"): the root
+  // service worker (same update-check rule as above) and the page it shows
+  // when the network is down. Neither carries client data. Splash and
+  // shortcut images are .png, which the matcher below already skips.
+  '/sw.js',
+  '/offline.html',
 ]
 
 export function proxy(request: NextRequest) {
