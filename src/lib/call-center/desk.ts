@@ -1,7 +1,8 @@
 import 'server-only'
-import { mayManageSunoff, sunoffActive } from '@/lib/sunoff-bridge/assigned-model'
+import { sourceMeta, mayManageSunoff, sunoffActive } from '@/lib/sunoff-bridge/assigned-model'
 import type { CallCenterEventType, CallCenterLeadStatus, VoiceCall } from '@prisma/client'
 import { db } from '@/lib/db'
+import { writeAssignedLead } from '@/lib/sunoff-bridge/assigned-write'
 import { isUniqueViolation, recordingPath } from '@/lib/telephony/voice-calls'
 import { last4Of, phoneHashOrNull } from '@/lib/telephony/compliance-core'
 import { readSecret } from './contact'
@@ -422,6 +423,19 @@ export async function recordCallCenterOutcomeFor(
   const stamp = at.toISOString()
   const after = applyOutcome(held.lead, outcome, stamp, mayManageSunoff(actor.role, held.row.leadAttribution) ? held.row.lockedBy ?? actor.id : actor.id, { callbackAt })
   if (after === held.lead) return { ok: false, error: 'Not allowed' }
+  if (sourceMeta(held.row.leadAttribution)) {
+    const saved = await writeAssignedLead(organizationId, actor, leadId, { type: 'desk', outcome,
+      followupAt: after.nextAttemptAt ? new Date(after.nextAttemptAt).getTime() : null })
+    if (!saved.ok) return { ok: false, error: saved.reason }
+    // Source state is already mirrored. Only add the native call trail/attempt count here.
+    await db.$transaction(async tx => {
+      await tx.callCenterLead.updateMany({ where: { id: leadId, organizationId }, data: { tries: after.tries } })
+      for (const event of addedTrailEvents(held.lead, after)) await tx.callCenterEvent.create({
+        data: { leadId, type: eventType(event.kind), body: eventBody(event), createdAt: at } })
+    })
+    if (outcome === 'do_not_call') await suppressLeadNumber(organizationId, leadId, actor.id, at)
+    return { ok: true, lead: await publicLead(organizationId, actor.id, leadId) ?? after }
+  }
   const result = await writeTrail(organizationId, actor, leadId, held.lead, after, at, {
     doNotCallAt: after.dnc ? held.row.doNotCallAt ?? at : null,
   })
@@ -759,7 +773,7 @@ export async function scsIntakeLinkFor(
   try {
     await db.$transaction(async (tx) => {
       const stamped = await tx.callCenterLead.updateMany({
-        where: { id: row.id, organizationId: user.organizationId, lockedBy: user.id },
+        where: { id: row.id, organizationId: user.organizationId, lockedBy: mayManageSunoff(user.role, row.leadAttribution) ? row.lockedBy : user.id },
         // The first send time sticks: "link sent <ago>" counts from it.
         data: { intakeLinkSentAt: row.intakeLinkSentAt ?? now },
       })

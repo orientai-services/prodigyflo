@@ -47,7 +47,7 @@ export async function syncAssignedSunoffLeads(body: unknown) {
       const contact = contactSecrets({ phone_number: lead.phone, email: lead.email ?? '' })
       const meta = { ...record(prev?.leadAttribution), sunoff: {
         id: lead.id, active: !lead.closed, userId: lead.userId, repKey: partner.key,
-        revision: snapshot.revision, sourceUpdatedAt: lead.updatedAt, state, stage: lead.stage,
+        revision: snapshot.revision, sourceUpdatedAt: lead.updatedAt, state, stage: lead.stage, address: lead.address, name: lead.name,
         managed: old?.managed ?? !prev, originalPageId: old ? old.originalPageId ?? null : prev?.pageId ?? null,
       } }
       const at = new Date(lead.updatedAt || snapshot.revision)
@@ -84,13 +84,13 @@ export async function syncAssignedSunoffLeads(body: unknown) {
         const slot = await tx.callCenterSlot.findUnique({ where: { id: slotId } })
         const startsAt = new Date(lead.appointmentAt), endsAt = new Date(lead.appointmentAt + 90 * 60_000)
         const slotData = { repKey: partner.key, startsAt, endsAt, language: lead.language,
-          status: 'HOLD' as const, heldBy: 'sunoff', outcomeAt: null }
+          status: lead.visitStatus ?? 'HOLD', heldBy: 'sunoff', outcomeAt: lead.visitStatus === 'SAT' ? at : null }
         if (!slot) await tx.callCenterSlot.create({ data: { id: slotId, organizationId, leadId: id, ...slotData,
           reminder24RepAt: at, reminder3RepAt: at, reminder24ClientAt: at, reminder3ClientAt: at } })
-        else if (slot.startsAt.getTime() !== lead.appointmentAt || slot.repKey !== partner.key || slot.status === 'CANCELLED')
+        else if (slot.startsAt.getTime() !== lead.appointmentAt || slot.repKey !== partner.key || slot.status !== slotData.status)
           await tx.callCenterSlot.update({ where: { id: slotId }, data: slotData })
       } else await tx.callCenterSlot.updateMany({ where: { id: slotId, organizationId, status: { in: ['HOLD', 'CONFIRMED'] } },
-        data: { status: 'CANCELLED', outcomeAt: at } })
+        data: { status: lead.visitStatus && ['NO_SHOW', 'RESCHEDULED', 'CANCELLED'].includes(lead.visitStatus) ? lead.visitStatus : 'CANCELLED', outcomeAt: at } })
     }
     for (const row of oldRows) {
       const m = sourceMeta(row.leadAttribution)
