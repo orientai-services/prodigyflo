@@ -1,3 +1,4 @@
+import { saveUserLanguage } from '@/lib/user-language'
 /**
  * Browser calls (P0b) through the TwiML App webhook and its callbacks
  * (docs/TELEPHONY_LIVE.md §2.3, §2.4, §2.7, §2.8). The server decides
@@ -390,4 +391,18 @@ describe('with the flag off', () => {
     expect(twiml).toContain('switched on yet')
     expect(await db.voiceCall.count({ where: { callSid: cs } })).toBe(0)
   })
+})
+
+it('the signed browser voice hook uses the staff member’s saved language, independently of the client language',async()=>{
+  try{
+    await saveUserLanguage(orgId,rep.id,'es')
+    const spanish=await place(rep,'invalid-target',mainLine)
+    expect(spanish).toContain('language="es-MX"')
+    expect(spanish).toContain('No pudimos realizar esta llamada.')
+    expect(spanish).not.toContain("We couldn")
+    await saveUserLanguage(orgId,rep.id,'en')
+    const english=await place(rep,'invalid-target',mainLine)
+    expect(english).toContain('language="en-US"')
+    expect(english).not.toContain('No pudimos')
+  }finally{await saveUserLanguage(orgId,rep.id,'en')}
 })

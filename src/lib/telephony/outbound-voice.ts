@@ -1,3 +1,4 @@
+import { userAudioLanguage } from '@/lib/user-language'
 import 'server-only'
 import type { VoiceCall } from '@prisma/client'
 import { db } from '@/lib/db'
@@ -71,26 +72,28 @@ function isUniqueViolation(err: unknown): { target: string } | null {
 }
 
 export async function placeBrowserCall(ctx: ClientWebhookContext, now = new Date()): Promise<string> {
-  if (!voiceBrowserEnabled()) return sayAndHangup(FLAG_OFF)
+  const language=await userAudioLanguage(ctx.organizationId,ctx.userId)
+  const stop=(reason:string)=>sayAndHangup(reason,language)
+  if (!voiceBrowserEnabled()) return stop(FLAG_OFF)
   const callSid = ctx.params.CallSid ?? ''
-  if (!callSid || !ctx.userId) return sayAndHangup(COULD_NOT_PLACE)
+  if (!callSid || !ctx.userId) return stop(COULD_NOT_PLACE)
 
   const replay = await db.voiceCall.findUnique({ where: { callSid } })
-  if (replay) return dialFor(replay) ?? sayAndHangup(COULD_NOT_PLACE)
+  if (replay) return dialFor(replay) ?? stop(COULD_NOT_PLACE)
 
   const actor = await loadActor(ctx.userId)
   if (!actor || actor.organizationId !== ctx.organizationId || !can(actor, 'communications:send')) {
-    return sayAndHangup(COULD_NOT_PLACE)
+    return stop(COULD_NOT_PLACE)
   }
 
   const target = parseTargetKey(ctx.params.target)
-  if (!target) return sayAndHangup(COULD_NOT_PLACE)
+  if (!target) return stop(COULD_NOT_PLACE)
   const resolved = await resolveDialTarget(actor, target, now)
-  if (!resolved.ok) return sayAndHangup(resolved.reason)
+  if (!resolved.ok) return stop(resolved.reason)
   const t = resolved.target
 
   const line = await resolveCallerLine(actor, ctx.params.line || null)
-  if (!line.ok) return sayAndHangup(line.reason)
+  if (!line.ok) return stop(line.reason)
 
   const input = {
     organizationId: actor.organizationId,
@@ -116,7 +119,7 @@ export async function placeBrowserCall(ctx: ClientWebhookContext, now = new Date
       if (decision.allowed) overrideNonce = check.nonce
     }
   }
-  if (!decision.allowed) return sayAndHangup(decision.reason)
+  if (!decision.allowed) return stop(decision.reason)
 
   const settings = await telephonySettingsFor(actor.organizationId)
   const limited = await voiceLimited(ctx.accountSid, now)
@@ -170,15 +173,15 @@ export async function placeBrowserCall(ctx: ClientWebhookContext, now = new Date
       })
       return { busy: false as const, vc }
     })
-    if (outcome.busy) return sayAndHangup(LIMITED_BUSY)
+    if (outcome.busy) return stop(LIMITED_BUSY)
     await auditHandDial(actor, t, 'browser', outcome.vc.id)
-    return dialFor(outcome.vc, decision.e164) ?? sayAndHangup(COULD_NOT_PLACE)
+    return dialFor(outcome.vc, decision.e164) ?? stop(COULD_NOT_PLACE)
   } catch (err) {
     const dupe = isUniqueViolation(err)
-    if (dupe && dupe.target.includes('overrideNonce')) return sayAndHangup('That override was already used. Ask again.')
+    if (dupe && dupe.target.includes('overrideNonce')) return stop('That override was already used. Ask again.')
     if (dupe) {
       const raced = await db.voiceCall.findUnique({ where: { callSid } })
-      if (raced) return dialFor(raced) ?? sayAndHangup(COULD_NOT_PLACE)
+      if (raced) return dialFor(raced) ?? stop(COULD_NOT_PLACE)
     }
     throw err
   }

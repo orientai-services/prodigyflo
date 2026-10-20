@@ -1,3 +1,5 @@
+import { callerAudioLanguage } from '@/lib/telephony/audio-language'
+import { readSecret } from '@/lib/call-center/contact'
 import { db } from '@/lib/db'
 import { TWIML_CONTENT_TYPE, emptyTwiml, whisperTwiml } from '@/lib/telephony/twiml'
 import { authenticateClientWebhook } from '@/lib/telephony/webhook'
@@ -22,5 +24,7 @@ export async function POST(request: Request) {
       data: { disclosureServedAt: new Date() },
     })
   }
-  return new Response(whisperTwiml(), { status: 200, headers: { 'Content-Type': TWIML_CONTENT_TYPE } })
+  const call=auth.ctx.voiceCallId ? await db.voiceCall.findFirst({where:{id:auth.ctx.voiceCallId,organizationId:auth.ctx.organizationId},select:{remoteSecret:true}}) : null
+  const language=await callerAudioLanguage(auth.ctx.organizationId,readSecret(call?.remoteSecret) ?? '')
+  return new Response(whisperTwiml(language), { status: 200, headers: { 'Content-Type': TWIML_CONTENT_TYPE } })
 }

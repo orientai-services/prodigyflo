@@ -39,7 +39,7 @@ export default async function InboxPage({
       orderBy: { occurredAt: 'desc' },
       take: 100,
       include: {
-        client: { select: { id: true, firstName: true, lastName: true } },
+        client: { select: { id: true, firstName: true, lastName: true, phone:true } },
         message: { select: { fromMasked: true, optOutDetected: true } },
       },
     }),
@@ -160,7 +160,7 @@ export default async function InboxPage({
                         <span className="text-muted-foreground flex items-center gap-1 text-xs">
                           <ArrowDownLeft className="size-3" />
                           {channelLabel(c.channel)}
-                          {c.message?.fromMasked && ` · ${c.message.fromMasked}`}
+                          {c.client.phone && ` · ${c.client.phone}`}
                         </span>
                         {unanswered && (
                           <Badge variant="outline" className="border-amber-500/60 text-[10px] tracking-wide uppercase">

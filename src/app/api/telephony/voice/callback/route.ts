@@ -1,3 +1,4 @@
+import { callerAudioLanguage } from '@/lib/telephony/audio-language'
 import { TWIML_CONTENT_TYPE, callbackConfirmedTwiml, emptyTwiml } from '@/lib/telephony/twiml'
 import { transcribeVoicemailFor, voicemailAnswerTwiml } from '@/lib/telephony/inbound-voice'
 import { requestCallback } from '@/lib/telephony/voice-calls'
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
 
   const { number, params } = auth.ctx
   const callSid = callSidFromUrl || params.CallSid || ''
+  const language=await callerAudioLanguage(number.organizationId,auth.ctx.from)
   const digits = (params.Digits ?? '').trim()
 
   if (digits === '1' && callSid) {
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
         saved = await requestCallback(callSid)
       }
       if (saved && saved.direction === 'INBOUND' && saved.organizationId === number.organizationId && saved.callbackRequested) {
-        return twiml(callbackConfirmedTwiml())
+        return twiml(callbackConfirmedTwiml(language))
       }
       console.error('[telephony] callback request had no inbound call row; sending to voicemail')
     } catch (err) {
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   const transcribe = await transcribeVoicemailFor(number.organizationId)
-  return twiml(voicemailAnswerTwiml(number, callSid, { skipGreeting: true, transcribe }))
+  return twiml(voicemailAnswerTwiml(number, callSid, { skipGreeting: true, transcribe, language }))
 }
 
 function twiml(body: string): Response {

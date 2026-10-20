@@ -67,9 +67,12 @@ describe('lead phones', () => {
     expect(phones.has(ids.bare)).toBe(false)
   })
 
-  it('a rep reads only the lead they hold, and not when it is on do-not-call', async () => {
+  it('a rep reads every visible record including open and do-not-call leads', async () => {
     const phones = await leadPhonesFor(rep.actor, Object.values(ids))
-    expect([...phones.keys()]).toEqual([ids.held])
+    expect(phones.get(ids.held)?.state).toBe('shown')
+    expect(phones.get(ids.open)?.state).toBe('shown')
+    expect(phones.get(ids.dnc)?.state).toBe('shown')
+    expect(phones.get(ids.broken)?.state).toBe('unavailable')
   })
 
   it('another workspace reads nothing', async () => {
@@ -79,6 +82,6 @@ describe('lead phones', () => {
   it('withLeadPhones puts phone only on the rows it may', async () => {
     const input: { id: string; phone?: LeadPhoneView | null }[] = [{ id: ids.held }, { id: ids.open }, { id: 'x' }]
     const rows = await withLeadPhones(rep.actor, input, (r) => r.id)
-    expect(rows.map((r) => r.phone?.state ?? null)).toEqual(['shown', null, null])
+    expect(rows.map((r) => r.phone?.state ?? null)).toEqual(['shown', 'shown', null])
   })
 })

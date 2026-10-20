@@ -14,6 +14,7 @@ vi.mock('next/server', async (orig) => ({
   },
 }))
 
+import { formatLeadPhone } from '@/lib/call-center/phone-display'
 import { db } from '@/lib/db'
 import { encryptSecret } from '@/lib/crypto'
 import { POST as voice } from '@/app/api/telephony/voice/route'
@@ -152,7 +153,7 @@ describe('the browser stage (P0b, flag on)', () => {
     expect(twiml).toContain(`<Identity>pf_${A.orgId}_${repB.id}</Identity>`)
     // The client's owner rings first, and the banner gets the client's name.
     expect(twiml.indexOf(repA.id)).toBeLessThan(twiml.indexOf(repB.id))
-    expect(twiml).toContain('<Parameter name="pfCaller" value="Casey Client"/>')
+    expect(twiml).toContain(`<Parameter name="pfCaller" value="Casey Client · ${formatLeadPhone(CLIENT_PHONE)?.display}"/>`)
     expect(twiml).toContain('stage=browser')
     await drain()
 

@@ -6,7 +6,7 @@ import { sendMessage } from '@/lib/messaging/send'
 import { decideOutbound } from '@/lib/telephony/compliance'
 import { last4Of, maskedLast4, phoneHashOrNull } from '@/lib/telephony/compliance-core'
 import { leadPhonesFor } from './lead-phones'
-import type { LeadPhoneView } from './phone-display'
+import { leadPhoneView, type LeadPhoneView } from './phone-display'
 import { failureCodeText } from '@/lib/telephony/carrier-errors'
 import { toE164 } from '@/lib/telephony/provider'
 import { isUniqueViolation } from '@/lib/telephony/voice-calls'
@@ -250,6 +250,7 @@ export async function listThreads(user: SessionUser, now = new Date()): Promise<
       kind: 'client',
       name: displayName(`${client.firstName} ${client.lastName}`, last4),
       last4,
+      phone: leadPhoneView(client.phone, Boolean(client.phone)),
       snippet: snippet(last.body ?? ''),
       lastDirection: last.direction === 'INBOUND' ? 'in' : 'out',
       at: last.occurredAt.toISOString(),
@@ -366,6 +367,7 @@ async function loadClientThread(user: SessionUser, clientId: string): Promise<Th
     kind: 'client',
     name: displayName(`${client.firstName} ${client.lastName}`, last4),
     last4,
+    phone: leadPhoneView(client.phone, Boolean(client.phone)),
     messages: rows.map(clientMessage),
     canSend,
     sendNote: canSend ? null : "You don't have permission to send texts.",

@@ -73,3 +73,16 @@ test('inactive historical identities cannot sign in', async ({ page }) => {
   await expect(page.getByRole('alert').filter({ hasText: 'not recognized' })).toBeVisible()
   await expect(page).toHaveURL(/\/login$/)
 })
+
+test('a Closer saves their own language and a stale tab cannot change another account',async({page})=>{
+ await login(page,'closera')
+ const me=await page.request.get('/api/me/language')
+ expect(me.status()).toBe(200)
+ const {userId}=await me.json()
+ const saved=await page.request.post('/api/me/language',{data:{userId,language:'es'}})
+ expect(saved.status()).toBe(200)
+ expect(await (await page.request.get('/api/me/language')).json()).toMatchObject({userId,language:'es'})
+ expect((await page.request.post('/api/me/language',{data:{userId:'another-user',language:'en'}})).status()).toBe(409)
+ expect((await page.request.post('/api/me/language',{data:null})).status()).toBe(400)
+ await page.request.post('/api/me/language',{data:{userId,language:'en'}})
+})

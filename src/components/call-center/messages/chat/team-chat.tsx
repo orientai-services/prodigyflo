@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, useTransition } from 'react'
+import { uiLocaleStore } from '@/lib/ui-locale'
 import { linkSunoffAccount } from '@/lib/chat-bridge/actions'
 import { ChatApi, ChatError, clientId } from './api'
 import { ChannelSheet } from './channel-sheet'
@@ -30,31 +31,9 @@ function pressBack(pane: HTMLElement | null, selector: string) {
 
 type Props = { configured: boolean; linked: boolean; initialLang?: Lang | null }
 
-const LANG_KEY = 'pf_chat_lang'
-/** The chat's language as last reported by the Worker (me.lang), kept for the moments before it answers. */
-function storedLang(): Lang | null {
-  try {
-    const v = window.localStorage.getItem(LANG_KEY)
-    return v === 'en' || v === 'es' ? v : null
-  } catch {
-    return null
-  }
-}
-function storeLang(l: Lang) {
-  try {
-    window.localStorage.setItem(LANG_KEY, l)
-  } catch {
-    // private mode: the language still applies for this visit
-  }
-}
-
-const noSubscribe = () => () => undefined
-
 export function TeamChat({ configured, linked, initialLang }: Props) {
-  // Until the chat answers: the last language it reported for this user (read after hydration; the server can't know it).
-  const stored = useSyncExternalStore(noSubscribe, storedLang, () => null)
-  const [chosen, setLang] = useState<Lang | null>(null)
-  const lang: Lang = chosen ?? initialLang ?? stored ?? 'en'
+  const lang=useSyncExternalStore(uiLocaleStore.subscribe,uiLocaleStore.get,()=>initialLang ?? 'en')
+  const setLang=uiLocaleStore.set
   const [isLinked, setLinked] = useState(linked)
   const t = strings(lang)
   if (!configured) return <p className="chat-note">{t.notConfigured}</p>
@@ -375,7 +354,6 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
     (l: Lang) => {
       setLang(l)
       api.setLang(l)
-      storeLang(l)
     },
     [api, setLang],
   )
@@ -400,7 +378,10 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
         if (me) {
           dispatch({ type: 'me', me })
           const l = me.prefs?.lang === 'en' || me.prefs?.lang === 'es' ? me.prefs.lang : me.lang
-          if (l === 'en' || l === 'es') applyLang(l)
+          // A stale chat-only preference must not override the signed-in account's language.
+          const preferred=uiLocaleStore.get()
+          api.setLang(preferred)
+          if(l!==preferred)void api.req('POST','/api/me/prefs',{lang:preferred}).catch(()=>undefined)
         }
         const first = await loadChannels()
         if (!live) return
@@ -422,6 +403,11 @@ function ChatApp({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) 
       api.close()
     }
   }, [api, loadChannels, loadRooms, openDefault, applyLang])
+
+  useEffect(()=>{
+    api.setLang(lang)
+    if(phase==='ready')void api.req('POST','/api/me/prefs',{lang}).catch(()=>undefined)
+  },[api,lang,phase])
 
   // The browser coming back online: catch up and reconnect now; going offline shows the banner.
   useEffect(() => {

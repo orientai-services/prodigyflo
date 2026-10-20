@@ -1,8 +1,11 @@
+import { callerAudioLanguage } from './audio-language'
+import type { UiLocale } from '@/lib/ui-locale'
 import 'server-only'
+import { formatLeadPhone } from '@/lib/call-center/phone-display'
 import { db } from '@/lib/db'
 import { isPlatformAccount } from './index'
 import { matchCallerToClient, teamDialTargets, type InboundNumber } from './calls'
-import { phoneHashOrNull, maskedLast4 } from './compliance-core'
+import { phoneHashOrNull } from './compliance-core'
 import { voiceLimited } from './account-status'
 import { ringsBrowsers } from './lines'
 import { presentUsersFor } from './presence'
@@ -47,7 +50,7 @@ export type Stage =
   | { kind: 'team'; i: number; to: string; userId: string }
   | { kind: 'voicemail' }
 
-type StageCtx = { number: InboundNumber; from: string; callSid: string; accountSid: string; platform: boolean }
+type StageCtx = { number: InboundNumber; from: string; callSid: string; accountSid: string; platform: boolean; language:UiLocale }
 
 async function browserStage(ctx: StageCtx, limited: boolean): Promise<Stage | null> {
   if (!voiceBrowserEnabled() || !ctx.platform || !ringsBrowsers(ctx.number)) return null
@@ -65,7 +68,7 @@ async function browserStage(ctx: StageCtx, limited: boolean): Promise<Stage | nu
       : null
   const params = {
     pfCallId: ctx.callSid,
-    pfCaller: client ? `${client.firstName} ${client.lastName}`.trim() : maskedLast4(ctx.from),
+    pfCaller: client ? `${client.firstName} ${client.lastName} · ${formatLeadPhone(ctx.from)?.display ?? ctx.from}`.trim() : formatLeadPhone(ctx.from)?.display ?? ctx.from,
     pfLine: ctx.number.friendlyName,
     pfTarget: client ? `client:${client.id}` : lead ? `lead:${lead.id}` : '',
   }
@@ -101,21 +104,22 @@ type TwimlOpts = {
 export function voicemailAnswerTwiml(
   number: Pick<InboundNumber, 'voicemailGreeting' | 'recordCalls'>,
   callSid: string,
-  opts: { skipGreeting: boolean; transcribe?: boolean; offerCallback?: boolean },
+  opts: { skipGreeting: boolean; transcribe?: boolean; offerCallback?: boolean; language?:UiLocale },
 ): string {
   const base = callbackUrls(callSid)
   const transcribeCallbackUrl = opts.transcribe && callSid ? base.transcription : null
   if (opts.offerCallback && callSid) {
     const lead = opts.skipGreeting
       ? ''
-      : greetingFor({ greeting: number.voicemailGreeting, recordCalls: number.recordCalls, skipGreeting: false })
-    return callbackOfferTwiml({ gatherActionUrl: base.callback, voicemailCallbackUrl: base.voicemail, transcribeCallbackUrl, lead })
+      : greetingFor({ greeting: number.voicemailGreeting, recordCalls: number.recordCalls, skipGreeting: false, language:opts.language })
+    return callbackOfferTwiml({ gatherActionUrl: base.callback, voicemailCallbackUrl: base.voicemail, transcribeCallbackUrl, lead, language:opts.language })
   }
   return voicemailTwiml({
     voicemailCallbackUrl: base.voicemail,
     greeting: number.voicemailGreeting,
     recordCalls: number.recordCalls,
     skipGreeting: opts.skipGreeting,
+    language:opts.language,
     transcribeCallbackUrl,
   })
 }
@@ -134,7 +138,7 @@ function twimlFor(stage: Stage, ctx: StageCtx, opts: TwimlOpts): string {
   const greeting = number.voicemailGreeting
   const transcribeCallbackUrl = opts.transcribe && callSid ? callbackUrls(callSid).transcription : null
   if (stage.kind === 'voicemail') {
-    return voicemailAnswerTwiml(number, callSid, opts)
+    return voicemailAnswerTwiml(number, callSid, {...opts,language:ctx.language})
   }
   if (stage.kind === 'browser') {
     const urls = callbackUrls(callSid, { stage: 'browser' })
@@ -143,6 +147,7 @@ function twimlFor(stage: Stage, ctx: StageCtx, opts: TwimlOpts): string {
       actionUrl: urls.dial,
       recordCalls: number.recordCalls,
       greeting,
+      language:ctx.language,
       callRecordingUrl: urls.callRecording,
       childStatusUrl: urls.childStatus,
       limited: opts.limited,
@@ -155,6 +160,7 @@ function twimlFor(stage: Stage, ctx: StageCtx, opts: TwimlOpts): string {
       forwardTo: stage.to,
       recordCalls: number.recordCalls,
       greeting,
+      language:ctx.language,
       voicemailCallbackUrl: urls.voicemail,
       actionUrl: urls.dial,
       callRecordingUrl: urls.callRecording,
@@ -178,6 +184,7 @@ function twimlFor(stage: Stage, ctx: StageCtx, opts: TwimlOpts): string {
     teamNumbers: [stage.to],
     recordCalls: number.recordCalls,
     greeting,
+    language:ctx.language,
     voicemailCallbackUrl: urls.voicemail,
     actionUrl: urls.dial,
     callRecordingUrl: urls.callRecording,
@@ -202,6 +209,7 @@ export async function answerInboundCall(ctx: WebhookContext, now = new Date()): 
     callSid,
     accountSid: ctx.accountSid,
     platform: isPlatformAccount(ctx.creds),
+    language:await callerAudioLanguage(ctx.number.organizationId,ctx.from),
   }
 
   const settings = await telephonySettingsFor(ctx.number.organizationId)
@@ -268,6 +276,7 @@ export async function nextInboundStage(
     callSid,
     accountSid: ctx.accountSid,
     platform: isPlatformAccount(ctx.creds),
+    language:await callerAudioLanguage(ctx.number.organizationId,ctx.from),
   }
   let next: Stage
   if (current.stage === 'browser') next = await routingStage(ctx.number)
