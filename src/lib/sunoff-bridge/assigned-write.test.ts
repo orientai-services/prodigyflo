@@ -64,6 +64,7 @@ describe('ProdigyFlo saves source changes and opens a single scoped SCS intake',
     const send=vi.fn(async(url: string | URL | Request,init?:RequestInit)=>{
       expect(String(url)).toBe('https://dialer.sunoff.app'+ASSIGNED_COMMAND_PATH)
       const body=String(init!.body),h=new Headers(init!.headers); sent.push(body)
+      expect(h.get('user-agent')).toBe('SunOff-ProdigyFlo-Bridge/1.0')
       expect(verifyBridgeRequest({key:KEY,method:'POST',path:ASSIGNED_COMMAND_PATH,body,ts:h.get('x-pf-bridge-ts'),sig:h.get('x-pf-bridge-sig')})).toMatchObject({ok:true})
       if(sent.length===1)throw Error('simulated lost response')
       return Response.json({ok:true,snapshot:{version:1,complete:true,revision:NOW+2,leads:[next]}})

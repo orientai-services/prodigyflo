@@ -36,7 +36,7 @@ export async function writeAssignedLead(organizationId: string, actor: DeskActor
   for (let attempt=0; attempt<2; attempt++) {
     try {
       response = await (options.fetchImpl ?? fetch)(`https://dialer.sunoff.app${ASSIGNED_COMMAND_PATH}`, {
-        method: 'POST', headers: { 'content-type': 'application/json', ...signBridgeRequest({ key, method: 'POST', path: ASSIGNED_COMMAND_PATH, body }) },
+        method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': 'SunOff-ProdigyFlo-Bridge/1.0', ...signBridgeRequest({ key, method: 'POST', path: ASSIGNED_COMMAND_PATH, body }) },
         body, signal: AbortSignal.timeout(25_000), redirect: 'manual', cache: 'no-store',
       })
       if (response.status < 500) break
