@@ -97,7 +97,7 @@ export function VisitPanel({
         <div className="cal-grab" aria-hidden="true" />
         <header className="cal-panel-head">
           <div>
-            <h3>{visit.name} {visit.sourceBrand ? <SunoffPill /> : null}</h3>
+            <h3>{visit.name}{visit.sourceBrand ? <> <SunoffPill /></> : null}</h3>
             <p className="cal-panel-when">{visitWhen(visit.startsAt, visit.endsAt)} · Pacific</p>
           </div>
           <button type="button" className="cal-x" aria-label="Close the visit" onClick={onClose}>×</button>

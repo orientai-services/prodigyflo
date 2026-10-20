@@ -393,7 +393,7 @@ export function LeadProfile({ api, now, sheetHost }: { api: LeadHandoffApi; now:
 
   const facts = (
     <dl className="facts">
-      <div><dt>Name</dt><dd>{lead.name} {lead.sourceBrand ? <SunoffPill /> : null}</dd></div>
+      <div><dt>Name</dt><dd>{lead.name}{lead.sourceBrand ? <> <SunoffPill /></> : null}</dd></div>
       <div><dt>ZIP</dt><dd>{lead.zip ?? '—'}</dd></div>
       <div><dt>Page</dt><dd>{lead.page}</dd></div>
       <div><dt>Tries</dt><dd>{triesCount(lead)}</dd></div>

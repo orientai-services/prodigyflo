@@ -59,7 +59,7 @@ export async function syncAssignedSunoffLeads(body: unknown) {
         pageId: 'sunoff', language: lead.language, lockedBy: person.id, leadAttribution: json(meta),
         phoneLast4: contact.phoneLast4, phoneSecret: contact.phoneSecret ? json(contact.phoneSecret) : undefined,
         emailSecret: contact.emailSecret ? json(contact.emailSecret) : undefined,
-        phoneHash: phoneHashOrNull(contact.dialPhone), timeZone: 'America/Los_Angeles',
+        phoneHash: phoneHashOrNull(contact.dialPhone), timeZone: prev?.timeZone ?? null,
         ...(lead.doNotCall ? { doNotCallAt: prev?.doNotCallAt ?? at } : {}),
         ...(validConsent && !prev?.consentAt ? { consentAt: new Date(consent!.at), consentSource: 'lead_form',
           consentFormId: consent!.formId, consentTextVersion: consent!.version } : {}),

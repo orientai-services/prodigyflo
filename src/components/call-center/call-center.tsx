@@ -132,7 +132,7 @@ function keepLinks(before: CallLead, next: CallLead): CallLead {
 function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (lead: CallLead) => void }) {
   return (
     <button type="button" className="person" disabled={lead.disabled} onClick={() => onOpen(lead)}>
-      <b>{lead.name} {lead.sourceBrand ? <SunoffPill /> : null}</b>
+      <b>{lead.name}{lead.sourceBrand ? <> <SunoffPill /></> : null}</b>
       {lead.subtitle ? <span>{lead.subtitle}</span> : null}
       <span>
         {languageLabel(lead.language)}
@@ -994,7 +994,7 @@ export function CallCenter({
                       {lockLabel(selected, selected.persisted ? viewerId ?? '' : CURRENT_REP) ? <span className="tag">{lockLabel(selected, selected.persisted ? viewerId ?? '' : CURRENT_REP)}</span> : null}
                       {selected.dnc ? <span className="tag">Do not call</span> : null}
                     </div>
-                    <h2 className="who">{selected.name} {selected.sourceBrand ? <SunoffPill /> : null}</h2>
+                    <h2 className="who">{selected.name}{selected.sourceBrand ? <> <SunoffPill /></> : null}</h2>
                     {deskError ? <p className="muted" role="status">{deskError}</p> : null}
                     <dl className="facts">
                       <div><dt>Page</dt><dd>{selected.page}</dd></div>
