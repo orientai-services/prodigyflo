@@ -22,7 +22,7 @@ import { findPossibleMatch, linkLeadToClientFor, mayLink, type LinkLeadResult } 
 
 async function actor() {
   const user = await requireUser()
-  return { organizationId: user.organizationId, id: user.id, name: user.name }
+  return { organizationId: user.organizationId, id: user.id, name: user.name, role: user.role }
 }
 
 export async function takeCallCenterLead(leadId: string): Promise<DeskResult> {
@@ -105,5 +105,5 @@ export async function loadLeadTrail(leadId: string): Promise<TrailEvent[] | null
 
 export async function revealCallCenterContact(leadId: string): Promise<CallCenterContact> {
   const user = await actor()
-  return revealCallCenterContactFor(user.organizationId, user.id, leadId)
+  return revealCallCenterContactFor(user.organizationId, user.id, leadId, user.role)
 }

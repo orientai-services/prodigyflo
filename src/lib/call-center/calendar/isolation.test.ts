@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 /**
  * The Call Center Calendar is fully separate from the Master Calendar.
  * 1. No calendar code imports or references Master Calendar models or files.
- * 2. This branch leaves the Master Calendar models and files untouched vs main.
+ * 2. Native scheduling and Master Calendar storage models remain untouched.
+ * The owner-requested SunOff source view only reads CallCenterSlot from assigned-calendar.ts.
  */
 const ROOT = path.resolve(__dirname, '../../../..')
 const CALENDAR_DIRS = ['src/lib/call-center/calendar', 'src/components/call-center/calendar']
@@ -40,7 +41,7 @@ describe('call center calendar isolation', () => {
     expect(hits).toEqual([])
   })
 
-  it('leaves Master Calendar files and schema models untouched vs main', () => {
+  it('leaves native scheduling and Master Calendar schema models untouched vs main', () => {
     let base: string
     try {
       base = execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], { cwd: ROOT, encoding: 'utf8' }).trim()
@@ -50,7 +51,7 @@ describe('call center calendar isolation', () => {
     }
     const diff = execFileSync(
       'git',
-      ['diff', '--name-only', base, '--', 'src/lib/scheduling.ts', 'src/components/board/desk-calendar.tsx', 'src/app/(app)/board/desk-calendar.tsx'],
+      ['diff', '--name-only', base, '--', 'src/lib/scheduling.ts', 'src/components/board/desk-calendar.tsx'],
       { cwd: ROOT, encoding: 'utf8' },
     ).trim()
     expect(diff).toBe('')

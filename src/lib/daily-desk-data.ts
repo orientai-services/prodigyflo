@@ -1,4 +1,5 @@
 import 'server-only'
+import { assignedCalendarChips } from '@/lib/sunoff-bridge/assigned-calendar'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { matchDocKind } from '@/lib/daily-desk-docs'
@@ -55,6 +56,9 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
     const day = civilDate(appointment.startsAt, timezone)
     const chip: DeskChip = { ...lead(appointment.client), appointmentId: appointment.id, updatedAt: appointment.updatedAt.toISOString(), status: appointment.status,
       ownerName: deskChipCloserName(appointment.client.owner?.name ?? null), timeLabel: timeLabel(appointment.startsAt, timezone), startsAt: appointment.startsAt.toISOString() }
+    chipsByDay.set(day, [...(chipsByDay.get(day) ?? []), chip])
+  }
+  for (const { day, chip } of await assignedCalendarChips(user, rangeStart, rangeEnd, timezone)) {
     chipsByDay.set(day, [...(chipsByDay.get(day) ?? []), chip])
   }
   return {

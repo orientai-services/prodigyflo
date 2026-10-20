@@ -41,6 +41,7 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --config=playwright.workspace.config.ts
+      - run: npx playwright test --config=playwright.sunoff.config.ts
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

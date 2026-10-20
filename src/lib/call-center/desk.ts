@@ -1,4 +1,5 @@
 import 'server-only'
+import { mayManageSunoff, sunoffActive } from '@/lib/sunoff-bridge/assigned-model'
 import type { CallCenterEventType, CallCenterLeadStatus, VoiceCall } from '@prisma/client'
 import { db } from '@/lib/db'
 import { isUniqueViolation, recordingPath } from '@/lib/telephony/voice-calls'
@@ -146,6 +147,7 @@ export async function loadCallCenterDeskFor(
     select: {
       id: true,
       pageId: true,
+      leadAttribution: true,
       source: true,
       language: true,
       status: true,
@@ -174,11 +176,11 @@ export async function loadCallCenterDeskFor(
   // The link fields stay out of the stored rows, so the leads read exactly as
   // they do for every other caller of loadCallCenterLeadsFor.
   const links: DeskLinkRow[] = []
-  const stored = rows.map(({ clientId, intakeLinkSentAt, consentAt, consentRevokedAt, ...row }) => {
+  const stored = rows.filter(row => sunoffActive(row.leadAttribution)).map(({ clientId, intakeLinkSentAt, consentAt, consentRevokedAt, ...row }) => {
     links.push({ id: row.id, clientId, intakeLinkSentAt, consentAt, consentRevokedAt, doNotCallAt: row.doNotCallAt })
     return toStored(row)
   })
-  return { leads: callLeadsForDesk(stored, viewerId, names, extras), links }
+  return { leads: rows.length && !stored.length ? [] : callLeadsForDesk(stored, viewerId, names, extras), links }
 }
 
 /**
@@ -205,12 +207,13 @@ export async function revealCallCenterContactFor(
   organizationId: string,
   userId: string,
   leadId: string,
+  role?: string,
 ): Promise<CallCenterContact> {
   const row = await db.callCenterLead.findFirst({
     where: { id: leadId, organizationId },
-    select: { lockedBy: true, doNotCallAt: true, phoneSecret: true, emailSecret: true },
+    select: { lockedBy: true, doNotCallAt: true, phoneSecret: true, emailSecret: true, leadAttribution: true },
   })
-  if (!row || row.doNotCallAt || row.lockedBy !== userId) return EMPTY_CONTACT
+  if (!row || !sunoffActive(row.leadAttribution) || row.doNotCallAt || (row.lockedBy !== userId && !mayManageSunoff(role, row.leadAttribution))) return EMPTY_CONTACT
   const phone = readSecret(row.phoneSecret)
   const email = readSecret(row.emailSecret)
   return {
@@ -225,6 +228,8 @@ export async function takeCallCenterLeadFor(
   leadId: string,
   at = new Date(),
 ): Promise<DeskResult> {
+  const source = await db.callCenterLead.findFirst({ where: { id: leadId, organizationId }, select: { leadAttribution: true } })
+  if (!source || !sunoffActive(source.leadAttribution)) return { ok: false, error: 'Lead is no longer assigned from SunOff' }
   const claimed = await db.callCenterLead.updateMany({
     where: { id: leadId, organizationId, lockedBy: null, doNotCallAt: null },
     data: { lockedBy: actor.id },
@@ -286,6 +291,7 @@ export async function skipCallCenterLeadFor(
 }
 
 type HeldRow = {
+  leadAttribution: unknown
   id: string
   pageId: string | null
   source: 'FORM' | 'INBOUND'
@@ -312,6 +318,7 @@ async function heldLead(organizationId: string, actor: DeskActor, leadId: string
     select: {
       id: true,
       pageId: true,
+      leadAttribution: true,
       source: true,
       language: true,
       status: true,
@@ -328,7 +335,8 @@ async function heldLead(organizationId: string, actor: DeskActor, leadId: string
     },
   })
   if (!row) return { ok: false, error: 'Lead not found' }
-  if (row.lockedBy !== actor.id) return { ok: false, error: 'Another rep has this lead' }
+  if (!sunoffActive(row.leadAttribution)) return { ok: false, error: 'Lead is no longer assigned from SunOff' }
+  if (row.lockedBy !== actor.id && !mayManageSunoff(actor.role, row.leadAttribution)) return { ok: false, error: 'Another rep has this lead' }
   const names = await lockNames(organizationId, [actor.id])
   const lead = callLeadsForDesk([toStored(row)], actor.id, names)[0]
   if (!lead) return { ok: false, error: 'Lead not found' }
@@ -368,7 +376,7 @@ async function writeTrail(
   try {
     await db.$transaction(async (tx) => {
       const updated = await tx.callCenterLead.updateMany({
-        where: { id: leadId, organizationId, lockedBy: actor.id },
+        where: { id: leadId, organizationId, lockedBy: actor.role === 'SUPER_ADMIN' && before.sourceBrand === 'SunOff' ? before.lockedBy : actor.id },
         data: {
           tries: after.tries,
           nextAttemptAt: after.nextAttemptAt ? new Date(after.nextAttemptAt) : null,
@@ -412,7 +420,7 @@ export async function recordCallCenterOutcomeFor(
   if (!held.ok) return { ok: false, error: held.error }
   if (held.row.doNotCallAt) return { ok: false, error: 'Do not call' }
   const stamp = at.toISOString()
-  const after = applyOutcome(held.lead, outcome, stamp, actor.id, { callbackAt })
+  const after = applyOutcome(held.lead, outcome, stamp, mayManageSunoff(actor.role, held.row.leadAttribution) ? held.row.lockedBy ?? actor.id : actor.id, { callbackAt })
   if (after === held.lead) return { ok: false, error: 'Not allowed' }
   const result = await writeTrail(organizationId, actor, leadId, held.lead, after, at, {
     doNotCallAt: after.dnc ? held.row.doNotCallAt ?? at : null,
@@ -490,7 +498,7 @@ export async function recordCallCenterNoteFor(
 ): Promise<DeskResult> {
   const held = await heldLead(organizationId, actor, leadId)
   if (!held.ok) return { ok: false, error: held.error }
-  const after = saveNote(held.lead, text, at.toISOString(), actor.id)
+  const after = saveNote(held.lead, text, at.toISOString(), mayManageSunoff(actor.role, held.row.leadAttribution) ? held.row.lockedBy ?? actor.id : actor.id)
   if (after === held.lead) return { ok: false, error: 'Not allowed' }
   return writeTrail(organizationId, actor, leadId, held.lead, after, at)
 }
@@ -504,7 +512,7 @@ export async function sendCallCenterIntakeFor(
   const held = await heldLead(organizationId, actor, leadId)
   if (!held.ok) return { ok: false, error: held.error }
   if (held.row.doNotCallAt) return { ok: false, error: 'Do not call' }
-  const after = sendIntakeLink(held.lead, at.toISOString(), actor.id)
+  const after = sendIntakeLink(held.lead, at.toISOString(), mayManageSunoff(actor.role, held.row.leadAttribution) ? held.row.lockedBy ?? actor.id : actor.id)
   if (after === held.lead) return { ok: false, error: 'Not allowed' }
   return writeTrail(organizationId, actor, leadId, held.lead, after, at, {
     intakeLinkSentAt: held.row.intakeLinkSentAt ?? at,
@@ -521,7 +529,7 @@ export async function recordCallCenterAttemptFor(
   if (!held.ok) return { ok: false, error: held.error }
   if (held.row.doNotCallAt) return { ok: false, error: 'Do not call' }
   const stamp = at.toISOString()
-  const dialled = applyLeadAction(held.lead, 'call', stamp, actor.id)
+  const dialled = applyLeadAction(held.lead, 'call', stamp, mayManageSunoff(actor.role, held.row.leadAttribution) ? held.row.lockedBy ?? actor.id : actor.id)
   if (dialled === held.lead) return { ok: false, error: 'Not allowed' }
   // The tel: flow dials from the rep's own phone: say so, not "preview".
   const after = {
@@ -569,6 +577,7 @@ export async function recordCarrierCallFor(
     select: {
       id: true,
       pageId: true,
+      leadAttribution: true,
       source: true,
       language: true,
       status: true,
@@ -674,11 +683,11 @@ async function intakeLinkRow(organizationId: string, leadId: string): Promise<In
     select: {
       id: true,
       pageId: true,
+      leadAttribution: true,
       language: true,
       lockedBy: true,
       doNotCallAt: true,
       clientId: true,
-      leadAttribution: true,
       consentAt: true,
       consentRevokedAt: true,
       timeZone: true,
@@ -687,9 +696,10 @@ async function intakeLinkRow(organizationId: string, leadId: string): Promise<In
   })
 }
 
-function intakeLinkGate(row: IntakeLinkRow | null, actorId: string): string | null {
+function intakeLinkGate(row: IntakeLinkRow | null, actorId: string, role?: string): string | null {
   if (!row) return 'Lead not found'
-  if (row.lockedBy !== actorId) return row.lockedBy ? 'Another rep has this lead' : 'Take this lead first'
+  if (!sunoffActive(row.leadAttribution)) return 'Lead is no longer assigned from SunOff'
+  if (row.lockedBy !== actorId && !mayManageSunoff(role, row.leadAttribution)) return row.lockedBy ? 'Another rep has this lead' : 'Take this lead first'
   if (row.doNotCallAt) return 'Do not call'
   if (row.clientId) return 'This lead already has its intake linked'
   return null
@@ -702,7 +712,7 @@ export async function scsIntakeTextStatusFor(
   now = new Date(),
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const row = await intakeLinkRow(user.organizationId, leadId)
-  const gate = intakeLinkGate(row, user.id)
+  const gate = intakeLinkGate(row, user.id, user.role)
   if (gate || !row) return { ok: false, reason: gate ?? 'Lead not found' }
   const { isMockMode } = await import('@/lib/messaging')
   const blocked = intakeTextBlock(row, isMockMode('SMS'), now)
@@ -724,7 +734,7 @@ export async function scsIntakeLinkFor(
 ): Promise<IntakeLinkResult> {
   if (mode !== 'open' && mode !== 'text' && mode !== 'copy') return { ok: false, reason: 'Not allowed' }
   const row = await intakeLinkRow(user.organizationId, leadId)
-  const gate = intakeLinkGate(row, user.id)
+  const gate = intakeLinkGate(row, user.id, user.role)
   if (gate || !row) return { ok: false, reason: gate ?? 'Lead not found' }
 
   let token: string

@@ -1,5 +1,7 @@
 'use client'
 
+import { SunoffPill } from '../sunoff-pill'
+
 import Link from 'next/link'
 import { useRef, useState } from 'react'
 import { confirmCalendarSlot, saveCalendarOutcome, type CalendarResult } from '@/lib/call-center/calendar/actions'
@@ -59,7 +61,8 @@ export function VisitPanel({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [askCancel, setAskCancel] = useState(false)
   const look = statusLook(visit.status)
-  const live = isLive(visit.status)
+  const external = visit.id.startsWith('sunoff:')
+  const live = isLive(visit.status) && !external
 
   async function run(key: string, act: () => Promise<CalendarResult>) {
     setBusy(true)
@@ -94,7 +97,7 @@ export function VisitPanel({
         <div className="cal-grab" aria-hidden="true" />
         <header className="cal-panel-head">
           <div>
-            <h3>{visit.name}</h3>
+            <h3>{visit.name} {visit.sourceBrand ? <SunoffPill /> : null}</h3>
             <p className="cal-panel-when">{visitWhen(visit.startsAt, visit.endsAt)} · Pacific</p>
           </div>
           <button type="button" className="cal-x" aria-label="Close the visit" onClick={onClose}>×</button>
@@ -112,8 +115,9 @@ export function VisitPanel({
           <p>{visit.note ?? 'No note on this lead yet.'}</p>
         </div>
         <div className="cal-panel-acts">
-          <Link prefetch={false} className="btn secondary" href={leadHref(visit.leadId)}>Open lead</Link>
-          {visit.status === 'HOLD' ? (
+          <Link prefetch={false} className="btn secondary" href={leadHref(visit.leadId)}>Open lead / Call</Link>
+          {external ? <a className="btn secondary" href="https://sunoff.app/?dialer=1" target="_blank" rel="noopener noreferrer">Manage in SunOff</a> : null}
+          {visit.status === 'HOLD' && !external ? (
             <button type="button" className="btn" disabled={busy} onClick={() => { void run('confirm', () => confirmCalendarSlot(visit.id)) }}>
               Confirm (on the call)
             </button>

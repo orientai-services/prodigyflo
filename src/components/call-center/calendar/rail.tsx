@@ -1,5 +1,7 @@
 'use client'
 
+import { SunoffPill } from '../sunoff-pill'
+
 import Link from 'next/link'
 import { useState } from 'react'
 import { railWhen, timeLabel, type RailLeadVM, type RepVM, type VisitVM } from '@/lib/call-center/calendar/planner'
@@ -49,7 +51,7 @@ export function Rail({
                 <li key={visit.id} className={`cal-rail-row cal-rep-${repOf(reps, visit.repKey).color}`}>
                   <i className="cal-dot" aria-hidden="true" />
                   <span className="cal-rail-text">
-                    <b>{timeLabel(visit.startsAt)} {visit.name}</b>
+                    <b>{timeLabel(visit.startsAt)} {visit.name} {visit.sourceBrand ? <SunoffPill /> : null}</b>
                     <small>{repOf(reps, visit.repKey).label} · {visit.status === 'HOLD' ? 'Hold' : 'Confirmed'}</small>
                   </span>
                   <Link prefetch={false} className="cal-rail-btn" href={leadHref(visit.leadId)}>Call</Link>
@@ -67,7 +69,7 @@ export function Rail({
               {toSchedule.map((lead) => (
                 <li key={lead.id} className="cal-rail-row">
                   <span className="cal-rail-text">
-                    <b>{lead.name}</b>
+                    <b>{lead.name} {lead.sourceBrand ? <SunoffPill /> : null}</b>
                     <small>{who(lead)} · came in {railWhen(lead.at, now)}</small>
                   </span>
                   <button type="button" className="cal-rail-btn" onClick={() => onBook(lead)}>Book</button>
@@ -85,7 +87,7 @@ export function Rail({
               {followUps.map((lead) => (
                 <li key={lead.id} className="cal-rail-row">
                   <span className="cal-rail-text">
-                    <b>{lead.name}</b>
+                    <b>{lead.name} {lead.sourceBrand ? <SunoffPill /> : null}</b>
                     <small>Next try {railWhen(lead.at, now)} · {who(lead)}</small>
                   </span>
                   <Link prefetch={false} className="cal-rail-btn" href={leadHref(lead.id)}>Open</Link>

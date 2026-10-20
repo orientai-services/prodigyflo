@@ -25,11 +25,12 @@ function visitVM(v: CalendarVisit): VisitVM {
     endsAt: v.endsAt.toISOString(),
     status: v.status,
     note: v.note,
+    sourceBrand: v.sourceBrand,
   }
 }
 
 function railVM(lead: RailLead): RailLeadVM {
-  return { id: lead.id, name: lead.name, last4: lead.last4, language: lead.language, at: lead.at.toISOString() }
+  return { sourceBrand: lead.sourceBrand, id: lead.id, name: lead.name, last4: lead.last4, language: lead.language, at: lead.at.toISOString() }
 }
 
 /**

@@ -6,6 +6,7 @@
 import { deriveFollowUp, isHandoffStatus, seedLeads, type CallLead, type IntakeMode, type LeadChannel, type LeadHandoff, type LeadIntake, type LeadLanguage, type LeadStatus, type TrailEvent, type TrailKind } from './model'
 import { calendarTrailText } from './calendar/trail-text'
 import { SCS_ENGLISH_PAGE_ID, readFacebookFormEvent } from './meta-route'
+import { sourceLabel, sourceMeta } from '@/lib/sunoff-bridge/assigned-model'
 
 export type StoredCallCenterEvent = {
   type: string
@@ -16,6 +17,7 @@ export type StoredCallCenterEvent = {
 export type StoredCallCenterLead = {
   id: string
   pageId: string | null
+  leadAttribution?: unknown
   source: 'FORM' | 'INBOUND'
   language: 'EN' | 'ES'
   status: 'WAITING' | 'INBOUND' | 'MISSED' | 'BOOKED'
@@ -40,6 +42,7 @@ function last4(value: string | null): string | null {
 }
 
 function pageName(row: StoredCallCenterLead): string {
+  if (sourceLabel(row.pageId)) return 'SunOff'
   if (row.pageId === SCS_ENGLISH_PAGE_ID || row.source === 'FORM') return 'Solar Contract Services'
   return 'Ad number'
 }
@@ -285,6 +288,7 @@ export function callLeadFromRow(
     last4: last4(row.phoneLast4),
     zip: personZip(row),
     page,
+    ...(sourceLabel(row.pageId) ? { sourceBrand: 'SunOff' as const, subtitle: String(sourceMeta(row.leadAttribution)?.stage ?? 'SunOff lead') } : {}),
     arrivedAt: row.createdAt.toISOString(),
     disabled: false,
     recording: null,

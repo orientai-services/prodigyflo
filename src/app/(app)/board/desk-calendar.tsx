@@ -1,5 +1,7 @@
 'use client'
 
+import { SunoffPill } from '@/components/call-center/sunoff-pill'
+
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -91,6 +93,7 @@ export function DeskCalendar({
 
   const openProfile = (clientId: string) => {
     closeMenu()
+    if (clientId.startsWith('sunoff-desk:')) { router.push(`/call-center?lead=${encodeURIComponent(clientId.slice(12))}`); return }
     router.push(`/clients/${clientId}`)
   }
 
@@ -223,6 +226,7 @@ export function DeskCalendar({
                       onOpen={() => openProfile(chip.clientId)}
                       onMenu={(event) => {
                         event.preventDefault()
+                        if (chip.sourceLeadId) { openProfile(chip.clientId); return }
                         setMenu({
                           clientId: chip.clientId,
                           appointmentId: chip.appointmentId,
@@ -452,7 +456,7 @@ function Chip({
       onContextMenu={onMenu}
     >
       <b>
-        {chip.timeLabel} {chip.firstName}
+        {chip.timeLabel} {chip.firstName} {chip.sourceBrand ? <SunoffPill /> : null}
       </b>
       {chip.ownerName ?? 'Unassigned'}
       {!['SCHEDULED', 'CONFIRMED'].includes(chip.status) && <span>{chip.status.replaceAll('_', ' ').toLowerCase()}</span>}

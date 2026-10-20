@@ -121,6 +121,7 @@ export default async function CallCenterPage({ searchParams }: PageProps<'/call-
     // Lead ids may be Meta ids ('meta:<org>:<leadgen>').
     openLeadId: leadIdParam(params.lead),
     canOverrideHours: can(user, 'telephony:manage'),
+    canManageSunoff: owner,
     setup: setup
       ? { vm: setup, status: status && 'account' in status ? (status as TwilioStatusVM) : null }
       : null,

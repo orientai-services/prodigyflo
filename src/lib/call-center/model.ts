@@ -115,6 +115,7 @@ export type CallLead = {
   phone?: LeadPhoneView | null
   zip: string | null
   page: string
+  sourceBrand?: 'SunOff'
   arrivedAt: string
   disabled: boolean
   recording: DummyRecording | null

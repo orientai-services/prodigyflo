@@ -1,3 +1,4 @@
+import { SunoffPill } from '../sunoff-pill'
 import Link from 'next/link'
 import {
   dayKeyOf,
@@ -52,7 +53,7 @@ export function MonthGrid({
                   const look = statusLook(visit.status)
                   return (
                     <span key={visit.id} className={`cal-mchip cal-rep-${repOf(reps, visit.repKey).color}${look.struck ? ' struck' : ''}`}>
-                      <span className="cal-mchip-text">{timeLabel(visit.startsAt).replace(':00 ', ' ')} {shortName(visit.name)}</span>
+                      {visit.sourceBrand ? <SunoffPill /> : null}<span className="cal-mchip-text">{timeLabel(visit.startsAt).replace(':00 ', ' ')} {shortName(visit.name)}</span>
                     </span>
                   )
                 })}
