@@ -1,3 +1,4 @@
+import type { UiLocale } from '@/lib/ui-locale'
 import type { CallRouting } from '@prisma/client'
 
 /**
@@ -54,8 +55,39 @@ export function escapeXml(value: string): string {
     .replace(/'/g, '&apos;')
 }
 
-function say(text: string): string {
-  return `<Say voice="Polly.Joanna">${escapeXml(text)}</Say>`
+const ES: Record<string,string> = {
+  [DEFAULT_GREETING]:'Gracias por llamar. Espere mientras le conectamos.',
+  [DEFAULT_VOICEMAIL_PROMPT]:'No pudimos atenderle. Deje su nombre, número y un mensaje después del tono y le devolveremos la llamada.',
+  [RECORDING_NOTICE]:'Esta llamada puede ser grabada para fines de calidad.',
+  [CALLBACK_PROMPT]:'Para que le devolvamos la llamada, presione 1. O espere para dejar un mensaje.',
+  [CALLBACK_CONFIRMED]:'Gracias. Le devolveremos la llamada lo antes posible. Hasta luego.',
+  'We did not get a message. Goodbye.':'No recibimos ningún mensaje. Hasta luego.',
+  "We couldn't place this call.":'No pudimos realizar esta llamada.',
+  "Phone calling from the browser isn't switched on yet.":'Las llamadas desde el navegador todavía no están activadas.',
+  'Another call is in progress. Until Twilio approves the business profile, the account can place one call at a time.':'Hay otra llamada en curso. Hasta que Twilio apruebe el perfil comercial, la cuenta permite una llamada a la vez.',
+  'This call could not start. Twilio allows one call at a time on this account until the business profile is approved. Try again when the other call ends.':'No se pudo iniciar esta llamada. Twilio permite una llamada a la vez hasta que apruebe el perfil comercial. Inténtelo cuando termine la otra llamada.',
+  'The line is busy.':'La línea está ocupada.', 'No answer.':'No hubo respuesta.',
+  'The call was cancelled.':'La llamada fue cancelada.', "The call didn't go through.":'No se pudo conectar la llamada.',
+  'That override was already used. Ask again.':'Esa autorización ya se utilizó. Solicite una nueva.',
+  "That contact isn't in your list.":'Ese contacto no está en su lista.',
+  'This client has no phone number on file.':'Este cliente no tiene un teléfono registrado.',
+  'This lead has no phone number on file.':'Este prospecto no tiene un teléfono registrado.',
+  'Another rep has this lead.':'Otro representante tiene este prospecto.',
+  'Take this lead first.':'Tome este prospecto primero.',
+  'Enter a 10-digit US number.':'Ingrese un número de Estados Unidos de diez dígitos.',
+  "We don't have this caller's number.":'No tenemos el número de esta persona.',
+  'This account has no phone line yet.':'Esta cuenta todavía no tiene una línea telefónica.',
+  "This line can't take callbacks yet. Set it to forward, ring a team or ring browsers.":'Esta línea todavía no recibe llamadas. Configure el desvío, el equipo o los navegadores.',
+  "You can't call from that line. Use your own line or the main line.":'No puede llamar desde esa línea. Use su línea o la principal.',
+  "We couldn't check the calling rules just now, so nothing was sent. Try again in a moment.":'No pudimos comprobar las reglas de llamadas. No se envió nada. Inténtelo en un momento.',
+  'This number is no longer in service. Goodbye.':'Este número ya no está en servicio. Hasta luego.',
+}
+function say(text: string, language: UiLocale = 'en'): string {
+  const spoken=language === 'es' ? ES[text] ?? 'No se pudo realizar la llamada. Revise el motivo en la pantalla del teléfono.' : text
+  return `<Say language="${language === 'es' ? 'es-MX' : 'en-US'}" voice="${language === 'es' ? 'Polly.Mia' : 'Polly.Joanna'}">${escapeXml(spoken)}</Say>`
+}
+function customSay(text:string,language:UiLocale='en'):string {
+  return `<Say language="${language === 'es' ? 'es-MX' : 'en-US'}" voice="${language === 'es' ? 'Polly.Mia' : 'Polly.Joanna'}">${escapeXml(text)}</Say>`
 }
 
 function document(body: string): string {
@@ -77,6 +109,7 @@ export type VoiceRouteConfig = {
   teamNumbers?: string[]
   recordCalls: boolean
   greeting?: string | null
+  language?: UiLocale
   /** Absolute URL the recorded voicemail is posted back to. */
   voicemailCallbackUrl: string
   /** Absolute URL that Twilio posts the dial outcome to. */
@@ -91,11 +124,10 @@ export type VoiceRouteConfig = {
   transcribeCallbackUrl?: string | null
 }
 
-export function greetingFor(config: Pick<VoiceRouteConfig, 'greeting' | 'recordCalls' | 'skipGreeting'>): string {
+export function greetingFor(config: Pick<VoiceRouteConfig, 'greeting' | 'recordCalls' | 'skipGreeting' | 'language'>): string {
   if (config.skipGreeting) return ''
-  const greeting = config.greeting?.trim() || DEFAULT_GREETING
-  const notice = config.recordCalls ? ` ${RECORDING_NOTICE}` : ''
-  return say(`${greeting}${notice}`)
+  const greeting=config.greeting?.trim()
+  return (greeting ? customSay(greeting,config.language) : say(DEFAULT_GREETING,config.language)) + (config.recordCalls ? say(RECORDING_NOTICE,config.language) : '')
 }
 
 function dialOpen(config: {
@@ -176,6 +208,7 @@ export function browserDialTwiml(config: {
   actionUrl: string
   recordCalls: boolean
   greeting?: string | null
+  language?: UiLocale
   callRecordingUrl?: string
   childStatusUrl?: string
   /** One call at a time: ring only the first browser. */
@@ -199,7 +232,7 @@ export function browserDialTwiml(config: {
     })
     .join('')
   return document(
-    `${greetingFor({ greeting: config.greeting, recordCalls: config.recordCalls })}${dialOpen(config)}${clients}</Dial>`,
+    `${greetingFor({ greeting: config.greeting, recordCalls: config.recordCalls, language:config.language })}${dialOpen(config)}${clients}</Dial>`,
   )
 }
 
@@ -207,13 +240,14 @@ export function browserDialTwiml(config: {
 export function voicemailTwiml(config: {
   voicemailCallbackUrl: string
   greeting?: string | null
+  language?: UiLocale
   recordCalls?: boolean
   skipGreeting?: boolean
   /** Signed transcription callback; absent → no transcription (as before). */
   transcribeCallbackUrl?: string | null
 }): string {
   return document(
-    greetingFor({ greeting: config.greeting, recordCalls: Boolean(config.recordCalls), skipGreeting: config.skipGreeting }) +
+    greetingFor({ greeting: config.greeting, recordCalls: Boolean(config.recordCalls), skipGreeting: config.skipGreeting, language:config.language }) +
       voicemailBody(config),
   )
 }
@@ -232,6 +266,7 @@ export function voicemailTwiml(config: {
  */
 export function callbackOfferTwiml(config: {
   gatherActionUrl: string
+  language?: UiLocale
   voicemailCallbackUrl: string
   transcribeCallbackUrl?: string | null
   /** Greeting + recording notice when the offer is the call's first answer (voicemail-only line, after hours). */
@@ -243,13 +278,13 @@ export function callbackOfferTwiml(config: {
     ['timeout', CALLBACK_GATHER_SECONDS],
     ['action', config.gatherActionUrl],
     ['method', 'POST'],
-  ])}>${say(CALLBACK_PROMPT)}</Gather>`
+  ])}>${say(CALLBACK_PROMPT,config.language)}</Gather>`
   return document((config.lead ?? '') + gather + voicemailBody(config))
 }
 
 /** The caller pressed 1: confirm and hang up. */
-export function callbackConfirmedTwiml(): string {
-  return document(say(CALLBACK_CONFIRMED) + '<Hangup/>')
+export function callbackConfirmedTwiml(language:UiLocale='en'): string {
+  return document(say(CALLBACK_CONFIRMED,language) + '<Hangup/>')
 }
 
 /**
@@ -258,10 +293,10 @@ export function callbackConfirmedTwiml(): string {
  * store one voicemail. With a transcription URL, Twilio transcribes the
  * message (English, recordings up to two minutes) and posts the text there.
  */
-function voicemailBody(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl'> & { transcribeCallbackUrl?: string | null }): string {
-  const transcribe = Boolean(config.transcribeCallbackUrl)
+function voicemailBody(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl' | 'language'> & { transcribeCallbackUrl?: string | null }): string {
+  const transcribe = config.language !== 'es' && Boolean(config.transcribeCallbackUrl)
   return (
-    say(DEFAULT_VOICEMAIL_PROMPT) +
+    say(DEFAULT_VOICEMAIL_PROMPT,config.language) +
     `<Record ${attrs([
       ['maxLength', VOICEMAIL_MAX_SECONDS],
       ['playBeep', 'true'],
@@ -272,13 +307,13 @@ function voicemailBody(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl'> & 
       ['recordingStatusCallback', config.voicemailCallbackUrl],
       ['recordingStatusCallbackMethod', 'POST'],
     ])} />` +
-    say('We did not get a message. Goodbye.') +
+    say('We did not get a message. Goodbye.',config.language) +
     '<Hangup/>'
   )
 }
 
 /** The follow-up answer after a dial that nobody picked up. */
-export function noAnswerTwiml(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl' | 'actionUrl' | 'routing' | 'recordCalls'>): string {
+export function noAnswerTwiml(config: Pick<VoiceRouteConfig, 'voicemailCallbackUrl' | 'actionUrl' | 'routing' | 'recordCalls' | 'language'>): string {
   return document(voicemailBody(config))
 }
 
@@ -315,13 +350,13 @@ export function outboundDialTwiml(config: {
 }
 
 /** Played to the callee on answer, before they are bridged. */
-export function whisperTwiml(): string {
-  return document(say(RECORDING_NOTICE))
+export function whisperTwiml(language:UiLocale='en'): string {
+  return document(say(RECORDING_NOTICE,language))
 }
 
 /** Say the plain reason, then hang up. Every refusal on a call ends this way. */
-export function sayAndHangup(reason: string): string {
-  return document(say(reason) + '<Hangup/>')
+export function sayAndHangup(reason: string, language:UiLocale='en'): string {
+  return document(say(reason,language) + '<Hangup/>')
 }
 
 /** A polite dead end — used when a number posts to us that we no longer own. */

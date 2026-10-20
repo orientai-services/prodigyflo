@@ -7,6 +7,8 @@ import { calendarReps } from './calendar/config'
 import { calendarTrailText } from './calendar/trail-text'
 import { leadHref } from './lead-link'
 import { withLeadPhones } from './lead-phones'
+import { readSecret } from './contact'
+import { leadPhoneView, phoneText } from './phone-display'
 import { readFacebookFormEvent } from './meta-route'
 import {
   HISTORY_PAGE,
@@ -14,7 +16,6 @@ import {
   dayLabel,
   decodeCursor,
   firstName,
-  maskPhones,
   maskedNumber,
   nameMatches,
   pageOf,
@@ -37,7 +38,7 @@ import {
  * anyone else sees calls they placed or answered, calls on their clients and
  * calls on leads they hold. Texts follow the same idea (their clients, leads
  * they hold, texts they sent). Names come from the lead's Facebook form or the
- * client record; a number never leaves here except as its last 4.
+ * client record; full numbers are returned only on records within that scope.
  */
 
 /** Each source is read a little past the page so ties at the boundary still merge right. */
@@ -72,10 +73,10 @@ function str(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-/** Free text shown in a list: phone numbers masked, any other long digit run hidden. */
+/** Free text on an authorized record preserves the numbers the user needs. */
 function safe(text: string | null | undefined): string | null {
   if (!text) return null
-  const out = maskPhones(text).replace(/\d{7,}/g, '····').trim()
+  const out = text.trim()
   return out || null
 }
 
@@ -180,7 +181,7 @@ type CallRow = Prisma.VoiceCallGetPayload<{
   select: {
     id: true; direction: true; status: true; outcome: true; startedAt: true; answeredAt: true; endedAt: true
     durationSeconds: true; talkSeconds: true; recordingSid: true; recordingDurationSeconds: true; recordingKind: true
-    remoteLast4: true; clientId: true; callCenterLeadId: true; userId: true; answeredBy: true
+    remoteSecret: true; remoteLast4: true; clientId: true; callCenterLeadId: true; userId: true; answeredBy: true
     callbackRequested: true; transcript: true
   }
 }>
@@ -243,7 +244,7 @@ async function loadCalls(v: Viewer, filter: HistoryFilter, search: Search | null
     select: {
       id: true, direction: true, status: true, outcome: true, startedAt: true, answeredAt: true, endedAt: true,
       durationSeconds: true, talkSeconds: true, recordingSid: true, recordingDurationSeconds: true, recordingKind: true,
-      remoteLast4: true, clientId: true, callCenterLeadId: true, userId: true, answeredBy: true,
+      remoteSecret: true, remoteLast4: true, clientId: true, callCenterLeadId: true, userId: true, answeredBy: true,
       callbackRequested: true, transcript: true,
     },
   })
@@ -252,18 +253,20 @@ async function loadCalls(v: Viewer, filter: HistoryFilter, search: Search | null
   const clientIds = defined(rows.map((r) => r.clientId))
   const [clients, leads, reps] = await Promise.all([
     clientIds.length
-      ? db.client.findMany({ where: { AND: [clientScope(v.user), { id: { in: clientIds } }] }, select: { id: true, firstName: true, lastName: true } })
+      ? db.client.findMany({ where: { AND: [clientScope(v.user), { id: { in: clientIds } }] }, select: { id: true, firstName: true, lastName: true, phone:true } })
       : Promise.resolve([]),
     leadInfo(org, defined(rows.map((r) => r.callCenterLeadId))),
     userNames(org, defined(rows.map(repId))),
   ])
+  const clientPhone=new Map(clients.map(c=>[c.id,c.phone]))
   const clientName = new Map(clients.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]))
 
   return rows.map((vc) => {
     const kind = callKind(vc)
     const visibleClient = vc.clientId && clientName.has(vc.clientId) ? vc.clientId : null
     const lead = vc.callCenterLeadId ? leads.get(vc.callCenterLeadId) : undefined
-    const name = visibleClient ? clientName.get(visibleClient)! : lead?.name ?? maskedNumber(vc.remoteLast4 ?? lead?.last4)
+    const phone = leadPhoneView(readSecret(vc.remoteSecret) ?? (vc.clientId ? clientPhone.get(vc.clientId) : null) ?? null, Boolean(vc.remoteSecret || vc.remoteLast4))
+    const name = visibleClient ? clientName.get(visibleClient)! : lead?.name ?? phoneText(phone, vc.remoteLast4 ?? lead?.last4)
     const rep = repId(vc)
     return {
       key: `vc:${vc.id}`,
@@ -272,6 +275,7 @@ async function loadCalls(v: Viewer, filter: HistoryFilter, search: Search | null
       time: timeLabel(vc.startedAt),
       kind,
       name,
+      phone,
       rep: rep ? firstName(reps.get(rep)) : null,
       seconds: callSeconds(vc, kind),
       status: callStatus(vc, kind),
@@ -305,7 +309,7 @@ async function loadClientTexts(v: Viewer, search: Search | null, before: Date | 
     take: SOURCE_TAKE,
     select: {
       id: true, direction: true, status: true, body: true, occurredAt: true, clientId: true, userId: true,
-      client: { select: { firstName: true, lastName: true } },
+      client: { select: { firstName: true, lastName: true, phone:true } },
     },
   })
   if (!rows.length) return []
@@ -317,6 +321,7 @@ async function loadClientTexts(v: Viewer, search: Search | null, before: Date | 
     time: timeLabel(c.occurredAt),
     kind: c.direction === 'INBOUND' ? 'sms-in' : 'sms-out',
     name: `${c.client.firstName} ${c.client.lastName}`.trim() || 'Client',
+    phone:leadPhoneView(c.client.phone,Boolean(c.client.phone)),
     rep: c.userId ? firstName(reps.get(c.userId)) : null,
     seconds: null,
     status: c.status === 'FAILED' ? 'Not sent' : c.status === 'QUEUED' ? 'Queued' : null,
@@ -570,7 +575,7 @@ export async function loadActivity(
     leadInfo(org, leadIds),
     lockHistory(leadIds),
     auditClientIds.length
-      ? db.client.findMany({ where: { organizationId: org, id: { in: auditClientIds } }, select: { id: true, firstName: true, lastName: true } })
+      ? db.client.findMany({ where: { organizationId: org, id: { in: auditClientIds } }, select: { id: true, firstName: true, lastName: true, phone:true } })
       : Promise.resolve([]),
   ])
   const lockUserIds = [...locks.values()].flat().map((t) => t.userId)

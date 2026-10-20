@@ -397,8 +397,8 @@ export async function CommunicationsTab({ clientId }: { clientId: string }) {
                         )}
                         <span>
                           {outbound
-                            ? `${c.user?.name ?? 'Automation'}${c.message?.toMasked ? ` → ${c.message.toMasked}` : ''}`
-                            : `${client.firstName}${c.message?.fromMasked ? ` (${c.message.fromMasked})` : ''}`}
+                            ? `${c.user?.name ?? 'Automation'}${c.message?.toMasked ? ` → ${client.phone}` : ''}`
+                            : `${client.firstName}${c.message?.fromMasked ? ` (${client.phone})` : ''}`}
                         </span>
                         <span title={dateTime(c.occurredAt)}>· {relativeTime(c.occurredAt)}</span>
                       </div>

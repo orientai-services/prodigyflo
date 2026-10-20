@@ -27,7 +27,7 @@ describe('lead phone display', () => {
     expect(phoneE164('555-0123')).toBeNull()
   })
 
-  it('lets a Super Admin see any lead, and a rep only the lead they hold off do-not-call', () => {
+  it('shows numbers for every authenticated role on visible records, including do-not-call', () => {
     const admin = { id: 'u-admin', role: 'SUPER_ADMIN' }
     const rep = { id: 'u-rep', role: 'CLOSER' }
     const held = { lockedBy: 'u-rep', doNotCallAt: null }
@@ -37,9 +37,9 @@ describe('lead phone display', () => {
     expect(maySeeLeadPhone(admin, other)).toBe(true)
     expect(maySeeLeadPhone(admin, dnc)).toBe(true)
     expect(maySeeLeadPhone(rep, held)).toBe(true)
-    expect(maySeeLeadPhone(rep, other)).toBe(false)
-    expect(maySeeLeadPhone(rep, open)).toBe(false)
-    expect(maySeeLeadPhone(rep, dnc)).toBe(false)
+    expect(maySeeLeadPhone(rep, other)).toBe(true)
+    expect(maySeeLeadPhone(rep, open)).toBe(true)
+    expect(maySeeLeadPhone(rep, dnc)).toBe(true)
     // An empty viewer id never matches an unlocked lead.
     expect(maySeeLeadPhone({ id: '', role: 'CLOSER' }, open)).toBe(false)
   })

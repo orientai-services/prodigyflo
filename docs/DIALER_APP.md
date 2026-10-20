@@ -16,8 +16,7 @@ panel, power mode, cadence, callbacks, missed calls, the dial pad
 dashboard (`docs/META_ADS_SCS.md`), the phone status pill + settings sheet
 (feat/phone-pill), browser calling and recordings (`docs/TELEPHONY_LIVE.md`).
 Compliance rules are unchanged: the server decides every dial and every text.
-Full phone numbers reach the browser only for viewers allowed to see them
-(§Phone numbers); everyone else gets the last 4.
+Full phone numbers are shown on every record the authenticated user can access (§Phone numbers).
 
 ## 1. Shell (lane A)
 
@@ -148,34 +147,17 @@ Server: `src/lib/call-center/messages.ts`; UI
 
 ## Phone numbers
 
-Owner ask 2026-10-13: lead numbers showed as dots ("••5080"). Now:
+Owner update 2026-10-20: every authenticated user sees full numbers on records they can access.
 
-- **Who sees a full number** (`maySeeLeadPhone`, `src/lib/call-center/phone-display.ts`):
-  a Super Admin on any lead in the workspace, or the rep who holds the lead
-  when it is not on do-not-call. The second half is the rule
-  `revealCallCenterContactFor` already used for the dial; nothing new is
-  revealed to a rep. Everyone else keeps `•••-•••-1234`.
-- **Where it is read**: `leadPhonesFor` / `withLeadPhones`
-  (`src/lib/call-center/lead-phones.ts`, server-only) decrypt `phoneSecret`
-  (VAULT_KEY) only for the leads the viewer may see and put a `phone` view on
-  the row. The desk load (`load-leads.ts`), History (`history.ts`), Messages
-  (`messages.ts`, lead threads only; client numbers are unchanged), the
-  calendar (`calendar-tab.tsx`) and Missed calls (`listMissed`, the caller's
-  own number) all use the same rule. No audit row per render: it is the same
-  reach the dial already has.
-- **How it reads**: `(702) 555-0123` for US numbers, `+<digits>` otherwise.
-  A number on file that will not decrypt reads **Number unavailable**, not dots.
-  No number at all reads "—".
-- **Tap to copy, never `tel:`**: the lead panel, Today, Messages and the
-  calendar panel render it as a copy button (`lead-phone.tsx`). It is plain
-  text inside another control (the list row). Every dial still goes through
-  Call and the server's outbound decision.
-- **Unchanged on purpose**: the team chat / case feed and the SunOff bridge
-  carry last 4 only (`cases.phone4`, docs/CYS_BRIDGE.md); SMS bodies and
-  transcripts keep their numbers masked; the incoming-call banner is one TwiML
-  sent to every ringing rep, so it keeps the name or last 4.
-- **Dial pad recents** show the full numbers this browser typed
-  (docs/DIAL_PAD.md).
+- `leadPhonesFor` / `withLeadPhones` decrypt only requested records in the viewer's own organization. Display is independent of who holds the lead and whether it is on do-not-call.
+- Lead lists and details, calendar, Messages, call History, Missed calls, client communications and incoming call banners show the full stored number. A historical call keeps its actual remote number when the contact's current number changes.
+- US numbers use `(702) 555-0123`; other countries use `+<digits>`. Copy buttons retain E.164. A missing or unreadable number is shown as **Number unavailable**; no digits are fabricated.
+- Company, client and call visibility boundaries stay in place. Calling and texting still use the existing holder, consent, do-not-call and outbound-decision checks.
+- Audit trails and signed cross-system case-feed identifiers remain redacted. Those are not the phone display on a visible CRM record.
+
+## Saved user language
+
+The EN/ES menu choice is saved per user in `Organization.settings.staffLanguages`, restored across devices, and retried after an offline change. Requests are bound to the authenticated user; an old tab cannot apply its language choice to another account. Browser calling errors use that preference. Customer recording notices, callbacks and voicemail use the known customer's language, independently of the representative's language.
 
 ## 6. Interfaces between lanes
 

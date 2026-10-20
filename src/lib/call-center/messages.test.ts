@@ -127,7 +127,7 @@ describe('call center messages', () => {
     expect(await db.callCenterEvent.count({ where: { lead: { organizationId: orgId }, type: 'SMS', direction: 'in' } })).toBe(1)
   })
 
-  it('lists one thread per lead and client, newest first, unread counted; full lead number only for a Super Admin', async () => {
+  it('lists one thread per lead and client, newest first, unread counted; full numbers on every visible record', async () => {
     const threads = await listThreads(admin.actor, OPEN)
     expect(threads.map((t) => t.key)).toEqual([`client:${clientId}`, `lead:${leadId}`])
     const t = threads.find((x) => x.kind === 'lead')!
@@ -138,15 +138,13 @@ describe('call center messages', () => {
     expect(t.lastDirection).toBe('in')
     // A Super Admin sees the lead's full number (docs/DIALER_APP.md §Phone numbers); a client's never rides along.
     expect(t.phone).toEqual({ state: 'shown', ...formatLeadPhone(lead) })
-    hidden(threads.filter((x) => x.kind === 'client'))
-    hidden(threads, clientPhone)
+    expect(threads.find(x=>x.kind === 'client')?.phone).toEqual({state:'shown',...formatLeadPhone(clientPhone)})
     expect(await countUnreadMessages(admin.actor)).toBe(2)
     // A Closer sees the lead thread (the desk is org-wide) but not another owner's client.
     const closer = await listThreads(repA.actor, OPEN)
     expect(closer.map((x) => x.key)).toEqual([`lead:${leadId}`])
     // …and, not holding the lead, only its last four.
-    expect(closer[0].phone).toBeNull()
-    hidden(closer)
+    expect(closer[0].phone).toEqual({state:'shown',...formatLeadPhone(lead)})
     expect(await countUnreadMessages(repA.actor)).toBe(1)
   })
 
@@ -155,7 +153,7 @@ describe('call center messages', () => {
     expect(thread?.messages.map((m) => [m.direction, m.text, m.status])).toEqual([['in', 'Is this about my solar?', 'received']])
     expect(thread?.canSend).toBe(true)
     expect(thread?.phone).toEqual({ state: 'shown', ...formatLeadPhone(lead) })
-    hidden(await loadThread(repB.actor, { kind: 'lead', id: leadId }))
+    expect((await loadThread(repB.actor, { kind: 'lead', id: leadId }))?.phone).toEqual({state:'shown',...formatLeadPhone(lead)})
     expect(await markThreadRead(admin.actor, { kind: 'lead', id: leadId })).toBe(1)
     expect(await markThreadRead(admin.actor, { kind: 'lead', id: leadId })).toBe(0)
     expect(await markThreadRead(admin.actor, { kind: 'client', id: clientId })).toBe(1)

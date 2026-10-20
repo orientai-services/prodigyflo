@@ -2,6 +2,8 @@ import type { RoleKey } from '@prisma/client'
 
 /** Additional surface restriction; every data query still enforces assignment scope. */
 export function staffRouteAllowed(role: RoleKey, path: string): boolean {
+  // Every signed-in user may save only their own language; the route binds the id to the session.
+  if (path === '/api/me/language') return true
   if (process.env.PRODIGYFLO_FINAL_DESK === 'true' && !path.startsWith('/api/')) {
     if (!['SUPER_ADMIN', 'CLOSER'].includes(role)) return false
     // `/dashboard` is the installed app's start page and only redirects staff

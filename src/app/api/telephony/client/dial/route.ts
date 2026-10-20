@@ -1,3 +1,4 @@
+import { userAudioLanguage } from '@/lib/user-language'
 import { after } from 'next/server'
 import { db } from '@/lib/db'
 import { noteCarrierError } from '@/lib/telephony/account-status'
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   const errorCode = params.ErrorCode || null
   if (errorCode) after(() => noteCarrierError(accountSid, errorCode))
 
-  const vc = voiceCallId ? await db.voiceCall.findUnique({ where: { id: voiceCallId }, select: { callSid: true } }) : null
+  const vc = voiceCallId ? await db.voiceCall.findUnique({ where: { id: voiceCallId }, select: { callSid: true, userId:true } }) : null
   if (vc) {
     await applyDialResult(vc.callSid, {
       dialStatus,
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
   }
 
   const speech = dialFailureSpeech(dialStatus, errorCode)
-  return new Response(speech ? sayAndHangup(speech) : emptyTwiml(), {
+  return new Response(speech ? sayAndHangup(speech,await userAudioLanguage(auth.ctx.organizationId,vc?.userId)) : emptyTwiml(), {
     status: 200,
     headers: { 'Content-Type': TWIML_CONTENT_TYPE },
   })

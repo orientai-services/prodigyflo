@@ -110,44 +110,43 @@ describe('call center history loaders', () => {
       ['sms-in', 'Cara Client'],
       ['out', 'Nate Fuller'],
       ['sms-out', 'Nate Fuller'],
-      ['missed', '•••-•••-4321'],
+      ['missed', 'Number unavailable'],
       ['voicemail', 'Mara Ellison'],
       ['out', 'Bo Other'],
     ])
     const [text, connected, leadText, missed, voicemail, busy] = page.rows
-    expect(text.text).toBe('Call me at •••-•••-0199 please')
+    expect(text.text).toBe('Call me at 702-555-0199 please')
     expect(text.href).toBe(`/clients/${client.cara}`)
     expect(connected).toMatchObject({ rep: 'Avery', seconds: 125, status: null, day: 'Mon 12', href: `/call-center?lead=${encodeURIComponent(lead.nate)}` })
     expect(connected.recording?.src).toMatch(/^\/api\/voice\/recordings\//)
     expect(leadText).toMatchObject({ text: 'On my way at 3', rep: 'Avery' })
     expect(missed).toMatchObject({ status: 'Missed', href: null, recording: null, seconds: null })
-    expect(voicemail).toMatchObject({ seconds: 22, transcript: 'Call me back at •••-•••-0102' })
+    expect(voicemail).toMatchObject({ seconds: 22, transcript: 'Call me back at 702 555 0102' })
     expect(busy).toMatchObject({ status: 'Busy', rep: 'Blake' })
     // A Super Admin sees each lead's full number (docs/DIALER_APP.md §Phone numbers), only on the row's `phone`.
     expect(connected.phone).toEqual({ state: 'shown', display: '(702) 555-0101', copy: '+17025550101' })
     expect(leadText.phone).toEqual(connected.phone)
     expect(voicemail.phone).toEqual({ state: 'shown', display: '(702) 555-0102', copy: '+17025550102' })
-    expect(text.phone).toBeUndefined()
-    expect(missed.phone).toBeUndefined()
-    const json = JSON.stringify(page.rows.map((r) => ({ ...r, phone: undefined })))
-    for (const digits of ['5550101', '5550102', '5550199', '5550188', '555-0199', REC]) expect(json).not.toContain(digits)
-    // Client numbers never ride along, not even for a Super Admin.
-    for (const digits of ['5550199', '5550188']) expect(JSON.stringify(page)).not.toContain(digits)
+    expect(text.phone).toEqual({state:'shown',display:'(702) 555-0199',copy:'+17025550199'})
+    expect(missed.phone).toEqual({state:'unavailable'})
+    // Recording SIDs stay on the protected streaming route. Full numbers remain visible.
+    expect(JSON.stringify(page)).not.toContain(REC)
+
   })
 
   it('filters by chip', async () => {
     const kinds = async (filter: HistoryFilter) => (await loadHistory(admin, { filter }, NOW)).rows.map((r) => r.name)
-    expect(await kinds('calls')).toEqual(['Nate Fuller', '•••-•••-4321', 'Mara Ellison', 'Bo Other'])
+    expect(await kinds('calls')).toEqual(['Nate Fuller', 'Number unavailable', 'Mara Ellison', 'Bo Other'])
     expect(await kinds('answered')).toEqual(['Nate Fuller'])
-    expect(await kinds('missed')).toEqual(['•••-•••-4321', 'Mara Ellison'])
+    expect(await kinds('missed')).toEqual(['Number unavailable', 'Mara Ellison'])
     expect(await kinds('sms')).toEqual(['Cara Client', 'Nate Fuller'])
-    expect(await kinds('unattached')).toEqual(['•••-•••-4321'])
+    expect(await kinds('unattached')).toEqual(['Number unavailable'])
   })
 
   it('searches by name or last 4', async () => {
     const names = async (q: string) => (await loadHistory(admin, { q }, NOW)).rows.map((r) => `${r.kind}:${r.name}`)
     expect(await names('nate ful')).toEqual(['out:Nate Fuller', 'sms-out:Nate Fuller'])
-    expect(await names('4321')).toEqual(['missed:•••-•••-4321'])
+    expect(await names('4321')).toEqual(['missed:Number unavailable'])
     expect(await names('0199')).toEqual(['sms-in:Cara Client'])
     expect(await names('cara')).toEqual(['sms-in:Cara Client'])
     expect(await names('nobody here')).toEqual([])
@@ -157,10 +156,10 @@ describe('call center history loaders', () => {
     const mine = await loadHistory(avery, {}, NOW)
     expect(mine.rows.map((r) => `${r.kind}:${r.name}`)).toEqual(['sms-in:Cara Client', 'out:Nate Fuller', 'sms-out:Nate Fuller'])
     // Avery holds Nate's lead, so Nate's rows carry the full number; the client row doesn't.
-    expect(mine.rows.map((r) => r.phone?.state === 'shown' ? r.phone.display : null)).toEqual([null, '(702) 555-0101', '(702) 555-0101'])
+    expect(mine.rows.map((r) => r.phone?.state === 'shown' ? r.phone.display : null)).toEqual(['(702) 555-0199', '(702) 555-0101', '(702) 555-0101'])
     const other = await loadHistory(blake, {}, NOW)
     expect(other.rows.map((r) => `${r.kind}:${r.name}`)).toEqual(['out:Bo Other'])
-    for (const digits of ['5550101', '5550102', '5550188']) expect(JSON.stringify(other)).not.toContain(digits)
+    for (const digits of ['5550101', '5550102']) expect(JSON.stringify(other)).not.toContain(digits)
   })
 
   it('pages 50 at a time with no gaps or repeats', async () => {

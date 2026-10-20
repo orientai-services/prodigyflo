@@ -1,3 +1,5 @@
+import { LocaleSync } from '@/components/locale-sync'
+import { savedUserLanguage } from '@/lib/user-language'
 import { finalDeskEnabled } from '@/lib/final-desk/data'
 import { notificationScope } from '@/lib/notification-scope'
 import type { Metadata } from 'next'
@@ -63,7 +65,8 @@ async function withVoice(children: React.ReactNode): Promise<React.ReactNode> {
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const user = await requireUser()
-  const body = await withVoice(children)
+  const language=await savedUserLanguage(user.organizationId,user.id)
+  const body = <><LocaleSync userId={user.id} saved={language} />{await withVoice(children)}</>
   if (finalDeskEnabled()) return <>{body}</>
 
   const sections = navigationFor(user)

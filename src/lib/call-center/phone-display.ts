@@ -2,11 +2,11 @@
  * How a lead's phone number reads in the dialer (docs/DIALER_APP.md §Phone
  * numbers). Pure: safe for client components and unit tests.
  *
- * The server decides who may see a full number (`maySeeLeadPhone`) and only
- * then puts a `LeadPhoneView` on the row. Everyone else keeps the last four.
+ * The server scopes the record to the authenticated user, then supplies the
+ * full number as a `LeadPhoneView`. Calling permissions are separate.
  */
 
-/** What the viewer gets for one lead. Absent = not allowed, show the last four. */
+/** What the viewer gets for one lead. Absent = no full number was loaded. */
 export type LeadPhoneView =
   /** `display` "(702) 555-0123" or "+57 3001234567"; `copy` the E.164 for the clipboard. */
   | { state: 'shown'; display: string; copy: string }
@@ -21,13 +21,14 @@ export type PhoneViewer = { id: string; role: string }
 export type PhoneLeadGate = { lockedBy: string | null; doNotCallAt: Date | string | null }
 
 /**
- * Who sees a lead's full number: a Super Admin on any lead in their workspace,
- * or the rep who holds the lead when it isn't on do-not-call. The second half
- * is exactly the rule `revealCallCenterContactFor` uses for the dial.
+ * Every authenticated user sees full numbers on records they can access.
+ * Call/text authorization is checked separately when an action is requested.
  */
-export function maySeeLeadPhone(viewer: PhoneViewer, lead: PhoneLeadGate): boolean {
-  if (viewer.role === 'SUPER_ADMIN') return true
-  return Boolean(viewer.id) && lead.lockedBy === viewer.id && !lead.doNotCallAt
+export function maySeeLeadPhone(viewer: PhoneViewer, _lead: PhoneLeadGate): boolean {
+  // Callers have already scoped the record to the authenticated viewer's workspace.
+  // Display is independent of who may call/text it; those write gates remain in place.
+  void _lead
+  return Boolean(viewer.id)
 }
 
 /**

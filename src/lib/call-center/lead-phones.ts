@@ -5,24 +5,18 @@ import { leadPhoneView, maySeeLeadPhone, type LeadPhoneView, type PhoneViewer } 
 
 export type LeadPhoneViewer = PhoneViewer & { organizationId: string }
 
-/**
- * Full numbers for the leads this viewer may see (phone-display.ts
- * `maySeeLeadPhone`), keyed by lead id. Leads the viewer may not see are left
- * out, so the caller falls back to the last four and nothing more reaches the
- * browser. No audit row: this is the same reach the dial already has, read on
- * every render, and an audit per render would bury the real events.
+/** Hydrate full phones for requested, already-visible records in the viewer's organization.
+ * The caller supplies only ids returned by its authorized record query. Calling/texting gates
+ * remain separate. Decryption failures are represented as unavailable instead of invented digits.
  */
 export async function leadPhonesFor(viewer: LeadPhoneViewer, leadIds: readonly string[]): Promise<Map<string, LeadPhoneView>> {
   const out = new Map<string, LeadPhoneView>()
   const ids = [...new Set(leadIds.filter(Boolean))]
   if (!viewer.id || ids.length === 0) return out
-  const superAdmin = viewer.role === 'SUPER_ADMIN'
   const rows = await db.callCenterLead.findMany({
     where: {
       organizationId: viewer.organizationId,
       id: { in: ids },
-      // A rep only ever reads the leads they hold, so nobody else's secret is decrypted.
-      ...(superAdmin ? {} : { lockedBy: viewer.id, doNotCallAt: null }),
     },
     select: { id: true, lockedBy: true, doNotCallAt: true, phoneSecret: true, phoneLast4: true },
   })
@@ -45,6 +39,6 @@ export async function withLeadPhones<T extends { phone?: LeadPhoneView | null }>
   return rows.map((r) => {
     const id = leadIdOf(r)
     const phone = id ? phones.get(id) : undefined
-    return phone ? { ...r, phone } : r
+    return phone && r.phone?.state !== 'shown' ? { ...r, phone } : r
   })
 }
