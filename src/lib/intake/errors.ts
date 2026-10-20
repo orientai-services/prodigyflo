@@ -10,3 +10,14 @@ export class BoundClientUnavailableError extends Error {
     this.name = 'BoundClientUnavailableError'
   }
 }
+
+/** A source case and its signed referral disagree. Do not create a replacement
+ * or redirect the homeowner's answers to either record automatically.
+ */
+export class IntakeBindingConflictError extends Error {
+  readonly code = 'intake_binding_conflict' as const
+  constructor() {
+    super('SCS case and intake link belong to different clients; reconciliation required.')
+    this.name = 'IntakeBindingConflictError'
+  }
+}

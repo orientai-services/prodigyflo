@@ -2,7 +2,9 @@ import 'server-only'
 import { IntakeStatus, Prisma, type IntakeSource, type IntakeSubmission } from '@prisma/client'
 import { db } from '@/lib/db'
 import { isRetiredIdentity, RetiredIntakeError } from '@/lib/retired-identities'
-import { BoundClientUnavailableError } from './errors'
+import { BoundClientUnavailableError, IntakeBindingConflictError } from './errors'
+import { resolveScsLeadBinding } from './scs-lead-binding'
+import { sourceMeta } from '@/lib/sunoff-bridge/assigned-model'
 import { parseIntakeBooking } from '@/lib/intake/appointment'
 import type { SchedulingResult } from '@/lib/scheduling'
 import { redactForAudit } from '@/lib/audit'
@@ -440,6 +442,13 @@ async function processInboundLocked(
       existing = await store.intakeSubmission.update({ where: { id: candidates[0].id }, data: { externalId, clientId: boundClientId } })
     }
   }
+  const referral = isScsPacket
+    ? await resolveScsLeadBinding(store, source.organizationId, packet)
+    : null
+  if (referral?.clientId) {
+    if (boundClientId && boundClientId !== referral.clientId) throw new IntakeBindingConflictError()
+    boundClientId = referral.clientId
+  }
   if (existing && isScsPacket) {
     const old = existing.rawPayload as Record<string, unknown>
     if (old.stage0_synthetic === true) packet.stage0_synthetic = true
@@ -508,6 +517,15 @@ async function processInboundLocked(
       actor, clientId: boundClientId, strictScs: isScsPacket && Boolean(scsLeadId(rawPayload)),
     }, store)
     if (outcome.clientId && isScsPacket) {
+      // Keep a newly opened SunOff profile with its assigned ProdigyFlo closer.
+      // Existing Client ownership and pipeline progress are never reassigned.
+      if (outcome.createdClient && referral?.lockedBy && sourceMeta(referral.leadAttribution)) {
+        const owner = await store.user.findFirst({ where: {
+          id: referral.lockedBy, organizationId: source.organizationId,
+          isActive: true, deletedAt: null, role: { key: 'CLOSER' },
+        }, select: { id: true } })
+        if (owner) await store.client.update({ where: { id: outcome.clientId }, data: { ownerId: owner.id } })
+      }
       const { ingestScsPacket } = await import('@/lib/intake/scs-packet')
       await ingestScsPacket({ organizationId: source.organizationId, clientId: outcome.clientId,
         intakeSubmissionId: submission.id, rawPayload }, store)

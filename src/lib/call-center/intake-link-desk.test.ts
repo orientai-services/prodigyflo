@@ -39,7 +39,7 @@ function packet(scsLeadId: string, pfl: string | null, extra: Record<string, unk
 
 async function ingest(source: IntakeSource, body: ReturnType<typeof packet>) {
   const { submission } = await processInbound(source, `scs:${body.lead_id}`, body)
-  expect(submission.status).toBe('APPLIED')
+  expect(['APPLIED', 'DUPLICATE']).toContain(submission.status)
   expect(submission.clientId).toBeTruthy()
   return submission.clientId as string
 }
@@ -168,13 +168,13 @@ describe('SCS intake link (desk + receiver)', () => {
     expect(await scsIntakeLinkFor(rep.actor, leadId, 'copy', NOW)).toEqual({ ok: false, reason: 'This lead already has its intake linked' })
   })
 
-  it('keeps the first link when a second SCS case arrives with the same token', async () => {
+  it('updates the first client when another SCS case arrives with the same signed referral', async () => {
     const first = (await db.callCenterLead.findUniqueOrThrow({ where: { id: leadId }, select: { clientId: true } })).clientId
     const token = signIntakeToken(leadId, NOW)
     const second = await ingest(source, packet(randomUUID(), token))
-    expect(second).not.toBe(first)
+    expect(second).toBe(first)
     expect((await db.callCenterLead.findUniqueOrThrow({ where: { id: leadId }, select: { clientId: true } })).clientId).toBe(first)
-    expect(await db.auditEvent.count({ where: { organizationId: orgId, action: 'call_center.link_conflict', entityId: leadId } })).toBe(1)
+    expect(await db.auditEvent.count({ where: { organizationId: orgId, action: 'call_center.link_conflict', entityId: leadId } })).toBe(0)
   })
 
   it('still ingests the intake when the token is bad, expired or for another workspace', async () => {

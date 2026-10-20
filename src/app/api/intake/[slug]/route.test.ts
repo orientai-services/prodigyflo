@@ -14,7 +14,7 @@ vi.mock('@/lib/connectors/catalog', () => ({ defForIntakeKind: () => null }))
 vi.mock('@/lib/intake/scs-packet', () => ({ isSchema42Payload: () => true, scsLeadId: () => 'lead_1' }))
 vi.mock('@/lib/intake/appointment', () => ({ parseIntakeBooking: () => null, upsertIntakeAppointment: vi.fn() }))
 
-import { BoundClientUnavailableError } from '@/lib/intake/errors'
+import { BoundClientUnavailableError, IntakeBindingConflictError } from '@/lib/intake/errors'
 import { POST } from './route'
 
 const call = () => POST(new Request('https://pf.test/api/intake/scs-website', {
@@ -32,5 +32,11 @@ describe('POST /api/intake/[slug] bound client unavailable', () => {
   it('still throws (500) for other errors', async () => {
     mocks.processInbound.mockRejectedValue(new Error('boom'))
     await expect(call()).rejects.toThrow('boom')
+  })
+  it('answers 409 when the source case and signed referral disagree', async () => {
+    mocks.processInbound.mockRejectedValue(new IntakeBindingConflictError())
+    const res = await call()
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ error: 'intake_binding_conflict' })
   })
 })
