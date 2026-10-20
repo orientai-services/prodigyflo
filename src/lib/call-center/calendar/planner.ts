@@ -36,6 +36,7 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 export type RepVM = { key: string; label: string; color: RepColor }
 
 export type VisitVM = {
+  sourceBrand?: 'SunOff'
   id: string
   leadId: string
   name: string
@@ -51,7 +52,7 @@ export type VisitVM = {
   phone?: LeadPhoneView | null
 }
 
-export type RailLeadVM = { id: string; name: string; last4: string | null; language: 'EN' | 'ES'; at: string; phone?: LeadPhoneView | null }
+export type RailLeadVM = { sourceBrand?: 'SunOff'; id: string; name: string; last4: string | null; language: 'EN' | 'ES'; at: string; phone?: LeadPhoneView | null }
 
 /** What the scheduler needs to grey out chips exactly as the server will refuse them. */
 export type SchedulerData = {

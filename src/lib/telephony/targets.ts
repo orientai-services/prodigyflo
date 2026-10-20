@@ -1,4 +1,5 @@
 import 'server-only'
+import { mayManageSunoff, sunoffActive } from '@/lib/sunoff-bridge/assigned-model'
 import { db } from '@/lib/db'
 import { decryptSecret, type EncryptedSecret } from '@/lib/crypto'
 import { clientScope, type SessionUser } from '@/lib/rbac'
@@ -151,7 +152,8 @@ async function resolveLead(actor: SessionUser, id: string, key: string, requireL
     },
   })
   if (!lead) return NOT_IN_SCOPE
-  if (requireLock && lead.lockedBy !== actor.id) {
+  if (!sunoffActive(lead.leadAttribution)) return NOT_IN_SCOPE
+  if (requireLock && lead.lockedBy !== actor.id && !mayManageSunoff(actor.role, lead.leadAttribution)) {
     return lead.lockedBy
       ? { ok: false, code: 'LOCKED_BY_OTHER', reason: 'Another rep has this lead.' }
       : { ok: false, code: 'NOT_IN_SCOPE', reason: 'Take this lead first.' }

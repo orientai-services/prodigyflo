@@ -184,3 +184,5 @@ Nothing mid-flight. The mirror and the reframe are both shipped.
   corrected, per-field confirmation of machine-read values enforced. B2 closed.
 - **2026-09-10** — File created after the Vercel + Supabase migration and the first successful
   end-to-end funnel run.
+
+- **2026-10-20** — Added the approved SunOff assigned-lead lane for Gatsby and Dakota: native dialer leads and calling, SunOff pills in Booked and Master Calendar, idempotent signed snapshots, source reassignment/removal, and owner calling without taking the assignment. No new roles, fabricated Clients, or automatic messages/calls.

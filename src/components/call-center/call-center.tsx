@@ -1,5 +1,7 @@
 'use client'
 
+import { SunoffPill } from './sunoff-pill'
+
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
@@ -130,7 +132,7 @@ function keepLinks(before: CallLead, next: CallLead): CallLead {
 function Person({ lead, rep, onOpen }: { lead: CallLead; rep: string; onOpen: (lead: CallLead) => void }) {
   return (
     <button type="button" className="person" disabled={lead.disabled} onClick={() => onOpen(lead)}>
-      <b>{lead.name}</b>
+      <b>{lead.name}{lead.sourceBrand ? <> <SunoffPill /></> : null}</b>
       {lead.subtitle ? <span>{lead.subtitle}</span> : null}
       <span>
         {languageLabel(lead.language)}
@@ -154,6 +156,8 @@ export type CallCenterPhone = {
   openLeadId?: string | null
   /** Holds telephony:manage; may stretch a narrowed calling window with a reason. */
   canOverrideHours?: boolean
+  /** Same-workspace Super Admin access to assigned SunOff leads. */
+  canManageSunoff?: boolean
   /** SUPER_ADMIN only: the Phone setup sheet. */
   setup?: { vm: PhoneSetupVM; status: TwilioStatusVM | null } | null
 }
@@ -319,11 +323,13 @@ export function CallCenter({
   }
 
   function repFor(lead: CallLead): string {
+    if (phone.canManageSunoff && lead.sourceBrand === 'SunOff' && lead.lockedBy) return lead.lockedBy
     return lead.persisted ? (viewerId ?? '') : CURRENT_REP
   }
 
   function holding(lead: CallLead): boolean {
     if (!lead.persisted) return true
+    if (phone.canManageSunoff && lead.sourceBrand === 'SunOff') return true
     return Boolean(viewerId) && lead.lockedBy === viewerId
   }
 
@@ -950,7 +956,7 @@ export function CallCenter({
                         onClick={() => openLead(lead)}
                       >
                         <td className="c-when" data-label="When">{formatWhen(lead.arrivedAt)}</td>
-                        <td className="c-person"><Person lead={lead} rep={repFor(lead)} onOpen={openLead} /></td>
+                        <td className="c-person"><Person lead={lead} rep={lead.persisted ? viewerId ?? '' : CURRENT_REP} onOpen={openLead} /></td>
                         <td className="c-chan" data-label="Came in as">{channelLabel(lead.channel)}</td>
                         <td className={`c-contacted ${lead.contacted ? 'yes' : 'no'}`} data-label="Contacted">{lead.contacted ? 'Yes' : 'No'}</td>
                         <td className="c-status" data-label="Status">{lead.status}</td>
@@ -985,10 +991,10 @@ export function CallCenter({
                       <span className="tag">{languageLabel(selected.language)}</span>
                       <span className={`tag ${selected.contacted ? 'g' : 'w'}`}>{selected.contacted ? 'Contacted' : 'Not contacted'}</span>
                       <span className="tag">{selected.status}</span>
-                      {lockLabel(selected, who) ? <span className="tag">{lockLabel(selected, who)}</span> : null}
+                      {lockLabel(selected, selected.persisted ? viewerId ?? '' : CURRENT_REP) ? <span className="tag">{lockLabel(selected, selected.persisted ? viewerId ?? '' : CURRENT_REP)}</span> : null}
                       {selected.dnc ? <span className="tag">Do not call</span> : null}
                     </div>
-                    <h2 className="who">{selected.name}</h2>
+                    <h2 className="who">{selected.name}{selected.sourceBrand ? <> <SunoffPill /></> : null}</h2>
                     {deskError ? <p className="muted" role="status">{deskError}</p> : null}
                     <dl className="facts">
                       <div><dt>Page</dt><dd>{selected.page}</dd></div>

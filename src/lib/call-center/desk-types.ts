@@ -10,6 +10,8 @@ export type CallCenterContact = {
 }
 
 export type DeskActor = {
+  /** From requireUser(), never from a request body. */
+  role?: string
   id: string
   name: string
 }

@@ -1,5 +1,8 @@
 'use client'
 
+import { SunoffPill } from '@/components/call-center/sunoff-pill'
+import { leadHref } from '@/lib/call-center/lead-link'
+
 import { Children, cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { Menu, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -228,7 +231,7 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   const soon = now ? liveChips.filter(c => new Date(c.startsAt).getTime() > now.getTime() && new Date(c.startsAt).getTime() - now.getTime() <= 1800000).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] : null
   const unscheduled = board && <UnscheduledList board={board} calendarRef={calendarRef} dayMode={mode === 'day'} busy={busy} open={open} viewAll={() => router.push('/clients?scheduling=unscheduled')} />
   function chip(c: DeskChip, agenda = false) { const top = ((mins(timeLabel(new Date(c.startsAt), tz)) - 480) / 60) * 64 + 4
-    return <div key={c.appointmentId} className={`${agenda ? 'appt' : 'chip'}${c.ownerName ? '' : ' u'}`} style={agenda ? { top, height: 56 } : undefined} onClick={e => { e.stopPropagation(); open(c.clientId) }} onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, chip: c }) }}><span className="chip-time">🕐 {fmt(c.startsAt, tz)}</span><b>{c.firstName} {c.lastName}</b><span className="closer">{c.ownerName ? `Closer - ${c.ownerName}` : 'Unassigned'}</span></div>
+    return <div key={c.appointmentId} className={`${agenda ? 'appt' : 'chip'}${c.ownerName ? '' : ' u'}`} style={agenda ? { top, height: 56 } : undefined} onClick={e => { e.stopPropagation(); if (c.sourceLeadId) router.push(leadHref(c.sourceLeadId)); else open(c.clientId) }} onContextMenu={e => { e.preventDefault(); if (c.sourceLeadId) { router.push(leadHref(c.sourceLeadId)); return }; setMenu({ x: e.clientX, y: e.clientY, chip: c }) }}><span className="chip-time">🕐 {fmt(c.startsAt, tz)}</span><b>{c.firstName} {c.lastName} {c.sourceBrand ? <SunoffPill /> : null}</b><span className="closer">{c.ownerName ? `Closer - ${c.ownerName}` : 'Unassigned'}</span></div>
   }
   let content: ReactNode = null
   if (view === 'board' && board) {

@@ -6,6 +6,8 @@
 export const DESK_TIMEZONE = 'America/Los_Angeles'
 
 export type DeskChip = {
+  sourceBrand?: 'SunOff'
+  sourceLeadId?: string
   appointmentId: string
   updatedAt?: string
   startsAt: string

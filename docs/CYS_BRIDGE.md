@@ -583,3 +583,14 @@ Files don't overlap between lanes. `call-center.tsx` is owned by **PF-C only**: 
 | ui | PF-C | prodigyflo `.claude/worktrees/ui` (feat/cys-ui) |
 
 No agent deploys anything to production (Vercel, droplet, Worker, SCS). The lead integrates, reviews and deploys.
+
+
+## Assigned SunOff leads — approved expansion, 2026-10-20
+
+The owner explicitly requested that SunOff leads assigned to Gatsby (SunOff 63) or Dakota (169) also appear in the separate ProdigyFlo CRM dialer and calendar. `POST /api/bridge/sunoff/leads` accepts a complete snapshot signed with the existing PF bridge HMAC. The producer pins brand `sunoff` and those two user ids; the receiver independently validates them, resolves the partners by their existing email addresses, and requires one shared active workspace. It creates no users and grants no roles. All other brands and reps stay outside this lane.
+
+Native CallCenterLead rows preserve encrypted contacts and existing calling rules. Meta ids dedupe an already received lead. Assignments, source visit times, opt-outs and revocations are retained; local call history and notes survive source refreshes. Signed revisions are serialized and monotonic. Missing assignments become inactive, preserve their encrypted contact history, and leave active lists without being marked do-not-call. Native records that already existed before this link keep their original source when unlinked.
+
+The workspace Super Admin can call and write notes/results on these leads without taking their assignment. Other reps retain their existing lock restrictions. No call, message, new consent, or reminder is sent by the import. SunOff manages imported visit times; ProdigyFlo presents them in its Booked planner and as a read-only source view in Master Calendar. Both views read the same CallCenterSlot and display a SunOff pill. Master Calendar Appointment/Client rows are never fabricated. Leads without dates stay in the dialer's To schedule rail. Native SCS records, calendars and dialing rules retain their existing behavior.
+
+SunOff retries its latest complete snapshot every minute, immediately after assignments/edits/deletions, and periodically rechecks unchanged data. Only a successful response advances its delivery marker. No source contact data or credentials are written to delivery logs.

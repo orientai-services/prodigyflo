@@ -1,4 +1,5 @@
 import 'server-only'
+import { sunoffActive } from '@/lib/sunoff-bridge/assigned-model'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getEmailProvider, getSmsProvider } from '@/lib/messaging'
@@ -120,6 +121,7 @@ export async function holdSlot(input: HoldInput): Promise<{ ok: true; slotId: st
 /** The rep confirms the HOLD while on the call. Reuses the lead's BOOKED status. */
 export async function confirmSlot(input: { organizationId: string; slotId: string; userId: string }) {
   const slot = await db.callCenterSlot.findFirst({ where: { id: input.slotId, organizationId: input.organizationId } })
+  if (slot?.heldBy === 'sunoff') return { ok: false as const, reason: 'Manage this visit in SunOff' }
   if (!slot || !canConfirm(slot.status as SlotStatus, 'rep')) return { ok: false as const, reason: 'not a hold' }
   await db.$transaction([
     db.callCenterSlot.update({ where: { id: slot.id }, data: { status: 'CONFIRMED', confirmedAt: new Date(), confirmedById: input.userId } }),
@@ -133,6 +135,7 @@ export async function recordSlotOutcome(input: { organizationId: string; slotId:
   const now = input.now ?? new Date()
   const slot = await db.callCenterSlot.findFirst({ where: { id: input.slotId, organizationId: input.organizationId } })
   if (!slot) return { ok: false as const, reason: 'not found' }
+  if (slot.heldBy === 'sunoff') return { ok: false as const, reason: 'Manage this visit in SunOff' }
   const plan = planOutcome(slot.status as SlotStatus, input.outcome, now)
   if ('error' in plan) return { ok: false as const, reason: plan.error }
   await db.$transaction(async (tx) => {
@@ -171,6 +174,7 @@ export async function rescheduleSlot(input: {
   if (!calendarReps().some((r) => r.key === input.repKey)) return { ok: false, reason: 'unknown rep' }
   const old = await db.callCenterSlot.findFirst({ where: { id: input.slotId, organizationId: input.organizationId } })
   if (!old) return { ok: false, reason: 'not found' }
+  if (old.heldBy === 'sunoff') return { ok: false, reason: 'Manage this visit in SunOff' }
   const plan = planOutcome(old.status as SlotStatus, 'rescheduled', now)
   if ('error' in plan) return { ok: false, reason: plan.error }
   const { skip, language } = await leadSkip(input.organizationId, old.leadId)
@@ -208,6 +212,7 @@ export async function rescheduleSlot(input: {
 const LEAD_FIELDS = {
   id: true,
   pageId: true,
+  leadAttribution: true,
   source: true,
   language: true,
   status: true,
@@ -227,10 +232,10 @@ type LeadRow = Prisma.CallCenterLeadGetPayload<{ select: typeof LEAD_FIELDS }>
 const SYSTEM_NOTE = /^(Calendar |Call back due )/
 
 /** Name, last four and last note the way the desk builds them (from-rows). */
-function leadFacts(row: LeadRow): { name: string; last4: string | null; note: string | null; contacted: boolean } {
+function leadFacts(row: LeadRow): { name: string; last4: string | null; note: string | null; contacted: boolean; sourceBrand?: 'SunOff' } {
   const lead = callLeadFromRow(row)
   const note = [...lead.trail].reverse().find((event) => event.kind === 'note' && !SYSTEM_NOTE.test(event.detail))
-  return { name: lead.name, last4: lead.last4, note: note?.detail.slice(0, 280) ?? null, contacted: lead.contacted }
+  return { name: lead.name, last4: lead.last4, note: note?.detail.slice(0, 280) ?? null, contacted: lead.contacted, sourceBrand: lead.sourceBrand }
 }
 
 export type CalendarVisit = {
@@ -246,6 +251,7 @@ export type CalendarVisit = {
   name: string
   last4: string | null
   note: string | null
+  sourceBrand?: 'SunOff'
 }
 
 /**
@@ -278,14 +284,14 @@ export async function listSlotsBetween(
     },
   })
   return rows
-    .filter((row) => visibleOnGrid(row.status as SlotStatus, row.outcomeAt, now))
+    .filter((row) => sunoffActive(row.lead.leadAttribution) && visibleOnGrid(row.status as SlotStatus, row.outcomeAt, now))
     .map(({ lead, ...slot }) => {
       const facts = leadFacts(lead)
-      return { ...slot, status: slot.status as SlotStatus, name: facts.name, last4: facts.last4, note: facts.note }
+      return { ...slot, status: slot.status as SlotStatus, name: facts.name, last4: facts.last4, note: facts.note, sourceBrand: facts.sourceBrand }
     })
 }
 
-export type RailLead = { id: string; name: string; last4: string | null; language: 'EN' | 'ES'; at: Date; contacted: boolean }
+export type RailLead = { id: string; name: string; last4: string | null; language: 'EN' | 'ES'; at: Date; contacted: boolean; sourceBrand?: 'SunOff' }
 
 /**
  * Leads still to book, newest first: open on the desk (not booked), callable,
@@ -306,9 +312,9 @@ export async function listToSchedule(organizationId: string, take = 50): Promise
     take,
     select: LEAD_FIELDS,
   })
-  return rows.map((row) => {
+  return rows.filter(row => sunoffActive(row.leadAttribution)).map((row) => {
     const facts = leadFacts(row)
-    return { id: row.id, name: facts.name, last4: facts.last4, language: row.language, at: row.createdAt, contacted: facts.contacted }
+    return { id: row.id, name: facts.name, last4: facts.last4, language: row.language, at: row.createdAt, contacted: facts.contacted, sourceBrand: facts.sourceBrand }
   })
 }
 
@@ -320,9 +326,9 @@ export async function listFollowUps(organizationId: string, now = new Date(), ta
     take,
     select: LEAD_FIELDS,
   })
-  return rows.map((row) => {
+  return rows.filter(row => sunoffActive(row.leadAttribution)).map((row) => {
     const facts = leadFacts(row)
-    return { id: row.id, name: facts.name, last4: facts.last4, language: row.language, at: row.nextAttemptAt ?? row.createdAt, contacted: facts.contacted }
+    return { id: row.id, name: facts.name, last4: facts.last4, language: row.language, at: row.nextAttemptAt ?? row.createdAt, contacted: facts.contacted, sourceBrand: facts.sourceBrand }
   })
 }
 
@@ -362,7 +368,7 @@ function repEmail(repKey: string): string | null {
 /** Queued reminder job. Runs from /api/jobs/run when the calendar is on. */
 export async function runCalendarReminders(now = new Date()): Promise<{ sent: number; failed: number }> {
   const slots = await db.callCenterSlot.findMany({
-    where: { status: { in: ACTIVE }, startsAt: { gt: now, lte: new Date(now.getTime() + 24 * 3_600_000) } },
+    where: { heldBy: { not: 'sunoff' }, status: { in: ACTIVE }, startsAt: { gt: now, lte: new Date(now.getTime() + 24 * 3_600_000) } },
     include: { lead: { select: { emailSecret: true, phoneSecret: true, timeZone: true, leadAttribution: true, outOfArea: true } } },
     take: 200,
   })

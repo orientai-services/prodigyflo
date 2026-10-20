@@ -1,3 +1,4 @@
+import { SunoffPill } from '../sunoff-pill'
 import { blockPlacement, statusLook, timeRange, type Lane, type RepVM, type VisitVM } from '@/lib/call-center/calendar/planner'
 import { phoneText } from '@/lib/call-center/phone-display'
 
@@ -52,7 +53,7 @@ export function VisitBlock({
           {visit.phone ? `${phoneText(visit.phone, null)} · ` : visit.last4 ? `••${visit.last4} · ` : ''}{visit.language === 'ES' ? 'Spanish' : 'English'}
         </span>
       ) : null}
-      <span className="cal-chip">{look.label}</span>
+      <span className="cal-chip">{look.label}</span> {visit.sourceBrand ? <SunoffPill /> : null}
       {detailed && visit.note ? <span className="cal-block-note">{visit.note}</span> : null}
     </button>
   )
