@@ -408,7 +408,7 @@ export function LeadProfile({ api, now, sheetHost }: { api: LeadHandoffApi; now:
         <h3>Client profile</h3>
         {facts}
         <p className="state-line"><b>No intake yet.</b> The profile fills in once they finish the SCS intake.</p>
-        <button type="button" className="btn" disabled={!api.canIntake || api.busy} onClick={() => { void api.intake('open') }}>Start SCS Intake</button>
+        <p className="muted">Use SCS Intake in the lead actions to start or share their application.</p>
       </div>
     )
   } else if (state === 'link_sent') {

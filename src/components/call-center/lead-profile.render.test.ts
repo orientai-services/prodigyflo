@@ -35,7 +35,8 @@ describe('lead panel: hand-off and profile', () => {
     expect(html).not.toContain('Send intake link')
     expect(html).toContain('data-state="no_intake"')
     expect(html).toContain('No intake yet.')
-    expect(html).toContain('Start SCS Intake')
+    expect(html).not.toContain('Start SCS Intake')
+    expect(html.match(/>SCS Intake<\/button>/g)).toHaveLength(1)
     expect(html).not.toContain('CYS Sign up')
   })
 

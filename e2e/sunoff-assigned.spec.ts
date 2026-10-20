@@ -19,7 +19,7 @@ test.beforeAll(async () => {
   const secrets = { phoneLast4: '0123', phoneSecret: encryptSecret('+17025550123'), emailSecret: encryptSecret('synthetic@example.test') }
   await db.callCenterLead.create({ data: { id: leadId, organizationId: org, pageId: 'sunoff', source: 'FORM', language: 'EN', status: 'BOOKED', lockedBy: rep.id,
     phoneLast4: secrets.phoneLast4, phoneSecret: secrets.phoneSecret!, emailSecret: secrets.emailSecret!,
-    leadAttribution: { sunoff: { id: 'browser', active: true, userId: '63', repKey: 'gatsby', stage: 'Scheduled', managed: true } },
+    leadAttribution: { sunoff: { id: 'browser', active: true, userId: '63', repKey: 'gatsby', stage: 'Scheduled', managed: true, name: 'Alex Source', address: '123 Example St, Las Vegas, NV 89117' } },
     events: { create: { type: 'FORM', body: facebookFormEventBody({ leadgenId: 'browser', name: 'Alex Source', zip: '89117' }) } } } })
   await db.callCenterSlot.create({ data: { id: `sunoff:${org}:browser:visit`, organizationId: org, leadId, repKey: 'gatsby', startsAt, endsAt: new Date(startsAt.getTime() + 90 * 60000), heldBy: 'sunoff', language: 'EN' } })
   expect(owner.id).not.toBe(rep.id)
@@ -33,6 +33,18 @@ test('source lead opens with native calling, source pills and stable desktop/mob
   await expect(page.locator('.who [aria-label="Source: SunOff"]')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Call', exact: true }).first()).toBeEnabled()
   await page.screenshot({ path: process.env.PF_QA_OUTPUT ? `${process.env.PF_QA_OUTPUT}/sunoff-lead-desktop.png` : 'test-results/sunoff-lead-desktop.png' })
+  await expect(page.getByRole('button', { name: 'SCS Intake', exact: true })).toHaveCount(1)
+  await page.context().route('https://solarcontractservices.com/begin?**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Intake destination</h1>' }))
+  const opening = page.context().waitForEvent('page')
+  await page.getByRole('button', { name: 'SCS Intake', exact: true }).click()
+  const intake = await opening
+  await intake.waitForURL('https://solarcontractservices.com/begin?**')
+  const token = new URL(intake.url()).searchParams.get('pfl')
+  expect(token).toBeTruthy()
+  const bootstrap = await page.request.post('/api/intake/scs/prefill', { data: { token } })
+  expect(bootstrap.status()).toBe(200)
+  expect(await bootstrap.json()).toMatchObject({ ok: true, values: { full_name: 'Alex Source', phone: '+17025550123', address_line1: '123 Example St', zip: '89117' } })
+  await intake.close()
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 })
     await page.goto(`/call-center?s=booked&view=day&date=${day}`)

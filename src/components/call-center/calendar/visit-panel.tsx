@@ -61,8 +61,7 @@ export function VisitPanel({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [askCancel, setAskCancel] = useState(false)
   const look = statusLook(visit.status)
-  const external = visit.id.startsWith('sunoff:')
-  const live = isLive(visit.status) && !external
+  const live = isLive(visit.status)
 
   async function run(key: string, act: () => Promise<CalendarResult>) {
     setBusy(true)
@@ -116,8 +115,7 @@ export function VisitPanel({
         </div>
         <div className="cal-panel-acts">
           <Link prefetch={false} className="btn secondary" href={leadHref(visit.leadId)}>Open lead / Call</Link>
-          {external ? <a className="btn secondary" href="https://sunoff.app/?dialer=1" target="_blank" rel="noopener noreferrer">Manage in SunOff</a> : null}
-          {visit.status === 'HOLD' && !external ? (
+          {visit.status === 'HOLD' ? (
             <button type="button" className="btn" disabled={busy} onClick={() => { void run('confirm', () => confirmCalendarSlot(visit.id)) }}>
               Confirm (on the call)
             </button>

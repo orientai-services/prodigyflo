@@ -13,6 +13,7 @@ export const assignmentSnapshot = z.object({
     phone: z.string().max(50), email: z.string().max(200).nullable(), address: z.string().max(600).nullable(),
     language: z.enum(['EN', 'ES']), createdAt: stamp, updatedAt: stamp,
     appointmentAt: stamp.nullable(), followupAt: stamp.nullable(),
+    visitStatus: z.enum(['HOLD', 'CONFIRMED', 'SAT', 'NO_SHOW', 'RESCHEDULED', 'CANCELLED']).optional(),
     stage: z.string().max(80), closed: z.boolean(), doNotCall: z.boolean(),
     consent: z.object({ at: stamp, source: z.enum(['meta', 'manual', 'csv']), formId: z.string().max(100).nullable(),
       version: z.string().max(100).nullable(), revokedAt: stamp.nullable(), expiresAt: stamp.nullable() }).nullable(),
@@ -36,6 +37,6 @@ export function sunoffLeadId(org: string, id: string): string {
   return /^meta_\d+$/.test(id) ? `meta:${org}:${id.slice(5)}` : `sunoff:${org}:${id}`
 }
 export function sourceState(l: AssignedLead): string {
-  return JSON.stringify([l.stage, l.closed, l.appointmentAt, l.followupAt, l.doNotCall])
+  return JSON.stringify([l.stage, l.closed, l.appointmentAt, l.followupAt, l.doNotCall, l.visitStatus])
 }
 export function sourceLabel(pageId: string | null | undefined): 'SunOff' | null { return pageId === 'sunoff' ? 'SunOff' : null }
