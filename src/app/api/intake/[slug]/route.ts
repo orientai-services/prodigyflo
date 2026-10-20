@@ -5,7 +5,7 @@ import { RetiredIntakeError } from '@/lib/retired-identities'
 import { SIGNATURE_HEADER, TOKEN_HEADER, verifySignature, verifyToken } from '@/lib/intake/hmac'
 import { deriveExternalId } from '@/lib/intake/external-id'
 import { processInbound } from '@/lib/intake/apply'
-import { BoundClientUnavailableError } from '@/lib/intake/errors'
+import { BoundClientUnavailableError, IntakeBindingConflictError } from '@/lib/intake/errors'
 import { recordInboundEvent } from '@/lib/inbound/record'
 import { defForIntakeKind } from '@/lib/connectors/catalog'
 import { isSchema42Payload, scsLeadId } from '@/lib/intake/scs-packet'
@@ -93,14 +93,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (error instanceof RetiredIntakeError) return Response.json({ status: 'IGNORED', reason: 'retired_test' })
     try {
       const { parseIntakeBooking, upsertIntakeAppointment } = await import('@/lib/intake/appointment')
-      if (parseIntakeBooking(payload)) {
+      if (!(error instanceof IntakeBindingConflictError) && parseIntakeBooking(payload)) {
         const existing = await db.intakeSubmission.findUnique({
           where: { sourceId_externalId: { sourceId: source.id, externalId } },
         })
         if (existing?.clientId) await upsertIntakeAppointment({ source, clientId: existing.clientId, rawPayload: payload })
       }
     } catch { /* still fail the HTTP response */ }
-    if (error instanceof BoundClientUnavailableError) return Response.json({ error: error.code, message: error.message }, { status: 409 })
+    if (error instanceof BoundClientUnavailableError || error instanceof IntakeBindingConflictError) return Response.json({ error: error.code, message: error.message }, { status: 409 })
     throw error
   }
   const { duplicate, submission, booking } = result
