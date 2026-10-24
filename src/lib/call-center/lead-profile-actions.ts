@@ -35,6 +35,10 @@ function readOnlyView(user: SessionUser, file: CaseFileData): CaseFileData {
   const strip = <T extends { fileUrl: string | null }>(item: T): T => ({ ...item, fileUrl: null })
   return {
     ...file,
+    // Out-of-scope reps see masked contact elsewhere (last 4 digits); the full
+    // phone/email on the case file must not ride through this view.
+    phone: '',
+    email: '',
     availableFiles: (file.availableFiles ?? []).map(strip),
     docs: file.docs.map((tile) => ({ ...strip(tile), files: tile.files.map(strip) })),
     brief: can(user, 'ai:run') || can(user, 'ai:review') ? file.brief : null,

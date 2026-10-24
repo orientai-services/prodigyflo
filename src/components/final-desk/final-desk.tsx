@@ -50,11 +50,10 @@ export function FinalDesk({ initial, view, clientId, query = {} }: { initial: Fi
   const [navOpen, setNavOpen] = useState(false)
   const [now, setNow] = useState<Date | null>(null), [mode, setMode] = useState<'month' | 'week' | 'day'>('month')
   // Board sides: 'scs' is intake (no advisor or no booked date, with source pills), 'booked' is the calendar.
-  // Admins land on intake, closers on their calendar; a manual pick sticks per device.
+  // Everyone lands on the calendar (the SunOff e2e and muscle memory depend on it); a manual pick sticks per device.
   const [side, setSide] = useState<'scs' | 'booked'>(() => {
-    const fallback = initial.user.role === 'SUPER_ADMIN' ? 'scs' : 'booked'
-    if (typeof window === 'undefined') return fallback
-    try { const saved = localStorage.getItem('desk_side'); return saved === 'scs' || saved === 'booked' ? saved : fallback } catch { return fallback }
+    if (typeof window === 'undefined') return 'booked'
+    try { const saved = localStorage.getItem('desk_side'); return saved === 'scs' || saved === 'booked' ? saved : 'booked' } catch { return 'booked' }
   })
   function pickSide(next: 'scs' | 'booked') { setSide(next); try { localStorage.setItem('desk_side', next) } catch {} }
   const [day, setDay] = useState(initial.board?.today ?? ''), [cursor, setCursor] = useState(initial.board?.today ?? ''), [modal, setModal] = useState<'assign' | 'book' | null>(null)
