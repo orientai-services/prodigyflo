@@ -27,6 +27,7 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
   const clientSelect = {
     id: true, firstName: true, lastName: true, email: true, phone: true,
     owner: { select: { name: true } },
+    leadSource: { select: { name: true } },
     documents: { where: { status: { notIn: ['REJECTED', 'EXPIRED'] }, NOT: { storageKey: null } }, select: { requirement: { select: { key: true } } } },
   } satisfies Prisma.ClientSelect
   const [requirements, closers, appointments, unscheduledRows, unscheduledTotal, unassignedCount] = await Promise.all([
@@ -49,6 +50,7 @@ export async function loadDeskBoard(user: SessionUser, monthRaw?: string): Promi
   const lead = (row: (typeof unscheduledRows)[number]) => ({
     clientId: row.id, firstName: row.firstName, lastName: row.lastName, email: row.email, phone: row.phone,
     ownerName: row.owner?.name ?? null,
+    sourceName: row.leadSource?.name ?? null,
     missingDocs: Math.max(0, requiredKeys.size - new Set(row.documents.map(doc => doc.requirement?.key ? canonicalKey(doc.requirement.key) : null).filter((key): key is string => Boolean(key && requiredKeys.has(key)))).size),
   })
   const chipsByDay = new Map<string, DeskChip[]>()

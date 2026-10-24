@@ -7,6 +7,8 @@ export const DESK_TIMEZONE = 'America/Los_Angeles'
 
 export type DeskChip = {
   sourceBrand?: 'SunOff'
+  /** Lead-source name from the CRM (e.g. a Facebook campaign source); SunOff bridge chips use sourceBrand instead. */
+  sourceName?: string | null
   sourceLeadId?: string
   appointmentId: string
   updatedAt?: string
@@ -35,6 +37,7 @@ export type DeskLead = {
   firstName: string
   lastName: string
   ownerName: string | null
+  sourceName?: string | null
   missingDocs: number
   email: string
   phone: string
