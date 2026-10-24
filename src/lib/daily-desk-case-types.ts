@@ -40,6 +40,8 @@ export type CaseFileData = {
   city: string
   state: string
   zip: string
+  phone: string
+  email: string
   source: string
   /** Lead source attribution rows (Meta ad / ad set / campaign / form / platform). Empty when none. */
   leadAttribution?: { label: string; value: string }[]

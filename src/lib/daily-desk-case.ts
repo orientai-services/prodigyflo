@@ -193,6 +193,8 @@ export async function loadCaseFile(user: SessionUser, clientId: string): Promise
     city: confirmed('city') || str(answers.city) || addr?.city || '',
     state: confirmed('state') || str(answers.state) || addr?.state || '',
     zip: confirmed('zip') || str(answers.zip) || addr?.postalCode || '',
+    phone: confirmed('phone') || str(answers.phone) || client.phone || '',
+    email: confirmed('email') || str(answers.email) || client.email || '',
     source: client.leadSource?.name ?? 'Unknown source',
     leadAttribution: await attributionRowsFor(user.organizationId, client.leadAttribution),
     outOfArea: client.outOfArea,
